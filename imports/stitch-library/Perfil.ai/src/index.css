@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Noto Serif", ui-serif, Georgia, serif;
+
+  --color-background: #0A0A0A;
+  --color-surface-container: #131313;
+  --color-surface-container-high: #201f1f;
+  --color-surface-container-highest: #353534;
+  
+  --color-primary: #cebdff;
+  --color-primary-container: #a78bfa;
+  --color-on-primary: #381385;
+  
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+  
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-zinc-100 font-sans antialiased;
+    background-color: #0A0A0A;
+  }
+}
+
+.glass-panel {
+  @apply bg-black/70 backdrop-blur-xl border-white/10;
+}
+
+.active-tab {
+  @apply text-primary border-b-2 border-primary;
+}

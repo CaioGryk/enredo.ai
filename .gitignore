@@ -17,6 +17,14 @@ node_modules/
 out/
 dist/
 build/
+dist-preview/
+dist-preview-*/
+*/dist-preview/
+*/dist-preview-*/
+
+# Expo
+.expo/
+*/.expo/
 
 # Logs
 logs

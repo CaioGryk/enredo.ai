@@ -1,0 +1,637 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum SubscriptionType {
+  FREE
+  PREMIUM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+}
+
+enum CreditTransactionType {
+  EARN
+  SPEND
+  REFUND
+  EXPIRE
+}
+
+enum CreditTransactionReason {
+  PURCHASE
+  SUBSCRIPTION_BONUS
+  PROMO
+  SCENE_GENERATION
+  MEMORY_SUMMARY
+  IMAGE_GENERATION
+  REFERRAL
+  REFUND
+  EXPIRATION
+}
+
+enum ModelUsageFeature {
+  SCENE_GENERATION
+  MEMORY_SUMMARY
+  IMAGE_GENERATION
+  CHOICE_GENERATION
+}
+
+enum StoryGenerationUsageStatus {
+  SUCCESS
+  FAILED
+  BLOCKED
+}
+
+enum UserActionType {
+  CHOICE
+  FREE_TEXT
+}
+
+enum ReadingSessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum CharacterRole {
+  PROTAGONIST
+  SUPPORTING
+  ANTAGONIST
+  MINOR
+}
+
+enum NarrativeFunction {
+  HERO
+  MENTOR
+  ALLY
+  SKEPTIC
+  RIVAL
+  VILLAIN
+  TRICKSTER
+  SHADOW
+  HARBINGER
+  GUARDIAN
+}
+
+enum GenerationStatus {
+  NOT_REQUESTED
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum AdEventType {
+  INTERSTITIAL
+  BANNER
+}
+
+enum SceneMediaType {
+  TEXT
+  IMAGE
+  VIDEO
+  ANIMATED
+}
+
+enum SceneVisibility {
+  PRIVATE
+  UNLISTED
+  PUBLIC
+}
+
+enum SceneModerationStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum StoryOrigin {
+  ADMIN
+  USER_GENERATED
+}
+
+enum StoryVisibility {
+  PRIVATE
+  UNLISTED
+  PUBLIC
+}
+
+enum StoryModerationStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id                 String          @id @default(uuid())
+  email              String          @unique
+  passwordHash       String
+  name               String
+  avatarUrl          String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  lastActiveAt       DateTime        @default(now())
+  role               UserRole        @default(USER)
+
+  subscription          Subscription?
+  creditWallet        CreditWallet?
+  readingSessions    ReadingSession[]
+  modelUsages        ModelUsage[]
+  dailyUsageLimits   DailyUsageLimit[]
+  adEvents           AdEvent[]
+  refreshTokens      RefreshToken[]
+  sceneMedia         SceneMedia[]
+  stories            Story[]            @relation("UserStories")
+  storyGenerationUsages StoryGenerationUsage[]
+
+  sceneMediaLikes    SceneMediaLike[]
+  sceneMediaSaves    SceneMediaSave[]
+  sceneMediaShares   SceneMediaShare[]
+  sceneMediaComments SceneMediaComment[]
+  sceneMediaReports  SceneMediaReport[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id           String    @id @default(uuid())
+  token        String    @unique
+  userId       String
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Subscription {
+  id                  String           @id @default(uuid())
+  userId              String           @unique
+  type                SubscriptionType  @default(FREE)
+  status              SubscriptionStatus @default(ACTIVE)
+  startedAt           DateTime          @default(now())
+  cancelledAt         DateTime?
+  currentPeriodEnd    DateTime?
+  paymentProviderId   String?
+  paymentProviderStatus String?
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model CreditWallet {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  balance   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  transactions CreditTransaction[]
+  user         User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("credit_wallets")
+}
+
+model CreditTransaction {
+  id         String                 @id @default(uuid())
+  walletId   String
+  type       CreditTransactionType
+  amount     Int
+  reason     CreditTransactionReason
+  metadata   Json?
+  createdAt  DateTime               @default(now())
+
+  creditWallet CreditWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@map("credit_transactions")
+}
+
+model Story {
+  id            String                   @id @default(uuid())
+  slug          String                   @unique
+  title         String
+  synopsis      String
+  coverUrl      String?
+  genres        String[]
+  authorName    String
+  isPremium     Boolean                  @default(false)
+  totalChapters Int                      @default(1)
+  publishedAt   DateTime?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  language       String  @default("pt-BR")
+  maturityRating String  @default("12+")
+  basePrompt     String
+  tone           String?
+  styleGuide     String?
+  worldRules     String?
+  openingScene   String?
+
+  origin           StoryOrigin           @default(ADMIN)
+  visibility       StoryVisibility       @default(PUBLIC)
+  moderationStatus StoryModerationStatus @default(APPROVED)
+
+  creatorUserId String?
+  creatorUser   User?   @relation("UserStories", fields: [creatorUserId], references: [id], onDelete: SetNull)
+
+  moderationReason String?
+  submittedAt      DateTime?
+  approvedAt       DateTime?
+  rejectedAt       DateTime?
+
+  characters       StoryCharacter[]
+  readingSessions ReadingSession[]
+  premises        StoryPremise[]
+  sceneMedia      SceneMedia[]
+  generationUsages StoryGenerationUsage[]
+
+  @@index([creatorUserId])
+  @@index([origin])
+  @@index([visibility])
+  @@index([moderationStatus])
+  @@map("stories")
+}
+
+model StoryCharacter {
+  id          String        @id @default(uuid())
+  storyId     String
+  name        String
+  description String?
+  imageUrl    String?
+  role        CharacterRole @default(SUPPORTING)
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@map("story_characters")
+}
+
+model StoryPremise {
+  id                    String                   @id @default(uuid())
+  storyId               String
+  title                 String
+  synopsis              String
+  basePrompt            String
+  openingScene          String?
+  tone                  String?
+  styleGuide            String?
+  worldRules            String?
+  coverPrompt           String?
+  coverUrl              String?
+  coverGenerationStatus GenerationStatus        @default(NOT_REQUESTED)
+  coverError            String?
+  sortOrder             Int                      @default(0)
+  isPremium             Boolean                  @default(false)
+  isAiGenerated         Boolean                  @default(false)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  story        Story                   @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  characters   StoryPlayableCharacter[]
+  sessions     ReadingSession[]
+
+  @@index([storyId])
+  @@map("story_premises")
+}
+
+model StoryPlayableCharacter {
+  id                    String              @id @default(uuid())
+  premiseId             String?
+  name                  String
+  roleLabel             String
+  narrativeFunction     NarrativeFunction
+  description           String?
+  personality           String?
+  motivation            String?
+  secret                String?
+  relationshipToPlayer  String?
+  initialGoal           String?
+  conflictPotential     String?
+  visualPrompt          String?
+  imageUrl              String?
+  imageGenerationStatus  GenerationStatus    @default(NOT_REQUESTED)
+  imageError            String?
+  sortOrder             Int                  @default(0)
+  isPremium             Boolean             @default(false)
+  isAiGenerated         Boolean             @default(false)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  premise    StoryPremise?  @relation(fields: [premiseId], references: [id], onDelete: Cascade)
+  sessions   ReadingSession[]
+
+  @@index([premiseId])
+  @@map("story_playable_characters")
+}
+
+model ReadingSession {
+  id                  String               @id @default(uuid())
+  userId              String
+  storyId             String
+  selectedPremiseId   String?
+  selectedCharacterId String?
+  protagonistName     String?
+  protagonistRole     String?
+  protagonistContext  String?
+  currentChapter      Int                  @default(1)
+  currentSceneIndex   Int                  @default(0)
+  memorySummary       String?
+  status              ReadingSessionStatus @default(ACTIVE)
+  startedAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  lastSceneAt         DateTime             @default(now())
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story           Story          @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  premise         StoryPremise?  @relation(fields: [selectedPremiseId], references: [id], onDelete: SetNull)
+  character       StoryPlayableCharacter? @relation(fields: [selectedCharacterId], references: [id], onDelete: SetNull)
+  narrativeEvents NarrativeEvent[]
+  narrativeMemory NarrativeMemory?
+  modelUsages    ModelUsage[]
+  adEvents       AdEvent[]
+
+  @@index([userId])
+  @@index([storyId])
+  @@map("reading_sessions")
+}
+
+model NarrativeEvent {
+  id             String         @id @default(uuid())
+  sessionId      String
+  chapterNumber  Int
+  sceneIndex     Int
+  sceneText      String
+  choices        String[]
+  userAction     String
+  userActionType UserActionType
+  modelUsed      String
+  inputTokens    Int
+  outputTokens   Int
+  generatedAt    DateTime        @default(now())
+
+  session     ReadingSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sceneMedia  SceneMedia?
+
+  @@unique([sessionId, sceneIndex])
+  @@index([sessionId])
+  @@map("narrative_events")
+}
+
+model NarrativeMemory {
+  id               String   @id @default(uuid())
+  sessionId        String   @unique
+  summary          String   @default("")
+  worldState       String   @default("")
+  characterState   String   @default("")
+  importantChoices String   @default("")
+  openThreads      String   @default("")
+  constraints      String   @default("")
+  sceneCount       Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  session ReadingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("narrative_memories")
+}
+
+model ModelUsage {
+  id           String            @id @default(uuid())
+  userId       String
+  sessionId    String?
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  costUsed     Float             @default(0)
+  feature      ModelUsageFeature
+  createdAt    DateTime          @default(now())
+
+  user        User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session     ReadingSession?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("model_usages")
+}
+
+model StoryGenerationUsage {
+  id            String                     @id @default(uuid())
+  userId        String
+  storyId       String?
+  modelId       String?
+  provider      String?
+  isMock        Boolean                    @default(false)
+  status        StoryGenerationUsageStatus
+  failureReason String?
+  inputTokens   Int?
+  outputTokens  Int?
+  totalTokens   Int?
+  estimatedCost Float?
+  createdAt     DateTime                   @default(now())
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story  Story?  @relation(fields: [storyId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([storyId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("story_generation_usages")
+}
+
+model DailyUsageLimit {
+  id                   String   @id @default(uuid())
+  userId               String
+  date                 DateTime @db.Date
+  freeInteractionsUsed Int      @default(0)
+  limit                Int      @default(10)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("daily_usage_limits")
+}
+
+model AdEvent {
+  id        String     @id @default(uuid())
+  userId    String
+  sessionId String?
+  storyId   String
+  type      AdEventType
+  provider  String     @default("MOCK")
+  shownAt   DateTime   @default(now())
+
+  user        User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session     ReadingSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("ad_events")
+}
+
+model SceneMedia {
+  id               String         @id @default(cuid())
+  userId           String
+  narrativeEventId String?        @unique
+  storyId          String?
+
+  visibility       SceneVisibility       @default(PRIVATE)
+  moderationStatus SceneModerationStatus @default(NOT_SUBMITTED)
+
+  title       String?
+  caption     String?
+  textExcerpt String?
+
+  imageUrl     String?
+  videoUrl     String?
+  thumbnailUrl String?
+  mediaType    SceneMediaType @default(TEXT)
+
+  moderationNote String?
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user         User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  narrativeEvent NarrativeEvent? @relation(fields: [narrativeEventId], references: [id], onDelete: SetNull)
+  story        Story?          @relation(fields: [storyId], references: [id], onDelete: SetNull)
+
+  likes   SceneMediaLike[]
+  saves   SceneMediaSave[]
+  shares  SceneMediaShare[]
+  comments SceneMediaComment[]
+  reports  SceneMediaReport[]
+
+  @@index([userId])
+  @@index([visibility])
+  @@index([moderationStatus])
+  @@index([storyId])
+  @@index([createdAt])
+  @@index([publishedAt])
+  @@map("scene_media")
+}
+
+model SceneMediaLike {
+  id            String   @id @default(cuid())
+  userId        String
+  sceneMediaId  String
+  createdAt     DateTime @default(now())
+
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sceneMedia  SceneMedia @relation(fields: [sceneMediaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sceneMediaId])
+  @@index([sceneMediaId])
+  @@index([userId])
+  @@map("scene_media_likes")
+}
+
+model SceneMediaSave {
+  id            String   @id @default(cuid())
+  userId        String
+  sceneMediaId  String
+  createdAt     DateTime @default(now())
+
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sceneMedia  SceneMedia @relation(fields: [sceneMediaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sceneMediaId])
+  @@index([sceneMediaId])
+  @@index([userId])
+  @@map("scene_media_saves")
+}
+
+model SceneMediaShare {
+  id            String   @id @default(cuid())
+  userId        String
+  sceneMediaId  String
+  createdAt     DateTime @default(now())
+
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sceneMedia  SceneMedia @relation(fields: [sceneMediaId], references: [id], onDelete: Cascade)
+
+  @@index([sceneMediaId])
+  @@index([userId])
+  @@map("scene_media_shares")
+}
+
+enum CommentModerationStatus {
+  VISIBLE
+  HIDDEN
+  REMOVED
+}
+
+model SceneMediaComment {
+  id            String   @id @default(cuid())
+  userId        String
+  sceneMediaId  String
+  body          String
+  status        CommentModerationStatus @default(VISIBLE)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sceneMedia  SceneMedia @relation(fields: [sceneMediaId], references: [id], onDelete: Cascade)
+
+  reports SceneMediaReport[]
+
+  @@index([sceneMediaId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("scene_media_comments")
+}
+
+enum SceneMediaReportTargetType {
+  SCENE_MEDIA
+  COMMENT
+}
+
+enum SceneMediaReportStatus {
+  OPEN
+  REVIEWED
+  DISMISSED
+}
+
+model SceneMediaReport {
+  id              String   @id @default(cuid())
+  reporterUserId  String
+  targetType      SceneMediaReportTargetType
+  sceneMediaId    String?
+  commentId       String?
+  reason          String
+  status          SceneMediaReportStatus @default(OPEN)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  reporter   User              @relation(fields: [reporterUserId], references: [id], onDelete: Cascade)
+  sceneMedia SceneMedia?       @relation(fields: [sceneMediaId], references: [id], onDelete: Cascade)
+  comment    SceneMediaComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([reporterUserId, sceneMediaId])
+  @@unique([reporterUserId, commentId])
+  @@index([reporterUserId])
+  @@index([targetType])
+  @@index([status])
+  @@index([sceneMediaId])
+  @@index([commentId])
+  @@index([createdAt])
+  @@map("scene_media_reports")
+}

@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Noto Serif", ui-serif, Georgia, serif;
+
+  --color-background: #0a0a0a;
+  --color-surface: #131313;
+  --color-surface-container: #201f1f;
+  --color-primary: #cebdff;
+  --color-on-primary: #381385;
+  --color-tertiary: #ffb95f;
+  --color-on-tertiary: #472a00;
+  --color-on-surface: #e5e2e1;
+  --color-on-surface-variant: #cac4d4;
+  --color-outline: #494552;
+
+  --radius-xl: 1.5rem;
+  --radius-lg: 1rem;
+  --radius-md: 0.75rem;
+
+  --animate-float: float 3s ease-in-out infinite;
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-background text-on-surface font-sans antialiased;
+  }
+}
+
+.glass-card {
+  background: rgba(19, 19, 19, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cinematic-glow {
+  box-shadow: 0 0 40px rgba(206, 189, 255, 0.1);
+}
+
+.gold-glow {
+  box-shadow: 0 0 30px rgba(255, 185, 95, 0.15);
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+

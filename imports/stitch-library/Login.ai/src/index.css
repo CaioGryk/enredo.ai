@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400;1,700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0a0a0a;
+  --color-primary: #cebdff;
+  --color-on-primary: #381385;
+  --color-primary-container: #a78bfa;
+  --color-surface: #131313;
+  --color-surface-dim: #131313;
+  --color-on-surface: #e5e2e1;
+  --color-on-surface-variant: #cac4d4;
+  --color-outline: #948e9d;
+  
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Noto Serif", ui-serif, Georgia, serif;
+  
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-on-surface font-sans;
+  }
+}
+
+.glass-card {
+  background: rgba(18, 18, 18, 0.65);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+}
+
+.cinematic-overlay {
+  background: radial-gradient(circle at center, transparent 0%, rgba(10, 10, 10, 0.8) 100%);
+}
+
+.input-focus-effect:focus {
+  border-bottom-color: var(--color-primary);
+  outline: none;
+  background: rgba(206, 189, 255, 0.03);
+}

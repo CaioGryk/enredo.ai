@@ -1,0 +1,8 @@
+{
+  "name": "Enredo",
+  "description": "Uma plataforma de storytelling interativo e cinemático, onde cada escolha molda o seu destino.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}

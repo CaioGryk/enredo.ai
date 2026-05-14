@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400;1,700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-background: #131313;
+  --color-primary: #cebdff;
+  --color-on-primary: #381385;
+  --color-on-surface: #e5e2e1;
+  --color-on-surface-variant: #cac4d4;
+  --color-surface-container: #201f1f;
+  --color-secondary: #c8c6c5;
+  
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Noto Serif", ui-serif, Georgia, serif;
+
+  --radius-xl: 1.5rem;
+  --radius-lg: 1rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-on-surface font-sans antialiased;
+  }
+}
+
+.glass-card {
+  background: rgba(18, 18, 18, 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.rim-light {
+  border-top: 0.5px solid rgba(255, 255, 255, 0.2);
+}
+
+.gradient-overlay {
+  background: linear-gradient(0deg, rgba(10, 10, 10, 0.95) 0%, rgba(10, 10, 10, 0.4) 50%, rgba(10, 10, 10, 0) 100%);
+}
+
+.cinematic-violet-glow {
+  box-shadow: 0 0 20px rgba(206, 189, 255, 0.3);
+}

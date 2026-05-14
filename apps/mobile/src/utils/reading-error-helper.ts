@@ -1,0 +1,76 @@
+import { Alert } from 'react-native';
+import { router } from 'expo-router';
+
+export const READING_ERROR_CODES = {
+  DAILY_LIMIT_REACHED: 'DAILY_LIMIT_REACHED',
+  INSUFFICIENT_CREDITS: 'INSUFFICIENT_CREDITS',
+  PREMIUM_REQUIRED: 'PREMIUM_REQUIRED',
+  MODEL_ACCESS_DENIED: 'MODEL_ACCESS_DENIED',
+  AI_PROVIDER_UNAVAILABLE: 'AI_PROVIDER_UNAVAILABLE',
+  READING_SESSION_NOT_FOUND: 'READING_SESSION_NOT_FOUND',
+  READING_GENERATION_FAILED: 'READING_GENERATION_FAILED',
+  INVALID_READING_ACTION: 'INVALID_READING_ACTION',
+} as const;
+
+export function handleReadingError(e: any): void {
+  const status = e?.response?.status;
+  const errorCode = e?.response?.data?.error;
+  const message = e?.response?.data?.message || 'Ocorreu um erro inesperado.';
+
+  if (errorCode) {
+    switch (errorCode) {
+      case READING_ERROR_CODES.DAILY_LIMIT_REACHED:
+        Alert.alert('Limite diário atingido', 'Você atingiu o limite de leitura do seu plano atual.', [
+          { text: 'OK', style: 'default' },
+        ]);
+        return;
+      case READING_ERROR_CODES.INSUFFICIENT_CREDITS:
+        Alert.alert('Créditos insuficientes', 'Você não tem créditos suficientes para usar este modelo.', [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Ver Planos', onPress: () => router.push('/(tabs)/upgrade') },
+        ]);
+        return;
+      case READING_ERROR_CODES.PREMIUM_REQUIRED:
+        Alert.alert('Conteúdo Premium', 'Esta história requer uma assinatura Premium.', [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Ver Premium', onPress: () => router.push('/(tabs)/upgrade') },
+        ]);
+        return;
+      case READING_ERROR_CODES.MODEL_ACCESS_DENIED:
+        Alert.alert('Modelo indisponível', 'Este modelo não está disponível para seu plano.', [
+          { text: 'OK', style: 'default' },
+        ]);
+        return;
+      case READING_ERROR_CODES.AI_PROVIDER_UNAVAILABLE:
+        Alert.alert('Serviço temporariamente indisponível', 'O serviço de IA está temporariamente fora do ar. Tente novamente mais tarde.', [
+          { text: 'OK', style: 'default' },
+        ]);
+        return;
+      case READING_ERROR_CODES.READING_SESSION_NOT_FOUND:
+        Alert.alert('Sessão não encontrada', 'Esta sessão de leitura não existe ou foi removida.', [
+          { text: 'OK', style: 'default', onPress: () => router.back() },
+        ]);
+        return;
+      case READING_ERROR_CODES.READING_GENERATION_FAILED:
+        Alert.alert('Erro ao gerar cena', 'Não foi possível gerar a cena. Tente novamente.', [
+          { text: 'OK', style: 'default' },
+        ]);
+        return;
+      case READING_ERROR_CODES.INVALID_READING_ACTION:
+        Alert.alert('Ação inválida', 'Revise sua ação e tente novamente.', [
+          { text: 'OK', style: 'default' },
+        ]);
+        return;
+    }
+  }
+
+  if (status === 402) {
+    Alert.alert('Acesso restrito', 'Você precisa de upgrade ou créditos para continuar.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Ver Premium', onPress: () => router.push('/(tabs)/upgrade') },
+    ]);
+    return;
+  }
+
+  Alert.alert('Erro', message);
+}

@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif:wght@400;600;700;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Noto Serif", ui-serif, Georgia, serif;
+
+  --color-brand-violet: #A78BFA;
+  --color-surface-base: #0A0A0A;
+  --color-surface-panel: #121212;
+  --color-surface-interactive: #1E1E1E;
+
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+}
+
+@utility glass {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+@utility text-gradient {
+  background: linear-gradient(to bottom, rgba(229, 226, 225, 1) 60%, rgba(229, 226, 225, 0.4) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@layer base {
+  body {
+    @apply bg-surface-base text-[#e5e2e1] font-sans selection:bg-brand-violet/30;
+    min-height: 100dvh;
+  }
+}
+
+/* Custom styles for the drop cap and narrative fade */
+.prose-fade {
+  mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+}
+
+.drop-cap::first-letter {
+  @apply text-5xl font-bold text-brand-violet mr-3 float-left leading-[0.8];
+  font-family: var(--font-serif);
+}
