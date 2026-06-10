@@ -8068,9 +8068,14 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 |-------|--------|
 | `apps/mobile npx tsc --noEmit` | ✅ Passed |
 | `apps/mobile npx expo-doctor` | ✅ 18/18 checks passed |
+| GitHub push to `origin/main` | ✅ `4f30971` pushed |
+| Second EAS Android preview build | ⏳ Submitted, initially `IN_QUEUE` |
 
 ### Next steps
 
-- Commit and push the dependency fix.
-- Generate a second Android preview APK using EAS.
+- Monitor the second Android preview APK:
+  - Build ID: `7c0a9bf7-d886-40d1-a28c-0efabd4341fc`
+  - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/7c0a9bf7-d886-40d1-a28c-0efabd4341fc`
+  - Git commit: `4f30971ca9b73071c42bd47fd5f4e410e002fea1`
+  - Android build version: `2`
 - Install the second APK on the owner's Android device and verify that it opens before sharing with beta testers.

@@ -67,6 +67,14 @@ Corrective dependency cleanup completed after the first crash:
 
 Next APK must be generated from this corrected dependency set before sharing with beta testers.
 
+Second preview build after dependency cleanup:
+
+```txt
+https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/7c0a9bf7-d886-40d1-a28c-0efabd4341fc
+```
+
+Initial status: `IN_QUEUE`. This build uses Git commit `4f30971ca9b73071c42bd47fd5f4e410e002fea1` and Android build version `2`.
+
 **Web Preview:**
 ```sh
 npx expo export --platform web --output-dir dist-preview-vX
