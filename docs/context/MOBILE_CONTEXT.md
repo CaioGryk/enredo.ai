@@ -47,6 +47,16 @@ First preview build:
 https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/b828384c-172e-400b-a2b6-70eee7dbbe27
 ```
 
+First preview APK artifact:
+
+```txt
+https://expo.dev/artifacts/eas/-X1WZw5MQDqWhtfiDzH9FOdijcWXiC8I_XAAmDaRq6o.apk
+```
+
+Status: `FINISHED`. Artifact expires on June 24, 2026.
+
+Known build warning: Expo Doctor passed the remote build but reported dependency cleanup items (`react-native-svg` missing for `lucide-react-native`, SDK 54 package mismatches, and duplicate native modules). Test this APK first; fix these dependency warnings before generating the next beta APK.
+
 **Web Preview:**
 ```sh
 npx expo export --platform web --output-dir dist-preview-vX

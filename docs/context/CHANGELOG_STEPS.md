@@ -7971,6 +7971,13 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
      - Build ID: `b828384c-172e-400b-a2b6-70eee7dbbe27`
      - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/b828384c-172e-400b-a2b6-70eee7dbbe27`
      - Initial status at documentation time: `IN_QUEUE`
+     - Final status: `FINISHED`
+     - APK artifact: `https://expo.dev/artifacts/eas/-X1WZw5MQDqWhtfiDzH9FOdijcWXiC8I_XAAmDaRq6o.apk`
+     - Artifact expiration: June 24, 2026
+   - Expo Doctor reported dependency warnings during the build but did not block APK generation:
+     - Missing `react-native-svg` peer dependency required by `lucide-react-native`
+     - Duplicate native modules caused by outdated `expo-auth-session` / `expo-crypto` major versions
+     - SDK 54 package version mismatches
 
 6. **Documentation process**
    - New operational rule added: every meaningful project change must be documented in project docs before the work is considered complete.
@@ -8001,7 +8008,7 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 | Public health check | ✅ `database: "ok"` |
 | Mobile TypeScript | ✅ `npx tsc --noEmit` passed |
 | EAS project creation | ✅ `@enredo.ai/enredo-ai` created and linked |
-| First EAS Android preview build | ⏳ Submitted, initially `IN_QUEUE` |
+| First EAS Android preview build | ✅ `FINISHED`; APK artifact generated |
 
 ### Next steps
 
@@ -8013,3 +8020,4 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 - Install on the owner's Android device first.
 - Validate register/login, library, story detail, premise selection, character selection, reading start, and first user action.
 - Only after owner validation, distribute APK link to the controlled beta group.
+- Before the next APK build, clean up Expo dependency warnings with `expo install` and rerun `expo-doctor`.
