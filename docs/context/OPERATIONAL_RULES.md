@@ -4,6 +4,18 @@
 
 ---
 
+## Documentation Rule
+
+Every meaningful project change must be documented in the project docs before the work is considered complete.
+
+Minimum expectation:
+- Update `docs/context/CHANGELOG_STEPS.md` with what changed, why, files touched, validation performed, and any remaining follow-up.
+- Update the focused context doc when applicable, such as `MOBILE_CONTEXT.md`, `BACKEND_CONTEXT.md`, `CURRENT_STATE.md`, deploy guides, beta guides, or operational docs.
+- Never document real secrets. Use placeholders for environment variables and provider keys.
+- Deployment, environment, Railway, Expo, EAS, database, billing, AI-provider, and beta-process changes are always documentation-worthy.
+
+---
+
 ## Forbidden Commands (Destructive)
 
 **NEVER run these without explicit authorization:**

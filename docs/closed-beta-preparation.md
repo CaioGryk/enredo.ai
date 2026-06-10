@@ -1,13 +1,13 @@
 # Closed Beta Preparation — Enredo.ai
 
-**Versão:** Step 97 — Maio de 2026
-**Status:** Pacote de preparação para beta fechada local/dev. **Não é um lançamento público.**
+**Versão:** Step 98o — Junho de 2026
+**Status:** Preparação para beta fechada com backend em Railway e APK Android interno via EAS. **Não é um lançamento público.**
 
 ---
 
 ## 1. Objetivo da Beta Fechada
 
-Validar o Enredo.ai com um grupo restrito de testadores em **ambiente local de desenvolvimento** antes de qualquer deploy em staging ou produção. O foco é:
+Validar o Enredo.ai com um grupo restrito de testadores usando **backend production beta no Railway** e **APK Android interno** antes de qualquer publicação em loja. O foco é:
 
 - Verificar a experiência completa de leitura interativa.
 - Testar o fluxo de geração de imagens e vídeos com créditos.
@@ -34,8 +34,9 @@ Validar o Enredo.ai com um grupo restrito de testadores em **ambiente local de d
 
 ### O que NÃO está incluído
 - ❌ Pagamentos reais (Stripe, Apple IAP, Google Play).
-- ❌ Deploy em staging ou produção.
-- ❌ App nas lojas (App Store / Google Play).
+- ✅ Backend production beta no Railway.
+- ✅ APK Android interno para testadores controlados.
+- ❌ App nas lojas (App Store / Google Play pública).
 - ❌ Personalização de aparência com foto de perfil.
 - ❌ Reembolsos ou expiração de créditos.
 - ❌ CI/CD automatizado.
@@ -52,63 +53,49 @@ Validar o Enredo.ai com um grupo restrito de testadores em **ambiente local de d
 
 **Número recomendado:** 3-8 testadores para esta fase.
 
-**Acesso:** Local apenas — cada testador precisa rodar o backend e o mobile localmente ou acessar via tunnel/expose local (ex: ngrok, localhost.run).
+**Acesso:** APK Android interno apontando para a API pública do Railway. Testadores não precisam rodar backend local.
+
+**API beta:** `https://enredoai-production.up.railway.app/api`
 
 ---
 
 ## 4. Checklist de Ambiente
 
-### Backend (`services/api`)
+### Backend Railway (`services/api`)
 ```bash
-# 1. Dependências
-npm install
-
-# 2. Configurar .env
-cp .env.example .env
-# Preencher DATABASE_URL, DIRECT_URL, JWT_SECRET, REFRESH_TOKEN_SECRET
-# LLM_MOCK_MODE=false (para IA real)
-# FREE_LLM_ONLY=false (para permitir modelos pagos)
-# ADMIN_EMAIL e ADMIN_PASSWORD (para seed do admin)
-
-# 3. Seed do admin
-npm run seed
-
-# 4. Validar
-npx prisma validate
-npx tsc --noEmit --incremental false
-npm test -- --runInBand
-npm run build
-
-# 5. Iniciar
-npm run dev
-# API disponível em http://localhost:3001
-# Swagger em http://localhost:3001/api/docs
+# Validar API pública
+curl https://enredoai-production.up.railway.app/api/health
 ```
+
+Expected result: `status: "ok"`, `environment: "production"`, `database: "ok"`.
 
 ### Mobile (`apps/mobile`)
 ```bash
 # 1. Dependências
 npm install
 
-# 2. Configurar API URL para celular físico/tunnel quando necessário
+# 2. Configurar API URL
 # O app lê EXPO_PUBLIC_API_URL em build/start time; não edite src/api/client.ts.
-# Exemplo:
-# EXPO_PUBLIC_API_URL=http://<ip-local-ou-tunnel>:3001/api npx expo start
+EXPO_PUBLIC_API_URL=https://enredoai-production.up.railway.app/api
 
 # 3. Validar
 npx tsc --noEmit
 
-# 4. Iniciar
+# 4. Iniciar localmente com Expo Go
 npx expo start
 # Escanear QR code com Expo Go no celular
+
+# 5. Gerar APK interno para beta controlada
+npx eas build -p android --profile preview
 ```
 
 ### Provedores de IA necessários
-- **OpenRouter** (API key: `OPENROUTER_API_KEY`) — modelo gratuito padrão.
-- **OpenAI** (API key: `OPENAI_API_KEY`) — modelos premium.
-- **Google AI** (API key: `GOOGLE_AI_API_KEY`) — geração de imagens.
+- **Groq** (API key: `GROQ_API_KEY`) — provedor gratuito principal.
+- **Google AI / Gemini** (API key: `GOOGLE_AI_API_KEY`) — fallback de texto.
+- **OpenRouter** (API key: `OPENROUTER_API_KEY`) — fallback de texto.
 
 **Opcionais (não bloqueiam a beta):**
+- OpenAI (API key: `OPENAI_API_KEY`) — modelos premium.
 - Anthropic (API key: `ANTHROPIC_API_KEY`) — modelo cine.
 - Kling (API keys: `KLING_API_KEY` + `KLING_ENABLED=true`) — geração de vídeo.
 
@@ -201,7 +188,7 @@ A beta deve ser **interrompida** se:
 - [ ] `.env` configurado com todas as variáveis necessárias.
 - [ ] Admin seed executado (`npm run seed`).
 - [ ] Backend rodando e acessível.
-- [ ] Mobile build funcional (Expo Go ou dev build).
+- [ ] Mobile build funcional (Expo Go ou APK preview).
 - [ ] Lista de testadores definida.
 - [ ] Canal de comunicação com testadores estabelecido (ex: Discord, WhatsApp, email).
 - [ ] Backup do banco de dados criado antes de iniciar a beta.

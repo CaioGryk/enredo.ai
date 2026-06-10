@@ -7920,3 +7920,85 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 - No environment values were committed.
 - No database mutation was performed.
 - Do not run Neon `prisma db push` unless the database decision is reopened and connectivity/target checks pass first.
+
+---
+
+## Step 98o — Railway Backend Production Deploy and Expo Beta Preparation
+
+**Date:** June 10, 2026
+
+**Objective:** Stabilize the backend beta deploy on Railway, configure the production API endpoint, and prepare the mobile app for an Android APK closed beta.
+
+### What was implemented
+
+1. **Prisma/OpenSSL deploy compatibility**
+   - Railway deploy was crashing after Nest route registration when Prisma attempted to load `libquery_engine-linux-musl.so.node`.
+   - Root cause: Alpine/musl Prisma engine expected `libssl.so.1.1`, which was unavailable in the Railway runtime.
+   - `services/api/prisma/schema.prisma` now includes `binaryTargets = ["native", "debian-openssl-3.0.x"]`.
+   - `services/api/Dockerfile` and `infra/docker/Dockerfile` now use `node:20-bookworm-slim` and install `openssl`/`ca-certificates`.
+   - `services/api/package.json` build script now runs `prisma generate && nest build`.
+
+2. **GitHub deploy path**
+   - Commit pushed to `main`: `eb88020` — `Fix Prisma deploy OpenSSL compatibility`.
+   - Railway redeployed successfully from GitHub and the service became online.
+
+3. **Railway backend environment**
+   - Railway variables were prepared for production beta mode:
+     - `NODE_ENV=production`
+     - real `DATABASE_URL` / `DIRECT_URL`
+     - strong JWT and refresh-token secrets
+     - `LLM_MOCK_MODE=false`
+     - `FREE_LLM_ONLY=true`
+     - text provider chain using Groq, Gemini, and OpenRouter
+     - image/video generation disabled for initial beta control
+     - Swagger disabled
+   - Public Railway domain generated: `https://enredoai-production.up.railway.app`.
+   - API base URL for clients: `https://enredoai-production.up.railway.app/api`.
+
+4. **Backend production validation**
+   - Public health check passed:
+     - `GET https://enredoai-production.up.railway.app/api/health`
+     - Returned `status: "ok"`, `environment: "production"`, `version: "0.1.0"`, and `database: "ok"`.
+
+5. **Expo/mobile beta preparation**
+   - Mobile local env prepared with `EXPO_PUBLIC_API_URL=https://enredoai-production.up.railway.app/api`.
+   - `apps/mobile/eas.json` preview profile now injects the same API URL for APK builds.
+   - Closed beta path selected: Android internal APK via EAS `preview` profile before Play Store Internal Testing.
+
+6. **Documentation process**
+   - New operational rule added: every meaningful project change must be documented in project docs before the work is considered complete.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `services/api/prisma/schema.prisma` | Added Debian OpenSSL 3 Prisma binary target |
+| `services/api/package.json` | Build now regenerates Prisma Client |
+| `services/api/Dockerfile` | Switched Alpine to Debian slim and installed OpenSSL |
+| `infra/docker/Dockerfile` | Same Docker compatibility update |
+| `apps/mobile/eas.json` | Preview APK profile now points to Railway API |
+| `apps/mobile/.env.local` | Local Expo API URL set; ignored by git |
+| `docs/context/OPERATIONAL_RULES.md` | Added permanent documentation rule |
+| `docs/context/CHANGELOG_STEPS.md` | Added this step |
+| `docs/closed-beta-preparation.md` | Updated beta deployment notes |
+| `docs/context/MOBILE_CONTEXT.md` | Updated Expo APK beta notes |
+
+### Validation
+
+| Check | Result |
+|-------|--------|
+| `services/api npm run build` | ✅ Prisma generate + Nest build passed |
+| GitHub push to `origin/main` | ✅ `eb88020` pushed |
+| Railway deploy | ✅ Service online |
+| Public health check | ✅ `database: "ok"` |
+
+### Next steps
+
+- Generate the first Android beta APK:
+  ```bash
+  cd apps/mobile
+  npx eas build -p android --profile preview
+  ```
+- Install on the owner's Android device first.
+- Validate register/login, library, story detail, premise selection, character selection, reading start, and first user action.
+- Only after owner validation, distribute APK link to the controlled beta group.

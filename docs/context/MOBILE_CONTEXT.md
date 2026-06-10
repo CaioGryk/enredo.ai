@@ -13,6 +13,27 @@
 | React Query | Server state management |
 | TypeScript | Type safety |
 
+## Closed Beta APK
+
+The controlled beta path is Android APK first, using EAS Build with the `preview` profile.
+
+Current beta API:
+
+```env
+EXPO_PUBLIC_API_URL=https://enredoai-production.up.railway.app/api
+```
+
+Local Expo uses `apps/mobile/.env.local` for the same URL. This file is intentionally ignored by git.
+
+APK build command:
+
+```bash
+cd apps/mobile
+npx eas build -p android --profile preview
+```
+
+The `preview` profile in `eas.json` builds an internal APK and injects the production beta API URL. Use this APK for owner validation first, then distribute the EAS APK link to controlled Android testers.
+
 **Web Preview:**
 ```sh
 npx expo export --platform web --output-dir dist-preview-vX
