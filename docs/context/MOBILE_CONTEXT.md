@@ -17,6 +17,13 @@
 
 The controlled beta path is Android APK first, using EAS Build with the `preview` profile.
 
+EAS project:
+
+```txt
+Account/project: @enredo.ai/enredo-ai
+Project ID: ccf84c49-0a5d-4534-bfa3-d8dd9a08f621
+```
+
 Current beta API:
 
 ```env
@@ -33,6 +40,12 @@ npx eas build -p android --profile preview
 ```
 
 The `preview` profile in `eas.json` builds an internal APK and injects the production beta API URL. Use this APK for owner validation first, then distribute the EAS APK link to controlled Android testers.
+
+First preview build:
+
+```txt
+https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/b828384c-172e-400b-a2b6-70eee7dbbe27
+```
 
 **Web Preview:**
 ```sh

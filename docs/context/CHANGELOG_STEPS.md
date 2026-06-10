@@ -7964,6 +7964,13 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
    - Mobile local env prepared with `EXPO_PUBLIC_API_URL=https://enredoai-production.up.railway.app/api`.
    - `apps/mobile/eas.json` preview profile now injects the same API URL for APK builds.
    - Closed beta path selected: Android internal APK via EAS `preview` profile before Play Store Internal Testing.
+   - EAS project created and linked:
+     - Account/project: `@enredo.ai/enredo-ai`
+     - Project ID: `ccf84c49-0a5d-4534-bfa3-d8dd9a08f621`
+   - First Android preview build started:
+     - Build ID: `b828384c-172e-400b-a2b6-70eee7dbbe27`
+     - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/b828384c-172e-400b-a2b6-70eee7dbbe27`
+     - Initial status at documentation time: `IN_QUEUE`
 
 6. **Documentation process**
    - New operational rule added: every meaningful project change must be documented in project docs before the work is considered complete.
@@ -7977,6 +7984,7 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 | `services/api/Dockerfile` | Switched Alpine to Debian slim and installed OpenSSL |
 | `infra/docker/Dockerfile` | Same Docker compatibility update |
 | `apps/mobile/eas.json` | Preview APK profile now points to Railway API |
+| `apps/mobile/app.json` | Linked app to EAS project ID |
 | `apps/mobile/.env.local` | Local Expo API URL set; ignored by git |
 | `docs/context/OPERATIONAL_RULES.md` | Added permanent documentation rule |
 | `docs/context/CHANGELOG_STEPS.md` | Added this step |
@@ -7991,6 +7999,9 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 | GitHub push to `origin/main` | ✅ `eb88020` pushed |
 | Railway deploy | ✅ Service online |
 | Public health check | ✅ `database: "ok"` |
+| Mobile TypeScript | ✅ `npx tsc --noEmit` passed |
+| EAS project creation | ✅ `@enredo.ai/enredo-ai` created and linked |
+| First EAS Android preview build | ⏳ Submitted, initially `IN_QUEUE` |
 
 ### Next steps
 
