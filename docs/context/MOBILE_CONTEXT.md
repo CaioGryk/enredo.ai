@@ -55,7 +55,17 @@ https://expo.dev/artifacts/eas/-X1WZw5MQDqWhtfiDzH9FOdijcWXiC8I_XAAmDaRq6o.apk
 
 Status: `FINISHED`. Artifact expires on June 24, 2026.
 
-Known build warning: Expo Doctor passed the remote build but reported dependency cleanup items (`react-native-svg` missing for `lucide-react-native`, SDK 54 package mismatches, and duplicate native modules). Test this APK first; fix these dependency warnings before generating the next beta APK.
+First device install result: the APK installed on the owner's Android phone but closed immediately on launch. The likely cause was the Expo Doctor dependency warning from the first build.
+
+Corrective dependency cleanup completed after the first crash:
+
+- Added `react-native-svg` for `lucide-react-native`.
+- Re-aligned Expo SDK 54 packages (`expo`, `expo-auth-session`, `expo-crypto`, `expo-font`, `expo-linking`, `expo-router`, `expo-web-browser`) with `expo install`.
+- Added `expo-font` and `expo-web-browser` config plugins.
+- Bumped Android `versionCode` to `2` for the next APK.
+- Validation now passes: `npx tsc --noEmit` and `npx expo-doctor` (`18/18 checks passed`).
+
+Next APK must be generated from this corrected dependency set before sharing with beta testers.
 
 **Web Preview:**
 ```sh
