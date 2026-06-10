@@ -8128,9 +8128,14 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 | Direct production register smoke test | ✅ `201 Created` |
 | `apps/mobile npx tsc --noEmit` | ✅ Passed |
 | `apps/mobile npx expo-doctor` | ✅ 18/18 checks passed |
+| GitHub push to `origin/main` | ✅ `eac9fc3` pushed |
+| Third EAS Android preview build | ⏳ Submitted, initially `IN_PROGRESS` |
 
 ### Next steps
 
-- Commit and push the fallback fix.
-- Generate a third Android preview APK with Android build version `3`.
+- Monitor the third Android preview APK:
+  - Build ID: `d481231c-f308-44aa-8b7b-dc24b9070e88`
+  - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/d481231c-f308-44aa-8b7b-dc24b9070e88`
+  - Git commit: `eac9fc3018a98c944fa0e53557475abda84bc73f`
+  - Android build version: `3`
 - Install the third APK on the owner's Android device and retry registration.
