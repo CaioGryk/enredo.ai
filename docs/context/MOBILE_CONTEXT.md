@@ -100,7 +100,13 @@ Third preview build after API fallback cleanup:
 https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/d481231c-f308-44aa-8b7b-dc24b9070e88
 ```
 
-Initial status: `IN_PROGRESS`. This build uses Git commit `eac9fc3018a98c944fa0e53557475abda84bc73f` and Android build version `3`.
+Third preview APK artifact:
+
+```txt
+https://expo.dev/artifacts/eas/KUneo0tL_IjPY68sGtJeRduXdA2CtQ6hupNXSLu3NIc.apk
+```
+
+Status: `FINISHED`. Artifact expires on June 24, 2026. This build uses Git commit `eac9fc3018a98c944fa0e53557475abda84bc73f` and Android build version `3`.
 
 **Web Preview:**
 ```sh
