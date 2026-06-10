@@ -1,7 +1,7 @@
 import { ReadingOrchestratorService } from '../reading-orchestrator.service';
 import { NarrativeEngine } from '../narrative/narrative-engine.service';
 import { StoryQualityService } from '@modules/story-quality/story-quality.service';
-import { SubscriptionType, ReadingSessionStatus } from '@prisma/client';
+import { SubscriptionType, ReadingSessionStatus, UserActionType } from '@prisma/client';
 
 describe('ReadingOrchestratorService - Reading Contract Fix', () => {
   let service: ReadingOrchestratorService;
@@ -22,11 +22,12 @@ describe('ReadingOrchestratorService - Reading Contract Fix', () => {
     mockPrisma = {
       $transaction: jest.fn(),
       story: { findUnique: jest.fn().mockResolvedValue(null) },
-      storyPremise: { findUnique: jest.fn().mockResolvedValue(null) },
-      storyPlayableCharacter: { findFirst: jest.fn().mockResolvedValue(null) },
+      storyPremise: { findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn().mockResolvedValue(null) },
+      storyPlayableCharacter: { findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn().mockResolvedValue(null) },
       narrativeMemory: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), update: jest.fn() },
       narrativeEvent: { create: jest.fn().mockResolvedValue({ chapterNumber: 1, sceneIndex: 0, sceneText: 'First scene' }), findMany: jest.fn().mockResolvedValue([]) },
       readingSession: {
+        findUnique: jest.fn().mockResolvedValue(null),
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 'session-1', userId: 'user-1', storyId: 'story-1' }),
         update: jest.fn().mockResolvedValue({ id: 'session-1' }),
@@ -377,6 +378,95 @@ describe('ReadingOrchestratorService - Reading Contract Fix', () => {
       expect(result.session.currentScene.sceneText).toBe('Newest scene text');
       // Should NOT be the oldest event
       expect(result.session.currentScene.id).not.toBe('event-oldest');
+    });
+
+    it('should continue with the session selected premise and character context', async () => {
+      const session = {
+        id: 'session-1',
+        userId: 'user-1',
+        storyId: 'story-1',
+        status: ReadingSessionStatus.ACTIVE,
+        currentSceneIndex: 1,
+        selectedPremiseId: 'premise-selected',
+        selectedCharacterId: 'character-selected',
+      };
+      const selectedPremise = {
+        id: 'premise-selected',
+        storyId: 'story-1',
+        title: 'Premissa Selecionada',
+        synopsis: 'A premissa correta da sessão.',
+      };
+      const selectedCharacter = {
+        id: 'character-selected',
+        premiseId: 'premise-selected',
+        name: 'Lia',
+        roleLabel: 'A investigadora',
+      };
+
+      mockPrisma.readingSession.findUnique.mockResolvedValue(session);
+      mockPrisma.story.findUnique.mockResolvedValue(mockStory);
+      mockPrisma.narrativeMemory.findUnique.mockResolvedValue({
+        id: 'memory-1',
+        sessionId: 'session-1',
+        summary: '',
+        worldState: '',
+        characterState: '',
+        importantChoices: '',
+        openThreads: '',
+        constraints: '',
+        sceneCount: 1,
+        codex: null,
+      });
+      mockPrisma.narrativeEvent.findMany.mockResolvedValue([
+        { id: 'event-1', sceneIndex: 1, sceneText: 'Previous scene', choices: ['Continue'] },
+      ]);
+      mockPrisma.storyPremise.findUnique.mockResolvedValue(selectedPremise);
+      mockPrisma.storyPlayableCharacter.findUnique.mockResolvedValue(selectedCharacter);
+      mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma));
+      mockPrisma.narrativeEvent.create.mockResolvedValue({
+        id: 'event-2',
+        sceneIndex: 2,
+        sceneText: 'Next scene',
+        choices: ['Choice A'],
+      });
+      mockPrisma.readingSession.update.mockResolvedValue({ ...session, currentSceneIndex: 2 });
+      mockPrisma.modelUsage = { create: jest.fn().mockResolvedValue({}) };
+
+      mockNarrativeEngine.generateScene.mockResolvedValue({
+        sceneText: 'Next scene',
+        suggestedActions: ['Choice A'],
+        sceneMetadata: { emotion: 'tense' },
+        modelUsed: 'groq/free',
+        tokenUsage: { inputTokens: 10, outputTokens: 20 },
+        memoryPatch: null,
+      });
+
+      await service.generateNextScene(
+        'user-1',
+        'session-1',
+        'Investigar a carta',
+        'groq/free',
+        mockUser,
+        { id: 'groq/free', tier: 'FREE' },
+        false,
+        undefined,
+        UserActionType.FREE_TEXT,
+      );
+
+      expect(mockPrisma.storyPremise.findUnique).toHaveBeenCalledWith({
+        where: { id: 'premise-selected' },
+        include: { characters: true },
+      });
+      expect(mockPrisma.storyPremise.findFirst).not.toHaveBeenCalled();
+      expect(mockPrisma.storyPlayableCharacter.findUnique).toHaveBeenCalledWith({
+        where: { id: 'character-selected' },
+      });
+      expect(mockPrisma.storyPlayableCharacter.findFirst).not.toHaveBeenCalled();
+
+      const engineInput = mockNarrativeEngine.generateScene.mock.calls[0][0];
+      expect(engineInput.premise).toBe(selectedPremise);
+      expect(engineInput.playableCharacter).toBe(selectedCharacter);
+      expect(engineInput.actionType).toBe(UserActionType.FREE_TEXT);
     });
   });
 });

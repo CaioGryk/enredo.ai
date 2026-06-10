@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { CreateStoryGenerationDto } from './dto/create-story-generation.dto';
+import { INJECTION_PATTERNS } from '../moderation/moderation.service';
 
 export type SafeStoryGenerationInput = {
   keywords: string[];
@@ -14,28 +15,6 @@ const MIN_KEYWORD_LENGTH = 2;
 const MAX_KEYWORD_LENGTH = 50;
 const MAX_FIELD_LENGTH = 50;
 const MAX_CONSTRAINTS_LENGTH = 500;
-
-const INJECTION_PATTERNS = [
-  /ignore\s+previous\s+instructions?/i,
-  /ignore\s+all\s+instructions/i,
-  /disregard\s+your\s+(system|previous|original)\s+(prompt|instructions|context)/i,
-  /you\s+are\s+now\s+(a|an)\s+/i,
-  /you\s+are\s+now\s*(a|an)?\s*(AI|assistant|language model)?/i,
-  /pretend\s+you\s+(are|were)\s+(a|an)\s+/i,
-  /pretend\s+you\s+(are|were)\s*(a|an)?\s*(AI|assistant)?/i,
-  /roleplay\s+(as|being)/i,
-  /system\s+(prompt|message)/i,
-  /developer\s+(message|mode|override)/i,
-  /reveal\s+(your|the)\s+(system|secret|hidden)\s+(prompt|instructions|context)/i,
-  /new\s+(system|ai|assistant)\s+prompt/i,
-  /override\s+(your|the)\s+(safety|content|behavior)/i,
-  /bypass\s+(your|the\s+)?(filters?|restrictions?|safety)/i,
-  /disable\s+(your|the\s+)?(safety|security|protection)/i,
-  /\[\s*SYSTEM\s*\]/i,
-  /<\|system\|>/i,
-  /jailbreak/i,
-  /DAN\b/i,
-];
 
 export class StoryGenerationInputGuard {
   validate(dto: CreateStoryGenerationDto): SafeStoryGenerationInput {

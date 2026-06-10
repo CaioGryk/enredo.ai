@@ -85,9 +85,11 @@ export class StoryLifecycleService {
       });
   }
 
-  async createStory(userId: string, dto: CreateStoryDto): Promise<any> {
+  async createStory(userId: string, dto: CreateStoryDto, options?: { skipCreationLimit?: boolean }): Promise<any> {
     // 0. Check story creation limits
-    await this.checkStoryCreationLimit(userId);
+    if (!options?.skipCreationLimit) {
+      await this.checkStoryCreationLimit(userId);
+    }
 
     // 1. Generate unique slug from title
     const slug = await this.generateUniqueSlug(dto.title);

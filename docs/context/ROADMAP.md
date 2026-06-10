@@ -18,7 +18,7 @@
   - Library → Detail → Premise → Character → Reader
 - ✅ Profile, Premium, My Stories, and Scenes as base
 
-**Status:** Beta readiness in progress. Backend structurally sound. Main blockers resolved in Steps 32-42.
+**Status:** Local/dev private beta readiness reached. Steps 43-97 closed and audited. Current focus is Step 98 — Real User Round in the QA + Launch block.
 
 ---
 
@@ -60,6 +60,10 @@
 ## Phase 3 (Community)
 
 **Features:**
+- User can create and play private AI stories
+- User can generate images and short videos from scenes in those stories
+- User can publish selected scene media to the social feed
+- Feed engagement can make the underlying story eligible for library promotion
 - User can submit private story for publication
 - Publication states: PRIVATE → SUBMITTED → APPROVED → PUBLIC (or REJECTED)
 - Other users can play, favorite, and rate stories
@@ -71,6 +75,8 @@
 **Requirements:**
 - Community moderation system
 - Quality scoring algorithm
+- Configurable engagement threshold for promotion eligibility (`likes` count to be defined)
+- Admin/editorial review before any user story enters the main public library
 - Content flagging
 - Creator profiles and reputations
 
@@ -82,6 +88,7 @@
 - Library retrofed by usage data
 - Popular stories become featured
 - Popular niches guide new curated stories
+- Community stories with strong feed traction can graduate into the official library after review
 - Creators receive badge/ranking
 - Premium can create series, universes, larger campaigns
 - Community stories can become candidates for main library
@@ -119,9 +126,10 @@ AI Generation (Phase 2)
 
 Media & Social (Phase 2-3)
 ├── Scene Images ✅
-├── Scene Videos (deferred)
+├── Character Portraits ✅ Core MVP; Cloudflare Workers AI provider planned
+├── Scene Videos ✅ Backend provider boundary / UX deferred
 ├── Social Feed Structure ✅
-└── Feed Publication (deferred)
+└── Feed Publication ✅
 
     ↓
 
@@ -144,23 +152,23 @@ Ecosystem (Phase 4)
 
 ## Immediate Priorities
 
-### Step 43 (Next)
-**Scene Media Mobile Contract & UX**
-- Connect mobile to scene media endpoints
-- Show image/video cost before generating
-- Handle `INSUFFICIENT_CREDITS`
-- Prevent duplicate generation during loading
-- Don't present video as ready if provider not implemented
+### Step 98 (Next)
+**Real User Round**
+- Run the controlled closed beta round with a small set of real testers.
+- Collect structured feedback, bug reports, and go/no-go notes using the Step 97 beta package.
+- Keep the scope limited to observation and feedback capture; do not perform public launch, store submission, or production deploy.
+- Preserve the QA + Launch sequence for Steps 90-100.
+- Defer broad staging, Stripe/IAP, CI/CD, and production infrastructure until the QA + Launch plan explicitly reaches those steps.
 
 ### Deferred Work
 | Item | Reason | Proposed Step |
 |------|--------|---------------|
-| Real video provider | Not yet implemented | Phase 2+ |
-| Purchase idempotency | Mock payment for now | Phase 2+ |
+| Real Kling credential/staging validation | Provider boundary exists, but no real credential execution has been validated | Step 86+ |
+| Persisted appearance opt-in/photo lookup | Provider boundary supports it, but schema/mobile persistence is deferred | Step 87+ |
+| Real purchase idempotency | Mock/dev metadata guard exists; production requires provider/webhook-backed uniqueness | Phase 2+ |
 | CreditTransaction refund | Flow not designed | Phase 3+ |
-| Admin grant credits | No scaffold exists | Step 42+ |
-| Full social features | Backend partial | Phase 3 |
+| Full social features | Feed, engagement, comments, reports, saved scenes, moderation implemented; deeper discovery/ranking deferred | Phase 3 |
 
 ---
 
-**Last Updated:** After Step 42 completion
+**Last Updated:** After Step 97 (Closed Beta Preparation)

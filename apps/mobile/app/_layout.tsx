@@ -1,12 +1,12 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { NotoSerif_400Regular, NotoSerif_400Regular_Italic, NotoSerif_600SemiBold, NotoSerif_700Bold, NotoSerif_900Black } from '@expo-google-fonts/noto-serif';
+import { Inter_300Light, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -24,6 +24,16 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    NotoSerif: NotoSerif_400Regular,
+    NotoSerifItalic: NotoSerif_400Regular_Italic,
+    NotoSerifSemiBold: NotoSerif_600SemiBold,
+    NotoSerifBold: NotoSerif_700Bold,
+    NotoSerifBlack: NotoSerif_900Black,
+    InterLight: Inter_300Light,
+    Inter: Inter_400Regular,
+    InterMedium: Inter_500Medium,
+    InterSemiBold: Inter_600SemiBold,
+    InterBold: Inter_700Bold,
     ...FontAwesome.font,
   });
 
@@ -54,14 +64,18 @@ function RootLayoutNav() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0D0D0F' } }}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="preview" />
           <Stack.Screen name="story/[id]" />
           <Stack.Screen name="reader/[id]" />
-          <Stack.Screen name="scene-media" options={{ title: 'Galeria de Cenas', headerShown: false, contentStyle: { backgroundColor: '#0D0D0F' } }} />
+          <Stack.Screen name="scene-media" options={{ title: 'Galeria de Cenas', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
+          <Stack.Screen name="saved-scenes" options={{ title: 'Cenas Salvas', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
+          <Stack.Screen name="onboarding" options={{ title: 'Boas-vindas', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
+          <Stack.Screen name="legal" options={{ title: 'Termos e Privacidade', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
+          <Stack.Screen name="profile/narrative-preferences" options={{ title: 'Preferências de Narrativa', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         </Stack>
       </AuthProvider>

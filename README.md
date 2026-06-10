@@ -22,19 +22,16 @@ O MVP deve entregar:
 ```
 enredo.ai/
 ├── apps/
-│   ├── web/          # Frontend Next.js (React)
-│   └── mobile/       # Frontend futuro (React Native/Expo)
+│   ├── mobile/       # App principal Expo Router + React Native
+│   └── web/          # Legado/reservado; não é o foco atual do MVP
 ├── services/
-│   ├── api/          # Backend NestJS/Fastify + PostgreSQL
-│   └── workers/      # Background jobs (cron, filas)
+│   └── api/          # Backend NestJS + Prisma + PostgreSQL
 ├── packages/
 │   ├── shared/       # Types, validações, utils compartilhadas
 │   ├── prompts/      # Prompts de sistema para cada modelo
 │   └── config/       # Configs centralizadas (turborepo, eslint, etc)
 ├── infra/
-│   ├── docker/       # Opcional/futuro; nao bloqueia o MVP
-│   ├── database/     # Schemas, diagramas
-│   └── migrations/   # migrations SQL
+│   └── docker/       # Opcional/futuro; nao bloqueia o MVP
 ├── docs/             # Documentação do projeto
 └── scripts/          # Scripts utilitários
 ```
@@ -45,8 +42,8 @@ enredo.ai/
 
 ```
 ┌─────────────┐      ┌─────────────┐      ┌─────────────────┐
-│   Frontend  │ ──── │  Backend    │ ──── │  LLM Gateway    │
-│  (Next.js)  │ REST │  (NestJS)   │      │  (Orquestrador) │
+│  Mobile App │ ──── │  Backend    │ ──── │  LLM Gateway    │
+│ (Expo/RN)   │ REST │  (NestJS)   │      │  (Orquestrador) │
 └─────────────┘      └──────┬──────┘      └────────┬────────┘
                             │                       │
                             ▼                       ▼
@@ -67,9 +64,9 @@ enredo.ai/
 
 | Camada       | Tecnologia                          |
 |--------------|-------------------------------------|
-| Backend      | Node.js + NestJS + TypeORM/Prisma   |
-| Frontend Web | Next.js 14+ (App Router) + Tailwind |
-| Frontend Mob | React Native + Expo (futuro)        |
+| Backend      | Node.js + NestJS + Prisma           |
+| App Mobile   | Expo Router + React Native          |
+| Frontend Web | Diferido                            |
 | Database     | Supabase Postgres + Prisma          |
 | Cache        | Redis                               |
 | LLM Gateway  | Custom (abstração sobre OpenAI, Anthropic, etc) |
@@ -88,27 +85,14 @@ enredo.ai/
 
 ---
 
-## Próximos Passos
+## Estado Atual
 
-### Backend MVP
-1. Setup do projeto NestJS
-2. Configurar Supabase Postgres em `services/api/.env`
-3. Auth básica (JWT)
-4. Endpoints: listar histórias, iniciar leitura, enviar ação
-5. LLM Gateway com switching de provedor
-6. Sistema de resumo de memória narrativa
-7. Registro de uso/custo
-8. Rate limiting e daily limits
+O projeto está pronto para **beta privada local/dev**. Staging/produção ainda dependem de deploy, Stripe real, observabilidade, rotação de credenciais e pipeline CI/CD.
 
-### Frontend MVP
-1. Setup Next.js
-2. Tela de biblioteca (lista de histórias)
-3. Tela de detalhe da história
-4. Leitor de cena narrativa (layout livro)
-5. Sistema de escolhas (cards + input livre)
-6. Progresso salvo
-7. Mock de ads para plano Free
-8. Tela de assinatura/perfil
+Consulte:
+- `docs/context/CURRENT_STATE.md`
+- `docs/context/BETA_READINESS.md`
+- `docs/context/OPERATIONAL_RULES.md`
 
 ---
 

@@ -206,3 +206,7 @@ Nao use `--accept-data-loss` sem revisar a mensagem do Prisma e sem aprovacao hu
 ```sh
 npx prisma migrate dev --name add_story_setup
 ```
+
+## 7. Alternative Providers
+
+Supabase e o provedor principal documentado. Para ambientes de beta/staging com menor custo, o Neon Postgres e suportado como alternativa — veja `docs/deploy-neon.md`. A aplicacao usa Prisma ORM com PostgreSQL padrao; nenhuma funcionalidade especifica do Supabase (RLS, Auth, Storage) e usada no caminho beta.

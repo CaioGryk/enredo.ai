@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, Min } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min, MinLength, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GetUserSubscriptionDto {
@@ -25,6 +25,24 @@ export class PurchaseCreditsDto {
   @ApiProperty({ example: 'starter' })
   @IsString()
   packageId: string;
+
+  @ApiProperty({ required: false, example: 'txn_abc123' })
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+}
+
+export class AdminGrantCreditsDto {
+  @ApiProperty({ example: 50 })
+  @IsInt()
+  @Min(1)
+  amount: number;
+
+  @ApiProperty({ example: 'Bonus de boas-vindas', minLength: 3, maxLength: 200 })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(200)
+  note: string;
 }
 
 export const CREDIT_PACKAGES = [

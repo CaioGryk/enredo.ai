@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { goBackSafe } from '../src/utils/navigation-helper';
 import { ArrowLeft, Clock, Image as ImageIcon, Send, ShieldCheck, ShieldX, Video } from 'lucide-react-native';
 import { api } from '../src/api/client';
 import { SceneMedia } from '../src/api/types';
@@ -84,7 +85,7 @@ export default function SceneMediaGalleryScreen() {
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <Header onBack={() => router.back()} />
+        <Header onBack={() => goBackSafe('/(tabs)/library')} />
         <StateBlock
           fullScreen
           loading
@@ -98,7 +99,7 @@ export default function SceneMediaGalleryScreen() {
   if (error) {
     return (
       <View style={styles.container}>
-        <Header onBack={() => router.back()} />
+        <Header onBack={() => goBackSafe('/(tabs)/library')} />
         <StateBlock
           fullScreen
           title="Não foi possível carregar"
@@ -112,7 +113,7 @@ export default function SceneMediaGalleryScreen() {
 
   return (
     <View style={styles.container}>
-      <Header onBack={() => router.back()} />
+      <Header onBack={() => goBackSafe('/(tabs)/library')} />
 
       <FlatList
         data={imageItems}
@@ -120,6 +121,10 @@ export default function SceneMediaGalleryScreen() {
         numColumns={2}
         contentContainerStyle={styles.gridContent}
         columnWrapperStyle={styles.columnWrapper}
+        removeClippedSubviews
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={5}
         ListHeaderComponent={
           <View style={styles.listHeader}>
             <Text style={styles.sectionTitle}>Imagens geradas</Text>
@@ -130,7 +135,7 @@ export default function SceneMediaGalleryScreen() {
             </Text>
             {videoItems.length > 0 ? (
               <Text style={styles.videoNote}>
-                {videoItems.length} vídeo{videoItems.length > 1 ? 's' : ''} — disponível em breve.
+                {videoItems.length} vídeo{videoItems.length > 1 ? 's' : ''} na sua galeria.
               </Text>
             ) : null}
           </View>
@@ -196,15 +201,15 @@ function GalleryCard({
     <View style={styles.card}>
       <View style={styles.cardImageWrapper}>
         <Image
-          source={{ uri: item.imageUrl! }}
+          source={{ uri: item.imageUrl || '' }}
           style={styles.cardImage}
           resizeMode="cover"
         />
         <View style={styles.cardImageOverlay}>
           {item.mediaType === 'VIDEO' ? (
             <View style={styles.cardTypeBadge}>
-              <Video color={colors.textMuted} size={10} />
-              <Text style={styles.cardTypeText}>Em breve</Text>
+              <Video color={colors.primary} size={10} />
+              <Text style={[styles.cardTypeText, styles.cardTypeTextActive]}>Vídeo</Text>
             </View>
           ) : (
             <View style={styles.cardTypeBadge}>

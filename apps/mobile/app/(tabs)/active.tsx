@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
+  ImageBackground,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -10,27 +11,17 @@ import {
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import {
-  BookOpen,
-  CheckCircle2,
-  Info,
-  Library,
-  Menu,
-  PenLine,
-  Play,
-  PlusCircle,
-  Sparkles,
-  User,
-} from 'lucide-react-native';
+import { BookCheck, BookOpen, CheckCircle, CheckCircle2, Info, Menu, Play, PlusCircle, Sparkles, User } from 'lucide-react-native';
 import { api } from '../../src/api/client';
-import { SessionListResponse, ReadingSessionSummary, SubscriptionResponse } from '../../src/api/types';
+import { ReadingSessionSummary, SessionListResponse, SubscriptionResponse } from '../../src/api/types';
 import { useAuth } from '../../src/context/AuthContext';
-import { colors } from '../../src/theme/colors';
+import { StateBlock } from '../../src/components/state-block';
 import { typography } from '../../src/theme/typography';
+import { colors } from '../../src/theme/colors';
 
 const ACCENT = '#CEBDFF';
-const PANEL = '#15131B';
-const PANEL_ALT = '#1B1824';
+const PANEL = '#131313';
+const PANEL_ALT = '#1c1b1b';
 const SOFT_TEXT = '#B7AFC8';
 
 type Filter = 'ACTIVE' | 'COMPLETED' | 'ABANDONED' | 'ALL';
@@ -94,6 +85,11 @@ export default function ActiveStoriesScreen() {
   const slots = useMemo(() => Math.max(0, 3 - activeCount), [activeCount]);
 
   function confirmAbandon(sessionId: string) {
+    if (Platform.OS === 'web') {
+      abandonMutation.mutate(sessionId);
+      return;
+    }
+
     Alert.alert('Abandonar crônica', 'Esta história sairá da sua lista de leituras ativas.', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Abandonar', style: 'destructive', onPress: () => abandonMutation.mutate(sessionId) },
@@ -103,8 +99,7 @@ export default function ActiveStoriesScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Carregando suas crônicas...</Text>
+        <StateBlock fullScreen loading title="Carregando suas crônicas" description="Buscando leituras em andamento." />
       </View>
     );
   }
@@ -112,11 +107,13 @@ export default function ActiveStoriesScreen() {
   if (isError) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.errorTitle}>Não foi possível carregar suas crônicas</Text>
-        <Text style={styles.errorText}>Verifique sua conexão e tente novamente.</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-          <Text style={styles.retryButtonText}>Tentar novamente</Text>
-        </TouchableOpacity>
+        <StateBlock
+          fullScreen
+          title="Não foi possível carregar"
+          description="Verifique sua conexão e tente novamente."
+          actionLabel="Tentar novamente"
+          onAction={() => refetch()}
+        />
       </View>
     );
   }
@@ -136,7 +133,7 @@ export default function ActiveStoriesScreen() {
             </View>
 
             <View style={styles.heroSection}>
-              <Text style={styles.eyebrow}>Suas cronicas</Text>
+              <Text style={styles.eyebrow}>Suas crônicas</Text>
               <Text style={styles.title}>Minhas Histórias</Text>
 
               <View style={styles.statusRow}>
@@ -146,10 +143,10 @@ export default function ActiveStoriesScreen() {
                 </View>
                 {isFreeUser ? (
                   <Text style={[styles.slotText, activeCount >= 3 && styles.slotTextCritical]}>
-                    {activeCount}/3 historias ativas
+                    {activeCount}/3 histórias ativas
                   </Text>
                 ) : (
-                  <Text style={styles.slotText}>Historias ilimitadas</Text>
+                  <Text style={styles.slotText}>Histórias ilimitadas</Text>
                 )}
               </View>
             </View>
@@ -174,7 +171,7 @@ export default function ActiveStoriesScreen() {
           <ChronicleCard
             session={item}
             index={index}
-            onContinue={() => router.push(`/reader/${item.id}`)}
+            onContinue={() => router.push(`/reader/${item.id}` as any)}
             onAbandon={() => confirmAbandon(item.id)}
             abandoning={abandonMutation.isPending}
           />
@@ -212,13 +209,31 @@ function ChronicleCard({
 }) {
   const progress = Math.min(90, Math.max(12, ((session.currentSceneIndex + 1) / 10) * 100));
   const palette = cardPalette(index);
+  const coverUrl = session.storyCoverUrl || session.selectedPremiseCoverUrl || session.selectedCharacterImageUrl || null;
+  const coverSource = coverUrl ? { uri: coverUrl } : null;
 
   return (
     <View style={styles.card}>
       <View style={[styles.cover, { backgroundColor: palette[0] }]}>
-        <View style={[styles.coverGlow, { backgroundColor: palette[2] }]} />
-        <View style={[styles.coverBand, { backgroundColor: palette[1] }]} />
-        <Text style={styles.coverMark}>{session.storyTitle.slice(0, 1)}</Text>
+        {coverSource ? (
+          <ImageBackground
+            source={coverSource}
+            resizeMode="cover"
+            style={styles.coverImage}
+            imageStyle={styles.coverImageRadius}
+          >
+            <View style={styles.coverScrim} />
+          </ImageBackground>
+        ) : (
+          <View style={styles.coverFallback}>
+            <View style={[styles.fallbackGlow, { backgroundColor: palette[2] }]} />
+            <View style={[styles.fallbackBand, { backgroundColor: palette[1] }]} />
+            <Sparkles color={palette[1]} size={32} opacity={0.6} />
+            <Text style={[styles.fallbackLabel, { color: palette[1] }]}>
+              {(session.storyTitle || 'H')[0]}
+            </Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.cardBody}>
@@ -335,7 +350,7 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     ...typography.h3,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -391,7 +406,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.h1,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     fontSize: 42,
     lineHeight: 48,
     marginBottom: 22,
@@ -415,7 +430,7 @@ const styles = StyleSheet.create({
   },
   memberText: {
     ...typography.label,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     fontSize: 10,
   },
   slotText: {
@@ -468,7 +483,7 @@ const styles = StyleSheet.create({
   },
   noticeTitle: {
     ...typography.bodySmall,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     fontWeight: '800',
     marginBottom: 4,
   },
@@ -496,6 +511,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'flex-end',
   },
+  coverImage: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  coverImageRadius: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
+  coverScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+  },
   coverGlow: {
     position: 'absolute',
     width: 180,
@@ -522,6 +549,32 @@ const styles = StyleSheet.create({
     marginLeft: 28,
     marginBottom: 16,
   },
+  coverFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  fallbackGlow: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    opacity: 0.32,
+  },
+  fallbackBand: {
+    position: 'absolute',
+    width: 200,
+    height: 6,
+    opacity: 0.18,
+    transform: [{ rotate: '12deg' }],
+  },
+  fallbackLabel: {
+    fontFamily: 'NotoSerif',
+    fontSize: 48,
+    opacity: 0.55,
+    marginTop: 8,
+  },
   cardBody: {
     padding: 22,
   },
@@ -533,7 +586,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     ...typography.h2,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     marginBottom: 8,
   },
   cardMeta: {
@@ -619,7 +672,7 @@ const styles = StyleSheet.create({
   },
   emptySlotTitle: {
     ...typography.h3,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     marginTop: 14,
     marginBottom: 6,
   },
@@ -647,7 +700,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     ...typography.h3,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     marginTop: 14,
     marginBottom: 8,
     textAlign: 'center',

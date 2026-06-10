@@ -1,6 +1,6 @@
 # Roadmap MVP — Enredo.ai
 
-> **Status:** arquivo atualizado após o fechamento do Step 55.
+> **Status:** arquivo atualizado após o fechamento auditado do Step 90.
 >
 > Este roadmap é uma visão de produto/MVP. Para o estado operacional mais recente, validações e próximo step, consulte `docs/context/CURRENT_STATE.md`. Para o roadmap vivo por fases futuras, consulte `docs/context/ROADMAP.md`.
 
@@ -129,9 +129,12 @@ Implementar planos, créditos, limites e trilha de auditoria de gastos.
 
 ### Diferido
 - Stripe real.
-- Idempotência de compra.
-- Fluxo admin de concessão de créditos promocionais.
 - Refunds/expiração.
+
+### Implementado Pós-MVP
+- Idempotência de compra (Step 81).
+- Fluxo admin de concessão de créditos promocionais (Step 82).
+- Histórico de transações mobile (Step 83).
 
 ---
 
@@ -151,15 +154,37 @@ Fechar UX, contratos mobile/backend, estabilidade, validações e documentação
 - TypeScript backend/mobile passando.
 - Prisma validate passando.
 - Build backend passando.
-- Suíte backend consolidada: 559 tests / 38 suites.
+- Suíte backend consolidada: 717 tests / 48 suites.
+- Cadeia LLM gratuita consolidada para preview/MVP: Groq como primário, OpenRouter DeepSeek e Google Gemini como fallbacks; pedidos explícitos de modelo gratuito são respeitados primeiro.
 - Contexto modular em `docs/context/`.
-- Steps 43-55 fechados e auditados.
+- Steps 43-97 fechados e auditados, incluindo preparação para beta fechada.
+- Retratos base de personagens definidos como core MVP; provider primário planejado: Cloudflare Workers AI / `@cf/black-forest-labs/flux-1-schnell`.
 
 ### Próximo Step Recomendado
-**Step 56 — Saved Scenes Screen/Tab**
+**Bloco QA + Launch (Steps 90-100)**
+
+| Step | Descrição |
+|------|-----------|
+| 90 | General Visual Review |
+| 91 | Feed/Reader Performance |
+| 92 | Final App Copy |
+| 93 | Terms/Privacy |
+| 94 | New User Flow |
+| 95 | Guided Manual QA |
+| 96 | Final Fixes |
+| 97 | Closed Beta Preparation |
+| 98 | Real User Round |
+| 99 | Post-Feedback Adjustments |
+| 100 | Initial Public MVP |
 
 Objetivo:
-- Tela ou aba de cenas salvas/bookmarked pelo usuário.
+- Revisão visual e de UX do app mobile.
+- Performance e estados de loading/erro no feed e reader.
+- Cópia final consistente e honesta.
+- Termos de uso e política de privacidade.
+- Fluxo de novo usuário e onboarding.
+- QA manual guiada e fixes pós-feedback.
+- Preparação para beta fechado, rodada com usuários reais e ajustes até o MVP público inicial.
 
 ---
 
@@ -176,7 +201,7 @@ Alguns itens que o roadmap antigo tratava como pós-MVP já foram parcialmente o
 | Geração de imagens de cena | ✅ Parcial, com créditos |
 | Feed/Cenas | ✅ Step 47 (feed real de cenas aprovadas) |
 | Reports/denúncias | ✅ Step 53 |
-| Vídeo de cena | ⏳ Diferido |
+| Vídeo de cena | ✅ Step 85-87 com Kling backend, custo/rollback e UX mobile inicial |
 | Publicação social | ✅ Step 45-46 (submissão + moderação admin) |
 | Stripe real | ⏳ Diferido |
 
@@ -222,15 +247,23 @@ Alguns itens que o roadmap antigo tratava como pós-MVP já foram parcialmente o
 
 ## Próximas Prioridades
 
-### Step 56 — Recomendado
-Opções naturais:
+### Step 91 — Feed/Reader Performance
+- Revisar performance percebida no feed e no reader.
+- Ajustar loading, erro, refresh, listas e pontos de scroll pesado.
+- Manter o bloco QA + Launch como trilha principal dos Steps 90-100.
 
-1. Real video provider integration.
-2. Admin UI/dashboard for moderation.
-3. Real video provider integration.
-4. Free token limit increase.
-5. Configuration externalization.
-6. Moderation/publication workflow for community stories.
+### Próximos Blocos Técnicos
+- Hosting, DNS, SSL, variáveis de ambiente e validação em ambiente remoto.
+- **Database beta path:** Neon Postgres + Railway como alternativa de menor custo para staging (guia: `docs/deploy-neon.md`). Supabase permanece como provedor principal.
+
+### Stripe Real Integration
+- Pagamentos reais para Premium e compra de créditos.
+
+### Production Observability
+- Error tracking, métricas, logs e alertas operacionais.
+
+### CI/CD Pipeline
+- Testes e deploy automatizados.
 
 ---
 
@@ -278,6 +311,6 @@ Opções naturais:
 
 ## Resumo Executivo
 
-O MVP original está praticamente completo. O projeto agora está na fase de **polimento para beta privada** e começando a construir a camada de **mídia/social** que diferencia o Enredo.ai de um leitor com IA comum.
+O MVP ampliado está pronto para beta local/dev, com mídia/social inicial, monetização dev/mock, vídeo de cena e política final de monetização já encaminhados. O projeto agora está no bloco **QA + Launch**, com foco em copy final, termos/privacidade, fluxo de novo usuário, QA guiado, beta fechado e ajustes finais.
 
-O próximo passo mais coerente é transformar a geração de imagem por cena em uma experiência persistente e navegável: **galeria/histórico de mídia + visibilidade de créditos no reader**.
+O próximo passo imediato é o **Step 98 — Real User Round**, nono passo do bloco QA + Launch (Steps 90-100).

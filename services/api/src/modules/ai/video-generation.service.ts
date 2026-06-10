@@ -5,13 +5,18 @@ import {
   VideoGenerationResponse,
   VideoProvider,
 } from './interfaces/video-generation.interface';
+import { KlingVideoProvider } from './providers/kling-video.provider';
 
 @Injectable()
 export class VideoGenerationService {
   private readonly logger = new Logger(VideoGenerationService.name);
   private readonly enabled: boolean;
+  private readonly klingProvider: KlingVideoProvider;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    klingVideoProvider: KlingVideoProvider,
+  ) {
     const value = this.configService.get<boolean | string>('ENABLE_VIDEO_GENERATION');
     if (typeof value === 'boolean') {
       this.enabled = value;
@@ -20,6 +25,7 @@ export class VideoGenerationService {
     } else {
       this.enabled = false;
     }
+    this.klingProvider = klingVideoProvider;
   }
 
   isEnabled(): boolean {
@@ -36,13 +42,16 @@ export class VideoGenerationService {
       };
     }
 
-    // Feature-flagged: Real video generation not yet implemented
-    // This is a foundation for future implementation
-    this.logger.log('Video generation called but real provider not yet implemented');
+    if (this.klingProvider.isAvailable()) {
+      this.logger.log('Delegating to Kling video provider');
+      return this.klingProvider.generate(request);
+    }
+
+    this.logger.warn('Video generation enabled but Kling provider not configured (KLING_ENABLED=false or missing KLING_API_KEY)');
     return {
       success: false,
-      error: 'Video generation not yet implemented',
-      message: 'Video generation is prepared but not yet available. Check back later.',
+      error: 'Video generation provider not configured',
+      message: 'Video generation is enabled but the Kling provider is not configured. Set KLING_ENABLED=true and KLING_API_KEY.',
     };
   }
 
@@ -51,14 +60,17 @@ export class VideoGenerationService {
       return null;
     }
 
-    // Return a placeholder provider for now
+    if (this.klingProvider.isAvailable()) {
+      return this.klingProvider;
+    }
+
     return {
-      name: 'video-placeholder',
+      name: 'kling-unconfigured',
       isAvailable: () => false,
       generate: async (_request: VideoGenerationRequest) => {
         return {
           success: false,
-          error: 'Video provider not yet implemented',
+          error: 'Kling provider not configured',
         };
       },
     };

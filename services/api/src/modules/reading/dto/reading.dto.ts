@@ -46,6 +46,8 @@ export class SceneResponseDto {
   sceneIndex: number;
   sceneText: string;
   choices: string[];
+  userAction?: string;
+  userActionType?: UserActionType;
   sceneMetadata?: {
     emotion?: string;
     pacing?: string;
@@ -115,7 +117,9 @@ export class SessionListResponseDto {
     storyTitle: string;
     storyCoverUrl?: string | null;
     selectedPremiseTitle?: string | null;
+    selectedPremiseCoverUrl?: string | null;
     selectedCharacterName?: string | null;
+    selectedCharacterImageUrl?: string | null;
     currentChapter: number;
     currentSceneIndex: number;
     status: ReadingSessionStatus;

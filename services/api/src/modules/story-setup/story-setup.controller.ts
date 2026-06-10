@@ -12,6 +12,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { StorySetupService } from './story-setup.service';
@@ -62,6 +63,7 @@ export class StorySetupController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post('stories/:storyId/premises/generate')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: 'Generate premises for a story (creator or admin/dev)' })
   @ApiResponse({ status: 201, description: 'Premises generated successfully' })
   @ApiResponse({ status: 403, description: 'Access denied' })
@@ -79,6 +81,7 @@ export class StorySetupController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post('premises/:premiseId/characters/generate')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: 'Generate playable characters for a premise (creator or admin/dev)' })
   @ApiResponse({ status: 201, description: 'Characters generated successfully' })
   @ApiResponse({ status: 403, description: 'Access denied' })

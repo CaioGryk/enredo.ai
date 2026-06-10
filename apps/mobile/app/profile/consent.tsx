@@ -1,32 +1,31 @@
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { ArrowLeft, Brain, MessageCircle, Shield, Video } from 'lucide-react-native';
 import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
+import { goBackSafe } from '../../src/utils/navigation-helper';
 
 const ACCENT = '#CEBDFF';
-const PANEL_ALT = '#1B1824';
+const PANEL_ALT = '#1c1b1b';
 const SOFT_TEXT = '#B7AFC8';
 
 export default function ProfileConsentScreen() {
-  const router = useRouter();
-  const [allowImagePersonalization, setAllowImagePersonalization] = useState(true);
+  const [allowImagePersonalization, setAllowImagePersonalization] = useState(false);
   const [allowPublicVideos, setAllowPublicVideos] = useState(false);
   const [allowComments, setAllowComments] = useState(true);
 
   function savePreviewState() {
-    Alert.alert('Preferências atualizadas', 'Essas preferências já estão prontas no frontend e serão conectadas ao backend na próxima rodada.');
+    Alert.alert('Preferências registradas', 'Nesta versão, essas escolhas ficam apenas como prévia visual. Elas não alteram sua conta ainda.');
   }
 
   function destructiveSoon(label: string) {
-    Alert.alert('Em breve', `${label} será conectado ao backend assim que fecharmos a camada de mídia e privacidade.`);
+    Alert.alert('Indisponível no momento', `${label} estará disponível em uma versão futura.`);
   }
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => goBackSafe('/(tabs)/profile')}>
           <ArrowLeft color={ACCENT} size={20} />
           <Text style={styles.backText}>Voltar</Text>
         </TouchableOpacity>
@@ -43,7 +42,7 @@ export default function ProfileConsentScreen() {
         <ConsentCard
           icon={<Brain color={ACCENT} size={20} />}
           title="Usar foto para personalização por IA"
-          description="Permite usar sua foto de perfil como referência opcional em cenas e vídeos gerados."
+          description="Prévia visual do consentimento para usar sua foto como referência opcional em cenas e vídeos gerados."
           value={allowImagePersonalization}
           onValueChange={setAllowImagePersonalization}
         />
@@ -111,7 +110,7 @@ function ConsentCard({
           value={value}
           onValueChange={onValueChange}
           trackColor={{ false: '#3A3348', true: 'rgba(206, 189, 255, 0.45)' }}
-          thumbColor={value ? ACCENT : '#8B839E'}
+          thumbColor={value ? ACCENT : '#cac4d4'}
         />
       </View>
       <Text style={styles.cardTitle}>{title}</Text>

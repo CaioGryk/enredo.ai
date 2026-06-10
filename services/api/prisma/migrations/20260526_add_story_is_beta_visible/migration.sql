@@ -1,0 +1,1 @@
+ALTER TABLE "stories" ADD COLUMN "isBetaVisible" BOOLEAN NOT NULL DEFAULT true;

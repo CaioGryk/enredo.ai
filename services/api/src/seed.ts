@@ -171,13 +171,14 @@ async function main() {
   for (const storyData of STORIES) {
     const { characters, ...story } = storyData;
     
-    const createdStory = await prisma.story.create({
-      data: {
-        ...story,
-        genres: story.genres,
-        publishedAt: new Date(),
-      },
-    });
+      const createdStory = await prisma.story.create({
+        data: {
+          ...story,
+          genres: story.genres,
+          publishedAt: new Date(),
+          isBetaVisible: false,
+        },
+      });
 
     for (const char of characters) {
       await prisma.storyCharacter.create({

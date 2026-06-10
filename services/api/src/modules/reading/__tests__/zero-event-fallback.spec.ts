@@ -177,7 +177,10 @@ describe('ReadingOrchestratorService - Zero-Event Fallback', () => {
     it('should resolve premise and character when selectedPremiseId and selectedCharacterId exist', async () => {
       const result = await service.getSessionWithStatus('user-1', 'session-1');
 
-      expect(mockPrismaInstance.storyPremise.findUnique).toHaveBeenCalledWith({ where: { id: 'premise-1' } });
+      expect(mockPrismaInstance.storyPremise.findUnique).toHaveBeenCalledWith({
+        where: { id: 'premise-1' },
+        include: { characters: true },
+      });
       expect(mockPrismaInstance.storyPlayableCharacter.findFirst).toHaveBeenCalledWith({
         where: { id: 'character-1', premiseId: 'premise-1' },
       });

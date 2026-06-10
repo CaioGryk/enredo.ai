@@ -157,9 +157,9 @@ describe('StorySetupService - User-Generated Story Setup', () => {
     };
 
     const mockCharacters = [
-      { name: 'Hero', roleLabel: 'Hero', narrativeFunction: 'HERO', description: 'A brave hero', personality: 'Brave', motivation: 'Save the world', secret: 'Has a dark past', relationshipToPlayer: 'Leader', initialGoal: 'Defeat the villain', conflictPotential: 'High', visualPrompt: 'Hero portrait' },
-      { name: 'Mentor', roleLabel: 'Mentor', narrativeFunction: 'MENTOR', description: 'A wise mentor', personality: 'Wise', motivation: 'Guide the hero', secret: 'Knows the truth', relationshipToPlayer: 'Guide', initialGoal: 'Teach the hero', conflictPotential: 'Low', visualPrompt: 'Mentor portrait' },
-      { name: 'Villain', roleLabel: 'Villain', narrativeFunction: 'VILLAIN', description: 'An evil villain', personality: 'Cruel', motivation: 'Conquer the world', secret: 'Was once good', relationshipToPlayer: 'Enemy', initialGoal: 'Defeat the hero', conflictPotential: 'High', visualPrompt: 'Villain portrait' },
+      { name: 'Lia', roleLabel: 'A irmã que voltou depois da meia-noite', narrativeFunction: 'HERO', description: 'A brave hero', personality: 'Brave', motivation: 'Save the world', secret: 'Has a dark past', relationshipToPlayer: 'Leader', initialGoal: 'Defeat the villain', startingSituation: 'Acorda no porão com terra nas mãos.', conflictPotential: 'High', visualPrompt: 'Hero portrait' },
+      { name: 'Caio', roleLabel: 'O vigia que trancou o portão cedo demais', narrativeFunction: 'MENTOR', description: 'A wise mentor', personality: 'Wise', motivation: 'Guide the hero', secret: 'Knows the truth', relationshipToPlayer: 'Guide', initialGoal: 'Teach the hero', startingSituation: 'Vê uma criança cruzar o pátio fechado.', conflictPotential: 'Low', visualPrompt: 'Mentor portrait' },
+      { name: 'Mara', roleLabel: 'A menina da foto que não deveria existir', narrativeFunction: 'VILLAIN', description: 'An evil villain', personality: 'Cruel', motivation: 'Conquer the world', secret: 'Was once good', relationshipToPlayer: 'Enemy', initialGoal: 'Defeat the hero', startingSituation: 'Aparece dentro de uma fotografia antiga.', conflictPotential: 'High', visualPrompt: 'Villain portrait' },
     ];
 
     it('should allow creator to generate characters for own private story premise', async () => {
@@ -190,6 +190,7 @@ describe('StorySetupService - User-Generated Story Setup', () => {
 
       const result = await service.generateCharacters('premise-1', 'creator-1', false);
       expect(result).toHaveLength(3);
+      expect(result[0].startingSituation).toBe('Acorda no porão com terra nas mãos.');
       expect(mockAiService.generatePlayableCharacters).toHaveBeenCalledWith({
         storyTitle: 'My User Story',
         premiseTitle: 'My Premise',

@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Param, Body, Query, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { ReadingService } from './reading.service';
 import { 
@@ -19,6 +20,7 @@ export class ReadingController {
   constructor(private readonly readingService: ReadingService) {}
 
   @Post('start')
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Start a new reading session' })
   @ApiResponse({ status: 201, description: 'Reading session started', type: ReadingStatusDto })
@@ -54,6 +56,7 @@ export class ReadingController {
   }
 
   @Post('sessions/:id/action')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send an action in a reading session' })
   @ApiParam({ name: 'id', description: 'Session ID' })

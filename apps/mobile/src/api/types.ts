@@ -48,6 +48,15 @@ export interface StoryPremise {
   synopsis: string;
   tone?: string | null;
   coverUrl?: string | null;
+  coverGenerationStatus?: string;
+  coverError?: string | null;
+  coverFallback?: {
+    palette?: string[];
+    symbol?: string;
+    title?: string;
+    subtitle?: string;
+  } | null;
+  playableCharacterCount: number;
   isPremium: boolean;
   sortOrder: number;
 }
@@ -60,7 +69,10 @@ export interface StoryPlayableCharacter {
   description?: string | null;
   personality?: string | null;
   initialGoal?: string | null;
+  startingSituation?: string | null;
   imageUrl?: string | null;
+  imageGenerationStatus?: string;
+  imageError?: string | null;
   imageFallback?: {
     palette?: string[];
     symbol?: string;
@@ -87,6 +99,8 @@ export interface SceneResponse {
   sceneIndex: number;
   sceneText: string;
   choices: string[];
+  userAction?: string;
+  userActionType?: string;
   sceneMetadata?: any;
   adPlacement?: any;
 }
@@ -94,6 +108,10 @@ export interface SceneResponse {
 export interface ReadingSessionDetails {
   id: string;
   storyId: string;
+  selectedPremiseId?: string | null;
+  selectedCharacterId?: string | null;
+  protagonistName?: string | null;
+  protagonistRole?: string | null;
   currentChapter: number;
   currentSceneIndex: number;
   status: string;
@@ -127,7 +145,9 @@ export interface ReadingSessionSummary {
   storyTitle: string;
   storyCoverUrl?: string | null;
   selectedPremiseTitle?: string | null;
+  selectedPremiseCoverUrl?: string | null;
   selectedCharacterName?: string | null;
+  selectedCharacterImageUrl?: string | null;
   currentChapter: number;
   currentSceneIndex: number;
   status: string;
@@ -186,6 +206,17 @@ export interface AIModelsResponse {
   models: AIModel[];
   defaultModelId: string;
   userPlan: string;
+}
+
+export interface NarrativePreferencesResponse {
+  romanceIntensity: 'NONE' | 'SOFT' | 'INTENSE' | 'ADULT_18';
+  adultContentOptIn: boolean;
+  ageVerifiedAt?: string | null;
+  adultTermsAcceptedAt?: string | null;
+  effectiveRomanceIntensity: 'NONE' | 'SOFT' | 'INTENSE' | 'ADULT_18';
+  adultContentAllowed: boolean;
+  mediaAdultContentAllowed: boolean;
+  userLikenessAdultContentAllowed: boolean;
 }
 
 export interface SSOResponse {

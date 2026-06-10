@@ -14,10 +14,11 @@ import {
 import { useRouter } from 'expo-router';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
-import { Apple, Mail, User, X } from 'lucide-react-native';
+import { Apple, BookOpen, Mail, User, X } from 'lucide-react-native';
 import { useAuth } from '../../src/context/AuthContext';
 import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
+import { goBackSafe } from '../../src/utils/navigation-helper';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -70,7 +71,11 @@ export default function LoginScreen() {
   React.useEffect(() => {
     if (response?.type === 'success') {
       const { id_token } = response.params;
-      handleGoogleLogin(id_token);
+      if (id_token) {
+        handleGoogleLogin(id_token);
+      } else {
+        Alert.alert('Erro no Google Login', 'Token de autenticação não recebido.');
+      }
     } else if (response?.type === 'error') {
       Alert.alert('Erro no Google Login', 'Não foi possível autenticar com o Google.');
     } else if (response?.type === 'cancel') {
@@ -126,15 +131,19 @@ export default function LoginScreen() {
 
       <View style={styles.header}>
         <Text style={styles.brand}>Enredo.ai</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
+        <TouchableOpacity onPress={() => goBackSafe('/')} style={styles.closeButton}>
           <X color={colors.textMuted} size={24} />
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.heroCopy}>
-          <Text style={styles.heroTitle}>Bem-vindo ao Enredo.ai</Text>
-          <Text style={styles.heroSubtitle}>Onde histórias ganham vida e memórias se tornam crônicas.</Text>
+        {/* Brand Centerpiece */}
+        <View style={styles.brandCenter}>
+          <View style={styles.brandIconBox}>
+            <BookOpen color={accent} size={44} strokeWidth={1.5} />
+          </View>
+          <Text style={styles.brandCenterName}>Enredo.ai</Text>
+          <Text style={styles.brandCenterTagline}>Sua próxima história começa aqui.</Text>
         </View>
 
         <View style={styles.card}>
@@ -248,7 +257,7 @@ function Field({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0D0D0F',
+    backgroundColor: '#0a0a0a',
   },
   backgroundImage: {
     resizeMode: 'cover',
@@ -284,6 +293,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 42,
     gap: 24,
+  },
+  brandCenter: {
+    alignItems: 'center',
+    paddingTop: 28,
+    gap: 14,
+  },
+  brandIconBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: 'rgba(206,189,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(206,189,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  brandCenterName: {
+    ...typography.h1,
+    color: accent,
+    fontStyle: 'italic',
+    fontSize: 42,
+    lineHeight: 48,
+    letterSpacing: -0.5,
+  },
+  brandCenterTagline: {
+    ...typography.body,
+    color: '#cac4d480',
+    fontSize: 15,
   },
   heroCopy: {
     paddingTop: 28,

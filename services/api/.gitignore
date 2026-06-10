@@ -1,6 +1,9 @@
 node_modules/
 dist/
 .env
+.env.*
+*.env.backup
+*.env.*.backup
 *.log
 .DS_Store
 coverage/

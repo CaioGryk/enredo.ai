@@ -1,5 +1,4 @@
-import { IsOptional, IsString, IsArray, IsInt, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDTO } from '../../../common/dto/pagination.dto';
 
@@ -24,6 +23,7 @@ export class GetStoriesDto extends PaginationDTO {
   isPremium?: boolean | string;
 }
 
+/** Safe public story fields — no internal prompts, moderation metadata, or creator info. */
 export class StoryResponseDto {
   id: string;
   slug: string;
@@ -31,17 +31,12 @@ export class StoryResponseDto {
   synopsis: string;
   coverUrl?: string;
   genres: string[];
-  authorName: string;
+  authorName?: string;
   isPremium: boolean;
   totalChapters: number;
   publishedAt?: Date;
   language?: string;
   maturityRating?: string;
-  basePrompt?: string;
-  tone?: string;
-  styleGuide?: string;
-  worldRules?: string;
-  openingScene?: string;
 }
 
 export class StoryWithCharactersDto extends StoryResponseDto {
@@ -51,8 +46,8 @@ export class StoryWithCharactersDto extends StoryResponseDto {
 export class CharacterResponseDto {
   id: string;
   name: string;
-  description?: string;
-  imageUrl?: string;
+  description?: string | null;
+  imageUrl?: string | null;
   role: string;
 }
 

@@ -9,6 +9,7 @@ import { FeedSceneMediaDto, FeedSceneMediaPaginationDto } from './dto/feed-scene
 import { EngagementResponseDto } from './dto/engagement-response.dto';
 import { CommentDto, CommentListResponseDto, CreateCommentDto } from './dto/comment.dto';
 import { ReportDto, CreateReportDto, AdminReportDto, AdminReportPaginationDto } from './dto/report.dto';
+import { ModerationService } from '../moderation/moderation.service';
 
 @Injectable()
 export class SceneMediaService {
@@ -17,6 +18,7 @@ export class SceneMediaService {
     private readonly billingService: BillingService,
     private readonly imageGenerationService: ImageGenerationService,
     private readonly videoGenerationService: VideoGenerationService,
+    private readonly moderationService: ModerationService,
   ) {}
 
   async createFromNarrativeEvent(userId: string, narrativeEventId: string): Promise<any> {
@@ -64,6 +66,7 @@ export class SceneMediaService {
         moderationStatus: SceneModerationStatus.NOT_SUBMITTED,
         textExcerpt,
         mediaType: SceneMediaType.TEXT,
+        adultContentGenerated: narrativeEvent.adultContentGenerated === true,
       },
     });
 
@@ -162,6 +165,10 @@ export class SceneMediaService {
       throw new BadRequestException('Cannot submit media without generated image or video content.');
     }
 
+    if (sceneMedia.adultContentGenerated) {
+      throw new BadRequestException('This scene media cannot be submitted for public feed at this time.');
+    }
+
     return this.prisma.sceneMedia.update({
       where: { id: sceneMediaId },
       data: {
@@ -221,9 +228,33 @@ export class SceneMediaService {
     );
   }
 
-  async generateVideo(userId: string, sceneMediaId: string, prompt?: string): Promise<any> {
+  async generateVideo(
+    userId: string,
+    sceneMediaId: string,
+    prompt?: string,
+    appearanceOptIn?: boolean,
+  ): Promise<any> {
     const sceneMedia = await this.prisma.sceneMedia.findUnique({
       where: { id: sceneMediaId },
+      include: {
+        narrativeEvent: {
+          select: {
+            sceneIndex: true,
+            session: {
+              select: {
+                story: {
+                  select: {
+                    title: true,
+                    slug: true,
+                    tone: true,
+                  },
+                },
+                selectedPremiseId: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!sceneMedia) {
@@ -234,7 +265,6 @@ export class SceneMediaService {
       throw new ForbiddenException('You do not have access to this scene media');
     }
 
-    // Check credits before call
     const wallet = await this.billingService.getCreditWallet(userId);
     if (wallet.balance < MEDIA_CREDIT_COSTS.VIDEO) {
       throw new HttpException(
@@ -243,17 +273,52 @@ export class SceneMediaService {
       );
     }
 
-    // Call generation (outside transaction)
-    const result = await this.videoGenerationService.generateVideo({
+    const session = sceneMedia.narrativeEvent?.session;
+    const storyTitle = session?.story?.title || 'Untitled story';
+    const premiseId = session?.selectedPremiseId;
+    const storyTone = session?.story?.tone || '';
+
+    const contextPrompt = [
+      `Story: ${storyTitle}`,
+      ...(premiseId ? [`Premise ID: ${premiseId}`] : []),
+      ...(storyTone ? [`Tone: ${storyTone}`] : []),
+      `Scene excerpt: ${sceneMedia.textExcerpt || ''}`,
+    ].filter(Boolean).join('. ');
+
+    const appearanceReference = await this.resolveAppearanceReference(userId, appearanceOptIn ?? false);
+
+    const videoRequest = {
       prompt: prompt || `Cinematic scene: ${sceneMedia.textExcerpt}`,
       duration: 5,
-    });
+      aspectRatio: '16:9' as const,
+      style: 'cinematic' as const,
+      contextPrompt,
+      ...(appearanceReference ? { appearanceReference } : {}),
+    };
+
+    const result = await this.videoGenerationService.generateVideo(videoRequest);
 
     if (!result.success || !result.videoUrl) {
       throw new BadRequestException('Video generation failed or is disabled');
     }
 
-    // Spend credits and update media atomically
+    const metadataPayload: Record<string, any> = {
+      feature: 'SCENE_MEDIA',
+      mediaType: 'VIDEO',
+      cost: MEDIA_CREDIT_COSTS.VIDEO,
+      sceneMediaId: sceneMedia.id,
+      narrativeEventId: sceneMedia.narrativeEventId,
+      storyId: sceneMedia.storyId,
+      provider: result.provider,
+      ...(result.model ? { model: result.model } : {}),
+      ...(result.taskId ? { taskId: result.taskId } : {}),
+      ...(result.durationSeconds ? { durationSeconds: result.durationSeconds } : {}),
+    };
+
+    if (appearanceReference) {
+      metadataPayload.appearanceConsent = true;
+    }
+
     return this.persistGeneratedMediaWithCreditSpend(
       userId,
       sceneMediaId,
@@ -263,15 +328,31 @@ export class SceneMediaService {
         videoUrl: result.videoUrl,
         mediaType: SceneMediaType.VIDEO,
       },
-      {
-        feature: 'SCENE_MEDIA',
-        mediaType: 'VIDEO',
-        sceneMediaId: sceneMedia.id,
-        narrativeEventId: sceneMedia.narrativeEventId,
-        storyId: sceneMedia.storyId,
-        provider: result.provider,
-      }
+      metadataPayload,
     );
+  }
+
+  /**
+   * Resolve the appearance reference URL for video generation.
+   *
+   * When userAppearanceOptIn is false or no profile photo exists, returns null.
+   * When userAppearanceOptIn is true AND a valid profile photo exists, returns
+   * the photo URL as a safe appearance reference (NOT a face-swap).
+   *
+   * DEFERRED: The profile-photo/opt-in persistence contract is not yet
+   * implemented in the User model or Prisma schema.  When those fields are
+   * added, this method will query the User record for the photo URL and
+   * opt-in flag.  Until then, it always returns null.
+   */
+  private async resolveAppearanceReference(
+    _userId: string,
+    appearanceOptIn: boolean,
+  ): Promise<string | null> {
+    if (!appearanceOptIn) {
+      return null;
+    }
+
+    return null;
   }
 
   private async persistGeneratedMediaWithCreditSpend(
@@ -336,6 +417,7 @@ export class SceneMediaService {
       visibility: SceneVisibility.PUBLIC,
       moderationStatus: SceneModerationStatus.APPROVED,
       publishedAt: { not: null },
+      adultContentGenerated: false,
     };
 
     const [records, total] = await Promise.all([
@@ -404,6 +486,44 @@ export class SceneMediaService {
     return dto;
   }
 
+  async getSaved(userId: string, params: { page?: number; limit?: number }): Promise<FeedSceneMediaPaginationDto> {
+    const { page = 1, limit = 20 } = params;
+    const safeLimit = Math.min(limit, 100);
+    const skip = (page - 1) * safeLimit;
+
+    const where = {
+      userId,
+      sceneMedia: {
+        visibility: SceneVisibility.PUBLIC,
+        moderationStatus: SceneModerationStatus.APPROVED,
+        publishedAt: { not: null },
+        adultContentGenerated: false,
+      },
+    };
+
+    const [saves, total] = await Promise.all([
+      this.prisma.sceneMediaSave.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: safeLimit,
+        include: {
+          sceneMedia: {
+            include: {
+              story: { select: { id: true, title: true, coverUrl: true, genres: true } },
+              user: { select: { id: true, name: true } },
+              _count: { select: { likes: true, saves: true, shares: true, comments: { where: { status: CommentModerationStatus.VISIBLE } } } },
+            },
+          },
+        },
+      }),
+      this.prisma.sceneMediaSave.count({ where }),
+    ]);
+
+    const data = saves.filter((s: any) => s.sceneMedia).map((s: any) => this.mapToFeedDto(s.sceneMedia));
+    return { data, pagination: { page, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit) } };
+  }
+
   async likeSceneMedia(userId: string, sceneMediaId: string): Promise<EngagementResponseDto> {
     await this.assertMediaIsEngageable(sceneMediaId);
 
@@ -457,7 +577,7 @@ export class SceneMediaService {
   private async assertMediaIsEngageable(sceneMediaId: string): Promise<void> {
     const media = await this.prisma.sceneMedia.findUnique({
       where: { id: sceneMediaId },
-      select: { id: true, visibility: true, moderationStatus: true, publishedAt: true },
+      select: { id: true, visibility: true, moderationStatus: true, publishedAt: true, adultContentGenerated: true },
     });
 
     if (!media) {
@@ -467,7 +587,8 @@ export class SceneMediaService {
     if (
       media.visibility !== SceneVisibility.PUBLIC ||
       media.moderationStatus !== SceneModerationStatus.APPROVED ||
-      !media.publishedAt
+      !media.publishedAt ||
+      media.adultContentGenerated === true
     ) {
       throw new BadRequestException('This scene media is not available for engagement.');
     }
@@ -527,13 +648,12 @@ export class SceneMediaService {
   async createComment(userId: string, sceneMediaId: string, dto: CreateCommentDto): Promise<CommentDto> {
     await this.assertMediaIsEngageable(sceneMediaId);
 
-    const body = dto.body?.trim();
-    if (!body || body.length < 1) {
-      throw new BadRequestException('Comment body must not be empty.');
+    const modResult = this.moderationService.moderateComment(dto.body ?? '');
+    if (!modResult.allowed) {
+      throw new BadRequestException(modResult.reason || 'Comment contains unsafe content.');
     }
-    if (body.length > 500) {
-      throw new BadRequestException('Comment body must be at most 500 characters.');
-    }
+
+    const body = modResult.sanitizedText;
 
     const comment = await this.prisma.sceneMediaComment.create({
       data: { userId, sceneMediaId, body, status: CommentModerationStatus.VISIBLE },
@@ -552,9 +672,11 @@ export class SceneMediaService {
   async reportSceneMedia(reporterUserId: string, sceneMediaId: string, dto: CreateReportDto): Promise<ReportDto> {
     await this.assertMediaIsEngageable(sceneMediaId);
 
-    const reason = dto.reason?.trim();
-    if (!reason || reason.length < 3) throw new BadRequestException('Reason must be at least 3 characters.');
-    if (reason.length > 500) throw new BadRequestException('Reason must be at most 500 characters.');
+    const modResult = this.moderationService.moderateReportReason(dto.reason ?? '');
+    if (!modResult.allowed) {
+      throw new BadRequestException(modResult.reason || 'Report reason is invalid.');
+    }
+    const reason = modResult.sanitizedText;
 
     const existing = await this.prisma.sceneMediaReport.findFirst({
       where: { reporterUserId, sceneMediaId },
@@ -576,18 +698,20 @@ export class SceneMediaService {
   async reportComment(reporterUserId: string, commentId: string, dto: CreateReportDto): Promise<ReportDto> {
     const comment = await this.prisma.sceneMediaComment.findUnique({
       where: { id: commentId },
-      include: { sceneMedia: { select: { id: true, visibility: true, moderationStatus: true, publishedAt: true } } },
+      include: { sceneMedia: { select: { id: true, visibility: true, moderationStatus: true, publishedAt: true, adultContentGenerated: true } } },
     });
     if (!comment) throw new NotFoundException('Comment not found');
 
     const sm = comment.sceneMedia;
-    if (!sm || sm.visibility !== SceneVisibility.PUBLIC || sm.moderationStatus !== SceneModerationStatus.APPROVED || !sm.publishedAt) {
+    if (!sm || sm.visibility !== SceneVisibility.PUBLIC || sm.moderationStatus !== SceneModerationStatus.APPROVED || !sm.publishedAt || sm.adultContentGenerated === true) {
       throw new BadRequestException('This comment is not available for reporting.');
     }
 
-    const reason = dto.reason?.trim();
-    if (!reason || reason.length < 3) throw new BadRequestException('Reason must be at least 3 characters.');
-    if (reason.length > 500) throw new BadRequestException('Reason must be at most 500 characters.');
+    const modResult = this.moderationService.moderateReportReason(dto.reason ?? '');
+    if (!modResult.allowed) {
+      throw new BadRequestException(modResult.reason || 'Report reason is invalid.');
+    }
+    const reason = modResult.sanitizedText;
 
     const existing = await this.prisma.sceneMediaReport.findFirst({
       where: { reporterUserId, commentId },

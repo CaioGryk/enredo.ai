@@ -2,47 +2,70 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Image,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  Pressable,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  AlertTriangle,
   ArrowLeft,
-  Bookmark,
-  ChevronRight,
+  BookOpen,
   Coins,
+  Compass,
+  Eye,
+  Flame,
+  HelpCircle,
   Image as ImageIcon,
-  Info,
   Lock,
-  PenTool,
+  MessageSquare,
+  Send,
+  Settings,
+  Shield,
   Sparkles,
+  Sword,
   Video,
+  Zap,
 } from 'lucide-react-native';
 import { api } from '../../src/api/client';
 import { AIModel, AIModelsResponse, ReadingStatusResponse, SceneMedia } from '../../src/api/types';
 import { StateBlock } from '../../src/components/state-block';
+import { useAuth } from '../../src/context/AuthContext';
 import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
 import { handleReadingError, READING_ERROR_CODES } from '../../src/utils/reading-error-helper';
+import { showApiError } from '../../src/utils/api-error-helper';
+import { goBackSafe } from '../../src/utils/navigation-helper';
+
+type Message = {
+  id: string;
+  sender: 'player' | 'narrator';
+  text: string;
+  choices?: string[];
+};
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const scrollViewRef = useRef<ScrollView>(null);
+  const { user, isLoading: authLoading } = useAuth();
+  const timelineRef = useRef<FlatList<Message>>(null);
   const [freeText, setFreeText] = useState('');
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const [isCreatingMedia, setIsCreatingMedia] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
 
   const { data: readingStatus, isLoading: sessionLoading, isError: sessionError, error: sessionQueryError, refetch: sessionRefetch } = useQuery<ReadingStatusResponse>({
     queryKey: ['session', id],
@@ -50,7 +73,9 @@ export default function ReaderScreen() {
       const { data } = await api.get(`/reading/sessions/${id}`);
       return data;
     },
-    enabled: Boolean(id),
+    enabled: Boolean(id && user),
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: modelsResponse } = useQuery<AIModelsResponse>({
@@ -59,6 +84,9 @@ export default function ReaderScreen() {
       const { data } = await api.get('/ai/models');
       return data;
     },
+    enabled: Boolean(user),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const actionMutation = useMutation({
@@ -70,11 +98,14 @@ export default function ReaderScreen() {
       const { data } = await api.post(`/reading/sessions/${id}/action`, payload);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setFreeText('');
+      setSelectedChoice(null);
+      queryClient.setQueryData(['session', id], data);
       queryClient.invalidateQueries({ queryKey: ['session', id] });
     },
     onError: (e: any) => {
+      queryClient.invalidateQueries({ queryKey: ['session', id] });
       handleReadingError(e);
     },
   });
@@ -83,10 +114,76 @@ export default function ReaderScreen() {
   const usage = readingStatus?.usage;
   const currentScene = session?.currentScene;
 
+  const hasIncompleteCurrentScene = React.useMemo(() => {
+    if (!currentScene) return false;
+    const hasSceneText = currentScene.sceneText && currentScene.sceneText.trim().length > 0;
+    return !hasSceneText;
+  }, [currentScene]);
+
+  const hasValidSession = React.useMemo(() => {
+    if (!session) return false;
+    const history = session.history || [];
+    const hasHistoryWithText = history.some((e) => e.sceneText && e.sceneText.trim().length > 0);
+    const hasCurrentWithText = currentScene?.sceneText && currentScene.sceneText.trim().length > 0;
+    return hasHistoryWithText || hasCurrentWithText;
+  }, [session]);
+
+  const messages = React.useMemo<Message[]>(() => {
+    const result: Message[] = [];
+    const history = (session?.history || []).slice().sort((a, b) => a.sceneIndex - b.sceneIndex);
+    // Build player → narrator pairs from oldest to newest.
+    // Incomplete historical events are skipped so the timeline never ends
+    // with a player action that has no narrator response.
+    for (const event of history) {
+      const hasValidSceneText = event.sceneText && event.sceneText.trim().length > 0;
+      if (!hasValidSceneText) {
+        continue;
+      }
+      if (event.userAction && event.userAction !== 'Início da história') {
+        result.push({ id: `${event.id}-user`, sender: 'player', text: event.userAction });
+      }
+      result.push({ id: `${event.id}-narrator`, sender: 'narrator', text: event.sceneText });
+    }
+    // Append current scene as the latest entry, avoiding duplicate user action
+    // Guard: only append if the scene has real text — empty/incomplete scenes are handled by the recovery state
+    if (currentScene) {
+      const hasValidSceneText = currentScene.sceneText && currentScene.sceneText.trim().length > 0;
+      if (!hasValidSceneText) {
+        return result;
+      }
+      if (currentScene.userAction && currentScene.userAction !== 'Início da história') {
+        const lastHistoryUserAction = history.length > 0 ? history[history.length - 1]?.userAction : undefined;
+        if (currentScene.userAction !== lastHistoryUserAction) {
+          result.push({ id: 'current-user', sender: 'player', text: currentScene.userAction });
+        }
+      }
+      result.push({
+        id: 'current-narrator',
+        sender: 'narrator',
+        text: currentScene.sceneText,
+        choices: currentScene.choices,
+      });
+    }
+    return result;
+  }, [session?.history, currentScene]);
+
+  const { data: storyInfo } = useQuery<{ title?: string }>({
+    queryKey: ['story-title', session?.storyId],
+    queryFn: async () => {
+      const { data } = await api.get(`/library/stories/${session!.storyId}`);
+      return data;
+    },
+    enabled: Boolean(session?.storyId && user),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
   const currentSceneId = currentScene?.id;
 
   useEffect(() => {
     setGeneratedImageUrl(null);
+    setGeneratedVideoUrl(null);
+    setSelectedChoice(null);
   }, [currentSceneId]);
 
   const sceneMediaQuery = useQuery<SceneMedia | null>({
@@ -99,6 +196,7 @@ export default function ReaderScreen() {
         const existing = mediaList.find((m) => m.narrativeEventId === currentSceneId);
         if (existing) {
           if (existing.imageUrl) setGeneratedImageUrl(existing.imageUrl);
+          if (existing.videoUrl) setGeneratedVideoUrl(existing.videoUrl);
           return existing;
         }
         return null;
@@ -106,7 +204,9 @@ export default function ReaderScreen() {
         return null;
       }
     },
-    enabled: Boolean(currentSceneId),
+    enabled: Boolean(currentSceneId && user),
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
   });
 
   const generateImageMutation = useMutation({
@@ -152,6 +252,10 @@ export default function ReaderScreen() {
         return sceneMediaQuery.data;
       }
 
+      if (!sceneMediaId) {
+        throw new Error('Scene media unavailable for current scene');
+      }
+
       setIsGeneratingImage(true);
       try {
         const { data: result } = await api.post(`/scene-media/${sceneMediaId}/generate-image`);
@@ -172,47 +276,171 @@ export default function ReaderScreen() {
           'Você não tem créditos suficientes para gerar esta imagem de cena.',
           [
             { text: 'Cancelar', style: 'cancel' },
-            { text: 'Comprar créditos', onPress: () => router.push('/(tabs)/upgrade') },
+            { text: 'Ver créditos (dev)', onPress: () => router.push('/(tabs)/upgrade') },
           ],
         );
         return;
       }
-      const message = e?.response?.data?.message || 'Falha ao gerar imagem da cena.';
-      Alert.alert('Geração indisponível', message, [{ text: 'OK', style: 'default' }]);
+      showApiError('Geração indisponível', e, 'Falha ao gerar imagem da cena.');
     },
   });
 
-  const history = useMemo(
-    () => [...(session?.history || [])].sort((a, b) => a.sceneIndex - b.sceneIndex),
-    [session?.history],
-  );
+  const generateVideoMutation = useMutation({
+    mutationFn: async () => {
+      if (!id || !currentSceneId) throw new Error('No current scene');
+
+      if (sceneMediaQuery.data?.videoUrl) {
+        return sceneMediaQuery.data;
+      }
+
+      let sceneMediaId = sceneMediaQuery.data?.id;
+
+      if (!sceneMediaId) {
+        setIsCreatingMedia(true);
+        try {
+          const { data: created } = await api.post(`/scene-media/from-event/${currentSceneId}`);
+          sceneMediaId = created.id;
+        } catch (createErr: any) {
+          if (createErr?.response?.status === 409) {
+            try {
+              const { data: listRes } = await api.get(`/scene-media/my`);
+              const mediaList: SceneMedia[] = Array.isArray(listRes) ? listRes : (listRes?.data ?? listRes?.sceneMedia ?? []);
+              const existing = mediaList.find((m: SceneMedia) => m.narrativeEventId === currentSceneId);
+              if (existing?.id) {
+                sceneMediaId = existing.id;
+                if (existing.videoUrl) {
+                  setGeneratedVideoUrl(existing.videoUrl);
+                  return existing;
+                }
+              }
+            } catch {
+              throw createErr;
+            }
+          } else {
+            throw createErr;
+          }
+        } finally {
+          setIsCreatingMedia(false);
+        }
+      }
+
+      if (sceneMediaQuery.data?.videoUrl && !sceneMediaId) {
+        return sceneMediaQuery.data;
+      }
+
+      if (!sceneMediaId) {
+        throw new Error('Scene media unavailable for current scene');
+      }
+
+      setIsGeneratingVideo(true);
+      try {
+        const { data: result } = await api.post(`/scene-media/${sceneMediaId}/generate-video`);
+        if (result?.videoUrl) setGeneratedVideoUrl(result.videoUrl);
+        queryClient.invalidateQueries({ queryKey: ['scene-media', currentSceneId] });
+        queryClient.invalidateQueries({ queryKey: ['scene-media-gallery'] });
+        queryClient.invalidateQueries({ queryKey: ['session', id] });
+        return result;
+      } finally {
+        setIsGeneratingVideo(false);
+      }
+    },
+    onError: (e: any) => {
+      const errorCode = e?.response?.data?.error;
+      if (errorCode === 'INSUFFICIENT_CREDITS') {
+        Alert.alert(
+          'Créditos insuficientes',
+          'Você não tem créditos suficientes para gerar este vídeo. São necessários 5 créditos.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Ver créditos (dev)', onPress: () => router.push('/(tabs)/upgrade') },
+          ],
+        );
+        return;
+      }
+      showApiError('Geração indisponível', e, 'Falha ao gerar vídeo da cena.');
+    },
+  });
+
   const models = modelsResponse?.models ?? [];
   const selectedModel = selectedModelId ? models.find((model) => model.id === selectedModelId) : null;
   const defaultModel = models.find((model) => model.id === modelsResponse?.defaultModelId);
   const activeModel = selectedModel || defaultModel || models[0];
-  const isGenerating = actionMutation.isPending || isCreatingMedia || isGeneratingImage;
+  const isGenerating = actionMutation.isPending || isCreatingMedia || isGeneratingImage || isGeneratingVideo;
   const creditsModel = useMemo(() => models.find((m) => m.creditCost > 0 && m.available), [models]);
 
-  const narrativeBlocks = useMemo(() => {
-    const blocks = currentScene?.sceneText
-      ? currentScene.sceneText.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)
-      : [];
-    return blocks.length > 0 ? blocks : ['A história ainda está preparando a próxima cena.'];
-  }, [currentScene?.sceneText]);
+  const lastNarratorIndex = React.useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].sender === 'narrator') return i;
+    }
+    return -1;
+  }, [messages]);
 
-  function sendAction(action: string, actionType: string) {
-    if (!action.trim() || isGenerating) return;
+  function submitAction(action: string, actionType: string) {
+    if (!user || !action.trim() || isGenerating || hasIncompleteCurrentScene) return;
     actionMutation.mutate({ action: action.trim(), actionType });
   }
 
-  if (sessionLoading) {
+  function selectChoice(choice: string) {
+    if (isGenerating || hasIncompleteCurrentScene) return;
+    setSelectedChoice(choice);
+  }
+
+  function submitSelectedChoice() {
+    if (!selectedChoice) return;
+    submitAction(selectedChoice, 'CHOICE');
+  }
+
+  if (!id) {
     return (
       <View style={styles.container}>
+        <View style={styles.header}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => goBackSafe('/(tabs)/library')}>
+            <ArrowLeft color={colors.text} size={24} />
+          </TouchableOpacity>
+        </View>
+        <StateBlock
+          fullScreen
+          title="Leitura não encontrada"
+          description="O identificador da sessão de leitura não foi fornecido."
+          actionLabel="Ir para biblioteca"
+          onAction={() => router.replace('/(tabs)/library')}
+        />
+      </View>
+    );
+  }
+
+  if (authLoading || sessionLoading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => goBackSafe('/(tabs)/library')}>
+            <ArrowLeft color={colors.text} size={24} />
+          </TouchableOpacity>
+        </View>
         <StateBlock
           fullScreen
           loading
-          title="Carregando sua leitura"
-          description="Estamos recuperando cena atual, histórico recente e configuração do modelo."
+          title={authLoading ? 'Validando sua sessão' : 'Carregando sua leitura'}
+          description={authLoading ? 'Estamos confirmando seu acesso antes de abrir a leitura.' : 'Estamos recuperando cena atual, histórico recente e configuração do modelo.'}
+        />
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => goBackSafe('/(tabs)/library')}>
+            <ArrowLeft color={colors.text} size={24} />
+          </TouchableOpacity>
+        </View>
+        <StateBlock
+          fullScreen
+          title="Sessão expirada"
+          description="Faça login novamente para continuar esta leitura."
+          actionLabel="Fazer login"
+          onAction={() => router.replace('/(auth)/login')}
         />
       </View>
     );
@@ -220,17 +448,23 @@ export default function ReaderScreen() {
 
   if (sessionError || !session) {
     const isNotFound = (sessionQueryError as any)?.response?.data?.error === READING_ERROR_CODES.READING_SESSION_NOT_FOUND;
+    const isUnauthorized = (sessionQueryError as any)?.response?.status === 401;
     return (
       <View style={styles.container}>
+        <View style={styles.header}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => goBackSafe('/(tabs)/library')}>
+            <ArrowLeft color={colors.text} size={24} />
+          </TouchableOpacity>
+        </View>
         <View style={styles.errorBlock}>
           <StateBlock
             fullScreen
-            title={isNotFound ? 'Sessão não encontrada' : 'Não foi possível carregar esta leitura'}
-            description={isNotFound ? 'Esta sessão de leitura não existe ou foi removida.' : 'Verifique sua conexão e tente novamente.'}
-            actionLabel="Voltar para biblioteca"
-            onAction={() => router.replace('/(tabs)/library')}
+            title={isUnauthorized ? 'Sessão expirada' : isNotFound ? 'Sessão não encontrada' : 'Não foi possível carregar esta leitura'}
+            description={isUnauthorized ? 'Faça login novamente para continuar esta leitura.' : isNotFound ? 'Esta sessão de leitura não existe ou foi removida.' : 'Verifique sua conexão e tente novamente.'}
+            actionLabel={isUnauthorized ? 'Fazer login' : 'Voltar para biblioteca'}
+            onAction={() => router.replace(isUnauthorized ? '/(auth)/login' : '/(tabs)/library')}
           />
-          {!isNotFound ? (
+          {!isNotFound && !isUnauthorized ? (
             <TouchableOpacity style={styles.errorRetryButton} onPress={() => sessionRefetch()}>
               <Text style={styles.errorRetryButtonText}>Tentar novamente</Text>
             </TouchableOpacity>
@@ -247,334 +481,488 @@ export default function ReaderScreen() {
     >
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
-            <ArrowLeft color={colors.textMuted} size={24} />
+          <TouchableOpacity onPress={() => goBackSafe('/(tabs)/library')} style={styles.iconButton}>
+            <ArrowLeft color={colors.textMuted} size={22} />
           </TouchableOpacity>
-          <View style={styles.headerDivider} />
-          <View style={styles.storyHeading}>
-            <Text style={styles.brand}>Enredo.ai</Text>
-            <Text style={styles.storyTitle} numberOfLines={1}>Sua leitura em andamento</Text>
+          <View style={styles.headerTitleGroup}>
+            <Text style={styles.headerStoryTitle} numberOfLines={1}>{storyInfo?.title || session?.protagonistName || 'Leitura'}</Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>Capítulo {session?.currentChapter || 1} • Cena {session?.currentSceneIndex || 0}</Text>
           </View>
         </View>
 
         <View style={styles.headerRight}>
-          <View style={styles.chapterInfo}>
-            <Text style={styles.chapterKicker}>Capítulo {session?.currentChapter || 1}</Text>
-            <Text style={styles.chapterSubtitle}>Cena {session?.currentSceneIndex || 0}</Text>
-          </View>
-          <TouchableOpacity style={styles.iconButton}>
-            <Bookmark color={colors.primary} fill={colors.primary} size={21} />
+          <TouchableOpacity onPress={() => router.push('/(tabs)/library')} style={styles.headerTextButton}>
+            <Text style={styles.headerTextButtonLabel}>Biblioteca</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.iconButton}>
+            <Settings color={colors.textMuted} size={20} />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView
-        ref={scrollViewRef}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <View style={styles.article}>
-          {history.slice(-3).map((event) => (
-            <View key={event.id} style={styles.historyBlock}>
-              {event.userAction ? (
-                <View style={styles.userActionWrapper}>
-                  <Text style={styles.userActionLabel}>Sua ação anterior</Text>
-                  <Text style={styles.userActionText}>{event.userAction}</Text>
+      {/* Decorative header separator */}
+      <View style={styles.headerSeparator} />
+
+      <View style={styles.timelineContainer}>
+        <FlatList
+          ref={timelineRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.timelineContent}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS !== 'web'}
+          onContentSizeChange={() => timelineRef.current?.scrollToEnd({ animated: false })}
+          onLayout={() => timelineRef.current?.scrollToEnd({ animated: false })}
+          ListHeaderComponent={
+            <View style={styles.timelineStartMarker}>
+              <Text style={styles.startMarkerText}>Início da Aventura</Text>
+            </View>
+          }
+          renderItem={({ item, index }) => {
+            const isPlayer = item.sender === 'player';
+            const isLastNarrator = index === lastNarratorIndex;
+            return (
+              <View style={[styles.messageRow, isPlayer ? styles.messageRowPlayer : styles.messageRowNarrator]}>
+                <View style={[styles.messageBubble, isPlayer ? styles.messageBubblePlayer : styles.messageBubbleNarrator]}>
+                  {isPlayer ? (
+                    <Text style={[styles.messageText, styles.messageTextPlayer]}>
+                      {item.text}
+                    </Text>
+                  ) : (
+                    <NarrativeText text={item.text} />
+                  )}
                 </View>
-              ) : null}
-            </View>
-          ))}
-
-          <View style={styles.narrativeContent}>
-            {narrativeBlocks.map((paragraph, index) => (
-              <Text key={`${index}-${paragraph.slice(0, 16)}`} style={[styles.narrativeText, index === 0 && styles.firstParagraph]}>
-                {paragraph}
-              </Text>
-            ))}
-            <Text style={styles.questionText}>O que você fará agora?</Text>
-          </View>
-
-          {currentScene?.adPlacement ? (
-            <View style={styles.adPlaceholder}>
-              <Text style={styles.adText}>Espaço publicitário</Text>
-            </View>
-          ) : null}
-
-          {isGenerating ? (
-            <View style={styles.generatingContainer}>
-              <ActivityIndicator color={colors.primary} />
-              <Text style={styles.generatingText}>A IA está escrevendo a próxima cena...</Text>
-            </View>
-          ) : null}
-
-          {currentScene ? (
-            <View style={styles.interactionSection}>
-              <SectionDivider label="Escreva sua própria ação" />
-              <View style={styles.inputWrapper}>
-                <View style={styles.inputLead}>
-                  <Sparkles color={colors.primary} size={16} />
-                  <Text style={styles.inputLeadText}>
-                    A próxima cena pode seguir exatamente a ação que você escrever aqui.
-                  </Text>
-                </View>
-                <TextInput
-                  style={[styles.input, Platform.OS === 'web' ? styles.webInput : null]}
-                  placeholder="Escreva sua próxima ação..."
-                  placeholderTextColor={`${colors.textMuted}80`}
-                  value={freeText}
-                  onChangeText={setFreeText}
-                  multiline
-                  editable={!isGenerating}
-                />
-                <TouchableOpacity
-                    style={[styles.sendActionButton, (!freeText.trim() || isGenerating) && styles.sendActionButtonDisabled]}
-                    onPress={() => sendAction(freeText, 'FREE_TEXT')}
-                    disabled={!freeText.trim() || isGenerating}
-                  >
-                    <Text style={[styles.sendActionText, isGenerating && styles.sendActionTextDisabled]}>Enviar ação</Text>
-                    <PenTool color={isGenerating ? colors.textMuted : colors.primary} size={16} />
-                  </TouchableOpacity>
-              </View>
-
-              {currentScene.choices?.length > 0 ? (
-                <>
-                  <SectionDivider label="Ações sugeridas" />
-                  <Text style={styles.suggestionHelper}>
-                    Use uma sugestão rápida ou siga com a sua própria ação.
-                  </Text>
-                  <View style={styles.choicesList}>
-                    {currentScene.choices.map((choice, index) => (
-                      <ChoiceButton
-                        key={`${choice}-${index}`}
-                        label={choice}
-                        primary={index === 0}
-                        onPress={() => sendAction(choice, 'CHOICE')}
-                        disabled={isGenerating}
-                      />
-                    ))}
-                  </View>
-                </>
-              ) : null}
-
-              <SectionDivider label="Mídia de cena" />
-              <Text style={styles.suggestionHelper}>
-                Gere imagens ou vídeos a partir desta cena. O conteúdo gerado é privado por padrão.
-              </Text>
-
-              <View style={styles.creditsRow}>
-                <Coins color={usage?.creditsRemaining ? colors.primary : colors.textMuted} size={14} />
-                <Text style={[styles.creditsText, !usage?.creditsRemaining && styles.creditsTextZero]}>
-                  {usage?.creditsRemaining ?? 0} crédito{(usage?.creditsRemaining ?? 0) !== 1 ? 's' : ''} disponível{(usage?.creditsRemaining ?? 0) !== 1 ? 'eis' : ''}
+                <Text style={[styles.messageMeta, isPlayer ? styles.messageMetaPlayer : styles.messageMetaNarrator]}>
+                  {isPlayer ? 'Você' : (storyInfo?.title || 'Narrador')}
                 </Text>
-                <TouchableOpacity
-                  style={styles.galleryLink}
-                  onPress={() => router.push('/scene-media' as any)}
-                >
-                  <Text style={styles.galleryLinkText}>Ver galeria</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.mediaRow}>
-                {sceneMediaQuery.data?.imageUrl || generatedImageUrl ? (
-                  <View style={[styles.mediaButton, styles.mediaButtonComplete]}>
-                    <ImageIcon color={colors.success} size={18} />
-                    <Text style={[styles.mediaButtonLabel, styles.mediaButtonLabelComplete]}>Imagem gerada</Text>
-                  </View>
-                ) : currentSceneId ? (
-                  <TouchableOpacity
-                    style={[styles.mediaButton, (isGenerating || generateImageMutation.isPending) && styles.mediaButtonDisabled]}
-                    onPress={() => {
-                      if (isGenerating || generateImageMutation.isPending) return;
-                      Alert.alert(
-                        'Gerar imagem da cena',
-                        'Esta ação consome 1 crédito. Deseja gerar uma imagem ilustrativa para esta cena?',
-                        [
-                          { text: 'Cancelar', style: 'cancel' },
-                          { text: 'Gerar', onPress: () => generateImageMutation.mutate() },
-                        ],
-                      );
-                    }}
-                    disabled={isGenerating || generateImageMutation.isPending}
-                  >
-                    {generateImageMutation.isPending || isGeneratingImage ? (
-                      <ActivityIndicator color={colors.primary} size="small" />
-                    ) : (
-                      <>
-                        <ImageIcon color={colors.primary} size={18} />
-                        <Text style={styles.mediaButtonLabel}>Gerar imagem</Text>
-                        <View style={styles.costBadge}>
-                          <Coins color={colors.primary} size={9} />
-                          <Text style={styles.costText}>1</Text>
+                {isLastNarrator && item.choices && item.choices.length > 0 && (
+                  <View style={styles.choicesInline}>
+                    <Text style={styles.choicesInlineLabel}>ESCOLHA SEU CAMINHO</Text>
+                    {item.choices.map((choice, cIdx) => {
+                      const isSelected = selectedChoice === choice;
+                      return (
+                      <Pressable
+                        key={cIdx}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Escolher caminho: ${choice}`}
+                        accessibilityState={{ disabled: isGenerating, selected: isSelected }}
+                        testID={`reader-choice-${cIdx}`}
+                        style={[
+                          styles.choiceInlineButton,
+                          isSelected && styles.choiceInlineButtonSelected,
+                          isGenerating && styles.choiceInlineButtonDisabled,
+                        ]}
+                        onPress={() => selectChoice(choice)}
+                        disabled={isGenerating}
+                      >
+                        <Text style={[styles.choiceInlineText, isSelected && styles.choiceInlineTextSelected]}>{choice}</Text>
+                        <View style={[styles.choiceInlineIconCircle, isSelected && styles.choiceInlineIconCircleSelected]}>
+                          {(() => {
+                            const ChoiceIcon = resolveChoiceIcon(choice);
+                            return <ChoiceIcon color={isSelected ? colors.background : colors.textMuted} size={14} />;
+                          })()}
                         </View>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                ) : (
-                  <View style={[styles.mediaButton, styles.mediaButtonDisabled]}>
-                    <ImageIcon color={colors.textMuted} size={18} />
-                    <Text style={[styles.mediaButtonLabel, styles.mediaButtonLabelDisabled]}>Imagem indisponível</Text>
+                      </Pressable>
+                    )})}
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel="Continuar com o caminho selecionado"
+                      testID="reader-submit-selected-choice"
+                      style={[
+                        styles.choiceContinueButton,
+                        (!selectedChoice || isGenerating) && styles.choiceContinueButtonDisabled,
+                      ]}
+                      onPress={submitSelectedChoice}
+                      disabled={!selectedChoice || isGenerating}
+                      activeOpacity={0.85}
+                    >
+                      {actionMutation.isPending ? (
+                        <ActivityIndicator color={colors.background} size="small" />
+                      ) : (
+                        <>
+                          <Text style={styles.choiceContinueButtonText}>CONTINUAR</Text>
+                          <Send color={colors.background} size={16} />
+                        </>
+                      )}
+                    </TouchableOpacity>
                   </View>
                 )}
-
-                <TouchableOpacity
-                  style={[styles.mediaButton, styles.mediaButtonDisabled]}
-                  disabled
-                >
-                  <Video color={colors.textMuted} size={18} />
-                  <Text style={[styles.mediaButtonLabel, styles.mediaButtonLabelDisabled]}>Gerar vídeo</Text>
-                  <View style={styles.costBadgeUnavailable}>
-                    <Coins color={colors.textMuted} size={9} />
-                    <Text style={styles.costTextUnavailable}>5</Text>
-                  </View>
-                  <Text style={styles.comingSoonBadge}>Em breve</Text>
-                </TouchableOpacity>
+                {isLastNarrator && item.choices && item.choices.length === 0 && (
+                  <Text style={styles.noChoicesInlineText}>Use o campo abaixo para descrever sua ação livremente.</Text>
+                )}
               </View>
-
-              {(sceneMediaQuery.data?.imageUrl || generatedImageUrl) ? (
-                <View style={styles.generatedImageContainer}>
-                  <View style={styles.generatedImageWrapper}>
-                    <Image
-                      source={{ uri: sceneMediaQuery.data?.imageUrl || generatedImageUrl || '' }}
-                      style={styles.generatedImage}
-                    />
-                  </View>
+            );
+          }}
+          ListFooterComponent={
+            <>
+              {isGenerating && (
+                <View style={styles.generatingDots}>
+                  <View style={styles.generatingDot} />
+                  <View style={[styles.generatingDot, styles.generatingDot2]} />
+                  <View style={[styles.generatingDot, styles.generatingDot3]} />
+                  <Text style={styles.generatingText}>Mestre narrando aventura...</Text>
                 </View>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-      </ScrollView>
+              )}
+              {hasIncompleteCurrentScene && !isGenerating && (
+                <View style={styles.recoveryBlock}>
+                  <AlertTriangle color="#D4A853" size={18} />
+                  <Text style={styles.recoveryTitle}>Cena atual não foi gerada corretamente</Text>
+                  <Text style={styles.recoveryDescription}>
+                    A última ação do jogador foi enviada, mas a resposta do narrador não foi recebida ou ficou incompleta.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.recoveryButton}
+                    onPress={() => sessionRefetch()}
+                  >
+                    <Text style={styles.recoveryButtonText}>Tentar novamente</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {!hasValidSession && !sessionLoading && !sessionError && (
+                <View style={styles.recoveryBlock}>
+                  <AlertTriangle color="#D4A853" size={18} />
+                  <Text style={styles.recoveryTitle}>Sessão sem conteúdo narrativo</Text>
+                  <Text style={styles.recoveryDescription}>
+                    Nenhuma cena válida foi encontrada nesta sessão de leitura. Tente recarregar ou volte para a biblioteca.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.recoveryButton}
+                    onPress={() => sessionRefetch()}
+                  >
+                    <Text style={styles.recoveryButtonText}>Tentar novamente</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              <View style={styles.timelineBottomSpacer} />
+            </>
+          }
+        />
+      </View>
 
       <View style={styles.dashboard}>
-        <View style={styles.usageRow}>
-          <Text style={styles.usageText}>
-            {usage ? `${usage.dailyUsed} / ${usage.dailyLimit} interações hoje` : 'Uso diário indisponível'}
-          </Text>
-          <Info color={colors.textMuted} size={14} />
+        <View style={styles.diagnosticsRow}>
+          <View style={styles.diagnosticItem}>
+            <View style={styles.diagnosticDot} />
+            <Text style={styles.diagnosticLabel} numberOfLines={1}>
+              {activeModel?.displayName || 'Modelo Padrão'}
+            </Text>
+          </View>
+          <View style={styles.diagnosticItem}>
+            <Zap color={colors.primary} size={12} />
+            <Text style={styles.diagnosticLabel}>
+              {usage?.creditsRemaining ?? 0} créditos
+            </Text>
+          </View>
         </View>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${usage ? Math.min((usage.dailyUsed / usage.dailyLimit) * 100, 100) : 0}%` }]} />
+
+        <View style={styles.mediaRow}>
+          {sceneMediaQuery.data?.imageUrl || generatedImageUrl ? (
+            <View style={[styles.mediaPill, styles.mediaPillComplete]}>
+              <ImageIcon color={colors.success} size={16} />
+              <Text style={[styles.mediaPillLabel, styles.mediaPillLabelComplete]}>Imagem gerada</Text>
+            </View>
+          ) : currentSceneId ? (
+            <TouchableOpacity
+              style={[styles.mediaPill, (isGenerating || generateImageMutation.isPending) && styles.mediaPillDisabled]}
+              onPress={() => {
+                if (isGenerating || generateImageMutation.isPending) return;
+                Alert.alert(
+                  'Gerar imagem da cena',
+                  'Esta ação consome 1 crédito. Deseja gerar uma imagem ilustrativa para esta cena?',
+                  [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: 'Gerar', onPress: () => generateImageMutation.mutate() },
+                  ],
+                );
+              }}
+              disabled={isGenerating || generateImageMutation.isPending}
+            >
+              {generateImageMutation.isPending || isGeneratingImage ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <>
+                  <Sparkles color={colors.primary} size={14} />
+                  <Text style={styles.mediaPillLabel}>Gerar Imagem</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity
+            style={[styles.mediaPill, (isGenerating || generateVideoMutation.isPending) && styles.mediaPillDisabled]}
+            onPress={() => {
+              if (isGenerating || generateVideoMutation.isPending) return;
+              Alert.alert(
+                'Gerar vídeo da cena',
+                'Esta ação consome 5 créditos. O vídeo é gerado a partir da cena atual. Deseja continuar?',
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { text: 'Gerar', onPress: () => generateVideoMutation.mutate() },
+                ],
+              );
+            }}
+            disabled={isGenerating || generateVideoMutation.isPending}
+          >
+            {generateVideoMutation.isPending || isGeneratingVideo ? (
+              <ActivityIndicator color={colors.primary} size="small" />
+            ) : (
+              <>
+                <Video color={colors.primary} size={14} />
+                <Text style={styles.mediaPillLabel}>Gerar Vídeo</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
-        <View style={styles.modelTabs}>
-          <ModelTab
-            label={activeModel?.displayName || 'Padrão'}
-            sub="Gratuito"
-            active={!selectedModelId}
-            onPress={() => setSelectedModelId(null)}
-            disabled={isGenerating}
+
+        {(sceneMediaQuery.data?.imageUrl || generatedImageUrl) ? (
+          <View style={styles.imagePreview}>
+            <Image
+              source={{ uri: (sceneMediaQuery.data?.imageUrl || generatedImageUrl) as string }}
+              style={styles.imagePreviewImage}
+            />
+          </View>
+        ) : null}
+
+        <View style={styles.inputInlineRow}>
+          <TextInput
+            testID="reader-free-action-input"
+            accessibilityLabel="Digite sua ação no leitor"
+            style={[styles.inputInline, hasIncompleteCurrentScene && styles.inputInlineDisabled]}
+            placeholder={hasIncompleteCurrentScene ? 'Aguardando recuperação da cena...' : 'O que você faz a seguir?...'}
+            placeholderTextColor="rgba(229, 226, 225, 0.20)"
+            value={freeText}
+            onChangeText={setFreeText}
+            onSubmitEditing={() => submitAction(freeText, 'FREE_TEXT')}
+            onKeyPress={({ nativeEvent }) => {
+              if (Platform.OS === 'web' && nativeEvent.key === 'Enter') {
+                submitAction(freeText, 'FREE_TEXT');
+              }
+            }}
+            editable={!isGenerating && !hasIncompleteCurrentScene}
+            blurOnSubmit={false}
+            maxLength={100}
+            returnKeyType="send"
           />
-          <ModelTab
-            label={premiumModelLabel(models)}
-            sub="Premium"
-            locked={!models.some((model) => model.tier === 'PREMIUM' && model.available)}
-            active={selectedModel?.tier === 'PREMIUM'}
-            onPress={() => selectFirstModel(models, 'PREMIUM', setSelectedModelId, router)}
-            disabled={isGenerating}
-          />
-          <ModelTab
-            label={creditsModel ? `Cine • ${creditsModel.creditCost} créditos` : 'Cine'}
-            sub={creditsModel?.displayName || 'Créditos'}
-            credits
-            locked={!creditsModel}
-            active={Boolean(selectedModel && selectedModel.creditCost > 0)}
-            onPress={() => selectCreditsModel(models, setSelectedModelId, router)}
-            disabled={isGenerating}
-          />
+          <TouchableOpacity
+            testID="reader-free-action-send"
+            accessibilityRole="button"
+            accessibilityLabel="Enviar ação digitada"
+            style={[styles.sendButtonInline, (!freeText.trim() || isGenerating || hasIncompleteCurrentScene) && styles.sendButtonInlineDisabled]}
+            onPress={() => submitAction(freeText, 'FREE_TEXT')}
+            disabled={!freeText.trim() || isGenerating || hasIncompleteCurrentScene}
+          >
+            <Send color={!freeText.trim() || isGenerating || hasIncompleteCurrentScene ? colors.textDisabled : colors.primary} size={20} fill={!freeText.trim() || isGenerating || hasIncompleteCurrentScene ? undefined : colors.primary} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.charCounterRow}>
+          <Text style={styles.charCounterText}>ESCOLHA UM CAMINHO OU DIGITE SUA AÇÃO</Text>
+          <Text style={styles.charCounterText}>100 CARACTERES MÁX</Text>
         </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-function SectionDivider({ label }: { label: string }) {
+const IconMap: Record<string, React.ComponentType<{ color?: string; size?: number }>> = {
+  compass: Compass,
+  book: BookOpen,
+  conversar: MessageSquare,
+  falar: MessageSquare,
+  mensagem: MessageSquare,
+  message: MessageSquare,
+  espada: Sword,
+  lâmina: Sword,
+  adaga: Sword,
+  sword: Sword,
+  brilho: Sparkles,
+  magia: Sparkles,
+  sparkles: Sparkles,
+  escudo: Shield,
+  proteger: Shield,
+  shield: Shield,
+  chama: Flame,
+  fogo: Flame,
+  flame: Flame,
+  olho: Eye,
+  observar: Eye,
+  eye: Eye,
+  ajuda: HelpCircle,
+  duvida: HelpCircle,
+  moedas: Coins,
+  ouro: Coins,
+  coins: Coins,
+  energia: Zap,
+  raio: Zap,
+  zap: Zap,
+};
+
+function resolveChoiceIcon(text: string): React.ComponentType<{ color?: string; size?: number }> {
+  const lower = text.toLowerCase();
+  for (const [key, Icon] of Object.entries(IconMap)) {
+    if (lower.includes(key)) return Icon;
+  }
+  return Compass;
+}
+
+type NarrativeSegment = {
+  kind: 'narration' | 'dialogue';
+  speaker?: string;
+  text: string;
+};
+
+function NarrativeText({ text }: { text: string }) {
+  const segments = useMemo(() => splitNarrativeText(text), [text]);
+
   return (
-    <View style={styles.sectionDivider}>
-      <View style={styles.dividerShort} />
-      <Text style={styles.dividerLabel}>{label}</Text>
-      <View style={styles.dividerLong} />
+    <View style={styles.narrativeStack}>
+      {segments.map((segment, index) => (
+        <View
+          key={`${segment.kind}-${index}`}
+          style={[
+            styles.narrativeSegment,
+            segment.kind === 'dialogue' && styles.dialogueSegment,
+          ]}
+        >
+          {segment.speaker ? (
+            <Text style={styles.dialogueSpeaker}>{segment.speaker}</Text>
+          ) : null}
+          <Text
+            style={[
+              styles.messageText,
+              styles.messageTextNarrator,
+              segment.kind === 'dialogue' && styles.dialogueText,
+            ]}
+          >
+            {segment.text}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }
 
-function ChoiceButton({ label, primary, onPress, disabled }: { label: string; primary?: boolean; onPress: () => void; disabled?: boolean }) {
-  return (
-    <TouchableOpacity style={[styles.choiceButton, primary && styles.choiceButtonPrimary, disabled && styles.choiceButtonDisabled]} onPress={onPress} disabled={disabled}>
-      <Text style={[styles.choiceText, primary && styles.choiceTextPrimary]}>{label}</Text>
-      <ChevronRight color={primary ? colors.background : colors.primary} size={20} />
-    </TouchableOpacity>
-  );
+function splitNarrativeText(text: string): NarrativeSegment[] {
+  const normalizedText = cleanNarrativeText(text);
+  const rawBlocks = normalizedText
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const blocks = rawBlocks.length > 0 ? rawBlocks : [normalizedText.trim()].filter(Boolean);
+
+  return blocks.flatMap((block): NarrativeSegment[] => {
+    const speakerMatch = block.match(/^([\p{L}\s.'-]{2,40}):\s*["“](.+)["”]?$/u);
+    if (speakerMatch) {
+      return [{
+        kind: 'dialogue' as const,
+        speaker: speakerMatch[1].trim(),
+        text: stripOuterQuotes(speakerMatch[2].trim()),
+      }];
+    }
+
+    const dialogueSegments = splitInlineDialogue(block);
+    if (dialogueSegments.length > 0) {
+      return dialogueSegments;
+    }
+
+    return splitLongNarration(block).map((textPart) => ({
+      kind: 'narration' as const,
+      text: textPart,
+    }));
+  });
 }
 
-function ModelTab({
-  label,
-  sub,
-  active,
-  locked,
-  credits,
-  disabled,
-  onPress,
-}: {
-  label: string;
-  sub: string;
-  active?: boolean;
-  locked?: boolean;
-  credits?: boolean;
-  disabled?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      style={[styles.modelTab, active && styles.modelTabActive, locked && styles.modelTabLocked]}
-      onPress={onPress}
-      disabled={disabled}
-    >
-      <View style={styles.modelTabTitleRow}>
-        <Text style={[styles.modelTabLabel, active && styles.modelTabLabelActive]} numberOfLines={1}>
-          {label}
-        </Text>
-        {locked ? <Lock color={colors.textMuted} size={10} /> : null}
-        {credits ? <Coins color={active ? colors.primary : colors.textMuted} size={10} /> : null}
-      </View>
-      <Text style={styles.modelTabSub}>{sub}</Text>
-      {active ? <View style={styles.activeDot} /> : null}
-    </TouchableOpacity>
-  );
-}
+function splitInlineDialogue(block: string): NarrativeSegment[] {
+  const quotePattern = /["“]([^"”]{4,})["”]/g;
+  const segments: NarrativeSegment[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
 
-function premiumModelLabel(models: AIModel[]) {
-  return models.find((model) => model.tier === 'PREMIUM')?.displayName || 'Avançado';
-}
+  while ((match = quotePattern.exec(block)) !== null) {
+    const before = block.slice(lastIndex, match.index).trim();
+    const speaker = inferSpeaker(before);
 
-function selectFirstModel(
-  models: AIModel[],
-  tier: string,
-  setSelectedModelId: (id: string | null) => void,
-  router: ReturnType<typeof useRouter>,
-) {
-  const model = models.find((item) => item.tier === tier);
-  if (model?.available) {
-    setSelectedModelId(model.id);
-    return;
+    if (before) {
+      for (const textPart of splitLongNarration(before)) {
+        segments.push({ kind: 'narration', text: textPart });
+      }
+    }
+
+    segments.push({
+      kind: 'dialogue',
+      speaker,
+      text: stripOuterQuotes(match[1].trim()),
+    });
+
+    lastIndex = match.index + match[0].length;
   }
-  Alert.alert('Modelo premium', model?.lockedReason || 'Faça upgrade para usar modelos avançados.', [
-    { text: 'Cancelar', style: 'cancel' },
-    { text: 'Ver Premium', onPress: () => router.push('/(tabs)/upgrade') },
-  ]);
+
+  if (segments.length === 0) return [];
+
+  const after = cleanDialogueAttributionLead(block.slice(lastIndex).trim());
+  if (after) {
+    for (const textPart of splitLongNarration(after)) {
+      segments.push({ kind: 'narration', text: textPart });
+    }
+  }
+
+  return segments;
 }
 
-function selectCreditsModel(
-  models: AIModel[],
-  setSelectedModelId: (id: string | null) => void,
-  router: ReturnType<typeof useRouter>,
-) {
-  const model = models.find((item) => item.creditCost > 0);
-  if (model?.available) {
-    setSelectedModelId(model.id);
-    return;
+function inferSpeaker(textBeforeQuote: string): string | undefined {
+  const compact = textBeforeQuote.replace(/\s+/g, ' ').trim();
+  const match = compact.match(/([A-ZÁÉÍÓÚÂÊÔÃÕÇ][\p{L}.'-]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][\p{L}.'-]+){0,2})\s+(?:diz|responde|murmura|sussurra|pergunta|grita|provoca|comenta|admite|revela|começa|interrompe|repete|rosna|declara)\b/iu);
+  const speaker = match?.[1]?.trim();
+  if (speaker && !/^(ele|ela|você|voce)$/i.test(speaker)) return speaker;
+
+  const fallbackNames = compact.match(/\b[A-ZÁÉÍÓÚÂÊÔÃÕÇ][\p{L}.'-]{2,}\b/gu) ?? [];
+  const fallback = fallbackNames
+    .filter((name) => !/^(Você|Voce|Ele|Ela|Um|Uma|O|A|Os|As)$/i.test(name))
+    .at(-1);
+  return fallback;
+}
+
+function splitLongNarration(block: string): string[] {
+  if (block.length <= 320) return [block];
+
+  const sentences = block.match(/[^.!?]+[.!?]+(?:["”])?|[^.!?]+$/g)?.map((part) => part.trim()).filter(Boolean) ?? [block];
+  const chunks: string[] = [];
+  let current = '';
+
+  for (const sentence of sentences) {
+    const next = current ? `${current} ${sentence}` : sentence;
+    if (next.length > 280 && current) {
+      chunks.push(current);
+      current = sentence;
+    } else {
+      current = next;
+    }
   }
-  Alert.alert('Créditos cinematográficos', model?.lockedReason || 'Compre créditos para usar o modo cinematográfico.', [
-    { text: 'Cancelar', style: 'cancel' },
-    { text: 'Ver créditos', onPress: () => router.push('/(tabs)/upgrade') },
-  ]);
+
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function stripOuterQuotes(text: string): string {
+  return text.replace(/^["“]+/, '').replace(/["”]+$/, '');
+}
+
+function cleanNarrativeText(text: string): string {
+  return text
+    .replace(/\\n/g, '\n')
+    .replace(/\*\*/g, '');
+}
+
+function cleanDialogueAttributionLead(text: string): string {
+  return text
+    .replace(/^,\s*(?:diz|responde|murmura|sussurra|pergunta|grita|provoca|comenta|admite|revela|repete|declara)\b,?\s*/i, '')
+    .replace(/^(?:ele|ela)\s+(?:diz|responde|murmura|sussurra|pergunta|grita|provoca|comenta|admite|revela|repete|declara)\b,?\s*/i, '')
+    .replace(/^(?:ele|ela),\s*/i, '')
+    .replace(/^,\s*/, '')
+    .trim();
 }
 
 const styles = StyleSheet.create({
@@ -625,479 +1013,461 @@ const styles = StyleSheet.create({
     color: colors.background,
   },
   header: {
-    height: 78,
-    paddingHorizontal: 18,
+    height: 64,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: 'rgba(10, 10, 12, 0.96)',
+    borderBottomColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(0,0,0,0.82)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  headerProgressBar: {
+    position: 'absolute',
+    top: 64,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  headerProgressFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 6,
+  },
+  headerSeparator: {
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginBottom: 0,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
   },
   iconButton: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 10,
   },
-  headerDivider: {
-    width: 1,
-    height: 18,
-    backgroundColor: colors.border,
+  headerTitleGroup: {
+    gap: 2,
+    flex: 1,
   },
-  brand: {
+  headerStoryTitle: {
     ...typography.h3,
     color: colors.primary,
-    fontStyle: 'italic',
-    fontSize: 18,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 18,
   },
-  storyHeading: {
-    gap: 3,
-    maxWidth: 180,
-  },
-  storyTitle: {
-    ...typography.bodySmall,
-    color: colors.text,
-    fontSize: 12,
-  },
-  chapterInfo: {
-    alignItems: 'flex-end',
-    maxWidth: 108,
-  },
-  chapterKicker: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 9,
-  },
-  chapterSubtitle: {
-    ...typography.bodySmall,
-    color: colors.textMuted,
-    fontSize: 11,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 22,
-    paddingBottom: 252,
-  },
-  article: {
-    width: '100%',
-    maxWidth: 720,
-    alignSelf: 'center',
-  },
-  historyBlock: {
-    marginBottom: 10,
-  },
-  userActionWrapper: {
-    borderLeftWidth: 2,
-    borderLeftColor: colors.primary,
-    paddingLeft: 12,
-    marginBottom: 16,
-  },
-  userActionLabel: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 9,
-    marginBottom: 4,
-  },
-  userActionText: {
-    ...typography.body,
-    color: colors.text,
-    fontStyle: 'italic',
-  },
-  narrativeContent: {
-    gap: 18,
-    marginBottom: 34,
-    padding: 24,
-    borderRadius: 30,
-    backgroundColor: 'rgba(27, 24, 36, 0.94)',
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-  },
-  narrativeText: {
-    ...typography.narrative,
-    color: colors.text,
-    fontSize: 20,
-    lineHeight: 35,
-    opacity: 0.92,
-  },
-  firstParagraph: {
-    fontSize: 21,
-  },
-  questionText: {
-    ...typography.narrative,
-    color: colors.primary,
-    fontStyle: 'italic',
-    fontSize: 18,
-    lineHeight: 30,
-  },
-  adPlaceholder: {
-    marginBottom: 28,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.10)',
-    backgroundColor: colors.surface,
-    borderRadius: 22,
-    alignItems: 'center',
-  },
-  adText: {
-    ...typography.label,
-    color: colors.textMuted,
-  },
-  generatingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 18,
-    paddingHorizontal: 18,
-    borderRadius: 22,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-  },
-  generatingText: {
-    ...typography.bodySmall,
-    color: colors.textMuted,
-    fontStyle: 'italic',
-  },
-  interactionSection: {
-    gap: 22,
-  },
-  sectionDivider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 4,
-  },
-  dividerShort: {
-    width: 32,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerLong: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerLabel: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 9,
+  headerSubtitle: {
+    ...typography.overline,
+    color: 'rgba(255,255,255,0.40)',
+    fontSize: 10,
     letterSpacing: 1.2,
   },
-  choicesList: {
-    gap: 10,
+  headerTextButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
-  choiceButton: {
-    minHeight: 60,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+  headerTextButtonLabel: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '500' as const,
+  },
+  /* ─── Timeline ─── */
+  timelineContainer: {
+    flex: 1,
+  },
+  timelineContent: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  timelineStartMarker: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  startMarkerText: {
+    ...typography.overline,
+    color: 'rgba(255,255,255,0.25)',
+    fontSize: 10,
+  },
+  timelineBottomSpacer: {
+    height: 16,
+  },
+
+  /* ─── Mensagens (bubbles) ─── */
+  messageRow: {
+    marginBottom: 20,
+  },
+  messageRowPlayer: {
+    alignItems: 'flex-end',
+  },
+  messageRowNarrator: {
+    alignItems: 'flex-start',
+  },
+  messageBubble: {
+    maxWidth: '88%',
     paddingHorizontal: 18,
     paddingVertical: 14,
+    borderRadius: 20,
+  },
+  messageBubblePlayer: {
+    backgroundColor: 'rgba(206, 189, 255, 0.22)',
+    borderTopRightRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(206, 189, 255, 0.18)',
+  },
+  messageBubbleNarrator: {
+    backgroundColor: 'rgba(19, 19, 19, 0.55)',
+    borderTopLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  messageText: {
+    fontSize: 16,
+    lineHeight: 26,
+  },
+  messageTextPlayer: {
+    ...typography.body,
+    fontFamily: 'Inter',
+    color: '#e5d9ff',
+  },
+  messageTextNarrator: {
+    ...typography.narrative,
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 28,
+  },
+  narrativeStack: {
+    gap: 10,
+  },
+  narrativeSegment: {
+    paddingVertical: 2,
+  },
+  dialogueSegment: {
+    borderLeftWidth: 2,
+    borderLeftColor: 'rgba(206, 189, 255, 0.45)',
+    backgroundColor: 'rgba(206, 189, 255, 0.055)',
+    borderRadius: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+  },
+  dialogueSpeaker: {
+    ...typography.label,
+    color: colors.primary,
+    fontSize: 10,
+    marginBottom: 5,
+  },
+  dialogueText: {
+    color: '#F2ECFF',
+    fontStyle: 'italic',
+  },
+  messageMeta: {
+    ...typography.overline,
+    color: 'rgba(255,255,255,0.20)',
+    fontSize: 9,
+    marginTop: 6,
+    marginHorizontal: 6,
+  },
+  messageMetaPlayer: {
+    textAlign: 'right',
+  },
+  messageMetaNarrator: {
+    textAlign: 'left',
+  },
+
+  /* ─── Escolhas inline ─── */
+  choicesInline: {
+    marginTop: 14,
+    width: '92%',
+    alignSelf: 'flex-start',
+  },
+  choicesInlineLabel: {
+    ...typography.overline,
+    color: 'rgba(206, 189, 255, 0.55)',
+    fontSize: 9,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  choiceInlineButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    backgroundColor: 'rgba(0,0,0,0.30)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 8,
   },
-  choiceButtonPrimary: {
+  choiceInlineButtonSelected: {
+    backgroundColor: 'rgba(206, 189, 255, 0.16)',
+    borderColor: 'rgba(206, 189, 255, 0.48)',
+  },
+  choiceInlineButtonDisabled: {
+    opacity: 0.4,
+  },
+  choiceInlineText: {
+    ...typography.body,
+    fontFamily: 'InterMedium',
+    color: '#e5e2e1',
+    fontSize: 13,
+    lineHeight: 19,
+    flex: 1,
+    paddingRight: 10,
+  },
+  choiceInlineTextSelected: {
+    color: colors.primary,
+  },
+  choiceInlineIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  choiceInlineIconCircleSelected: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  choiceButtonDisabled: {
-    opacity: 0.4,
+  choiceContinueButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
   },
-  choiceText: {
+  choiceContinueButtonDisabled: {
+    opacity: 0.35,
+  },
+  choiceContinueButtonText: {
     ...typography.label,
-    color: colors.text,
-    flex: 1,
+    color: colors.background,
     fontSize: 11,
   },
-  choiceTextPrimary: {
-    color: colors.background,
-  },
-  inputWrapper: {
-    position: 'relative',
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.10)',
-    borderRadius: 26,
-    backgroundColor: 'rgba(21, 19, 27, 0.92)',
-    padding: 18,
-    minHeight: 156,
-  },
-  inputLead: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 10,
-  },
-  inputLeadText: {
-    ...typography.bodySmall,
+  noChoicesInlineText: {
+    ...typography.caption,
+    fontFamily: 'Inter',
     color: colors.textMuted,
-    flex: 1,
-    lineHeight: 18,
+    fontStyle: 'italic',
+    marginTop: 8,
+    marginLeft: 4,
   },
-  input: {
-    ...typography.narrative,
-    color: colors.text,
-    minHeight: 120,
-    paddingRight: 8,
-    textAlignVertical: 'top',
-  },
-  webInput: {
-    outlineStyle: 'none',
-    boxShadow: 'none',
-  } as any,
-  sendActionButton: {
-    alignSelf: 'flex-end',
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.10)',
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
+
+  /* ─── Loading dots ─── */
+  generatingDots: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: colors.surfaceHighlight,
-  },
-  sendActionButtonDisabled: {
-    opacity: 0.4,
-  },
-  sendActionText: {
-    ...typography.label,
-    color: colors.primary,
-    fontSize: 10,
-  },
-  sendActionTextDisabled: {
-    color: colors.textMuted,
-  },
-  suggestionHelper: {
-    ...typography.bodySmall,
-    color: colors.textMuted,
-    marginTop: -10,
-  },
-  creditsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: 'rgba(21, 19, 27, 0.92)',
+    backgroundColor: 'rgba(19, 19, 19, 0.40)',
     borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-  },
-  creditsText: {
-    ...typography.label,
-    color: colors.primary,
-    fontSize: 10,
-    flex: 1,
-  },
-  creditsTextZero: {
-    color: colors.textMuted,
-  },
-  galleryLink: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.15)',
-  },
-  galleryLinkText: {
-    ...typography.label,
-    color: colors.primary,
-    fontSize: 9,
-  },
-  dashboard: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    borderColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 20,
     paddingHorizontal: 18,
-    paddingTop: 16,
+    paddingVertical: 14,
+    maxWidth: 300,
+    alignSelf: 'flex-start',
+  },
+  generatingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+    opacity: 0.7,
+  },
+  generatingDot2: {
+    opacity: 0.5,
+  },
+  generatingDot3: {
+    opacity: 0.3,
+  },
+  generatingText: {
+    ...typography.labelSmall,
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 10,
+    marginLeft: 4,
+  },
+
+  /* ─── Recovery (incomplete scene) ─── */
+  recoveryBlock: {
+    backgroundColor: 'rgba(212, 168, 83, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 168, 83, 0.20)',
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  recoveryTitle: {
+    ...typography.label,
+    color: '#D4A853',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  recoveryDescription: {
+    ...typography.caption,
+    color: 'rgba(212, 168, 83, 0.70)',
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  recoveryButton: {
+    backgroundColor: 'rgba(212, 168, 83, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 168, 83, 0.25)',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  recoveryButtonText: {
+    ...typography.labelSmall,
+    color: '#D4A853',
+    fontSize: 12,
+  },
+
+  /* ─── Painel Inferior ─── */
+  dashboard: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
     paddingBottom: 24,
-    backgroundColor: 'rgba(11, 11, 15, 0.98)',
+    backgroundColor: 'rgba(10, 10, 10, 0.97)',
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: 'rgba(255,255,255,0.08)',
     gap: 12,
   },
-  usageRow: {
+  diagnosticsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  usageText: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 9,
-  },
-  progressTrack: {
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-  },
-  modelTabs: {
+  diagnosticItem: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-    borderRadius: 20,
-    backgroundColor: 'rgba(21, 19, 27, 0.98)',
-    padding: 5,
   },
-  modelTab: {
-    flex: 1,
-    minHeight: 54,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
+  diagnosticDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4ade80',
   },
-  modelTabActive: {
-    backgroundColor: colors.surfaceHighlight,
-    borderWidth: 1,
-    borderColor: `${colors.primary}33`,
-  },
-  modelTabLocked: {
-    opacity: 0.48,
-  },
-  modelTabTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    maxWidth: '100%',
-  },
-  modelTabLabel: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 9,
-    maxWidth: 82,
-  },
-  modelTabLabelActive: {
-    color: colors.primary,
-  },
-  modelTabSub: {
-    ...typography.bodySmall,
+  diagnosticLabel: {
+    ...typography.labelSmall,
     color: colors.textMuted,
     fontSize: 10,
-    lineHeight: 13,
-    marginTop: 2,
   },
-  activeDot: {
-    position: 'absolute',
-    bottom: 4,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.primary,
-  },
+
+  /* ─── Botões de mídia (pills) ─── */
   mediaRow: {
     flexDirection: 'row',
     gap: 10,
   },
-  mediaButton: {
+  mediaPill: {
     flex: 1,
-    minHeight: 72,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.12)',
-    backgroundColor: 'rgba(21, 19, 27, 0.92)',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    position: 'relative',
+    gap: 8,
+    paddingVertical: 11,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  mediaButtonDisabled: {
-    opacity: 0.45,
-    borderColor: 'rgba(255,255,255,0.05)',
+  mediaPillDisabled: {
+    opacity: 0.4,
   },
-  mediaButtonLabel: {
-    ...typography.label,
+  mediaPillComplete: {
+    borderColor: 'rgba(74, 222, 128, 0.16)',
+    backgroundColor: 'rgba(74, 222, 128, 0.05)',
+  },
+  mediaPillLabel: {
+    ...typography.labelSmall,
     color: colors.text,
     fontSize: 10,
   },
-  mediaButtonLabelDisabled: {
-    color: colors.textMuted,
+  mediaPillLabelComplete: {
+    color: colors.success,
   },
-  costBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    backgroundColor: 'rgba(206, 189, 255, 0.10)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  costText: {
-    ...typography.label,
-    color: colors.primary,
-    fontSize: 8,
-  },
-  costBadgeUnavailable: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    backgroundColor: 'rgba(139, 131, 158, 0.10)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  costTextUnavailable: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 8,
-  },
-  comingSoonBadge: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 7,
-    position: 'absolute',
-    top: 6,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  generatedImageContainer: {
-    gap: 8,
-    marginTop: 4,
-  },
-  generatedImageWrapper: {
-    borderRadius: 18,
+
+  /* ─── Image preview inline ─── */
+  imagePreview: {
+    borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.12)',
+    borderColor: 'rgba(206, 189, 255, 0.10)',
   },
-  generatedImage: {
+  imagePreviewImage: {
     width: '100%' as any,
-    height: 200,
+    height: 120,
     resizeMode: 'cover' as any,
   },
-  mediaButtonComplete: {
-    borderColor: 'rgba(16, 185, 129, 0.20)',
-    backgroundColor: 'rgba(16, 185, 129, 0.06)',
+
+  /* ─── Input inline ─── */
+  inputInlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(255,255,255,0.15)',
   },
-  mediaButtonLabelComplete: {
-    color: colors.success,
+  inputInline: {
+    ...typography.body,
+    fontFamily: 'Inter',
+    color: colors.text,
+    flex: 1,
+    paddingRight: 44,
+    paddingVertical: 14,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  inputInlineDisabled: {
+    color: colors.textDisabled,
+  },
+  sendButtonInline: {
+    position: 'absolute',
+    right: 2,
+    bottom: 8,
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendButtonInlineDisabled: {
+    opacity: 0.3,
+  },
+  charCounterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
+  charCounterText: {
+    ...typography.overline,
+    color: 'rgba(255,255,255,0.18)',
+    fontSize: 9,
   },
 });

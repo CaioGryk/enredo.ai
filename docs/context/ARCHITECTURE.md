@@ -47,6 +47,13 @@ Outer layers depend on inner layers:
 - No circular dependencies between modules or features
 - Use Cases/Interactors have no knowledge of UI or data implementation details
 
+### 8. Sensitive Preference Enforcement
+- Sensitive narrative preferences must be backend-owned.
+- Mobile can display and request preference changes, but backend computes effective allowed behavior.
+- Adult 18+ narrative behavior requires explicit opt-in, age confirmation, and terms acceptance.
+- Adult preferences affect private reading generation only; they must not automatically affect public feed distribution or media generation.
+- Text, image, video, and user-likeness policies must be handled as separate risk surfaces.
+
 ---
 
 ## Technology Stack
@@ -174,6 +181,15 @@ Outer layers depend on inner layers:
 - Provider abstraction (OpenRouter, OpenAI, Anthropic)
 - Prompt engineering
 
+### narrative-preferences
+- Backend-owned user narrative preference resolver.
+- Stores romance/adult preference gates.
+- Computes effective policy for `reading` and `ai` layers.
+- Private reading prompts receive the server-computed policy block for first scene and continuation.
+- Must not expose adult content as public discovery metadata.
+- MVP public feed/moderation guardrails block adult-generated media from public submission and social surfaces.
+- Reference: `docs/content-adult-policy.md`.
+
 ### billing
 - Credit wallet management
 - Credit transactions (ledger)
@@ -228,7 +244,7 @@ Outer layers depend on inner layers:
 | ReadingService | `reading/reading.service.ts` | Facade for reading operations |
 | ReadingOrchestratorService | `reading/reading-orchestrator.service.ts` | Core reading business logic |
 | NarrativeEngineService | `reading/narrative/narrative-engine.service.ts` | AI scene generation |
-| NarrativeContextBuilder | `reading/narrative/narrative-context.builder.ts` | Context construction |
+| NarrativeContextBuilder | `reading/narrative/narrative-context.builder.ts` | Context construction + Story Codex (Step 98c) |
 | GenerationBudgetGuard | `reading/application/generation-budget.guard.ts` | Budget enforcement |
 | AiService | `ai/ai.service.ts` | LLM gateway |
 | BillingService | `billing/billing.service.ts` | Credit operations |
@@ -246,4 +262,4 @@ Outer layers depend on inner layers:
 
 ---
 
-**Last Updated:** After Step 47
+**Last Updated:** After Step 98c (Narrative Memory Hardening / Story Codex) — June 2026

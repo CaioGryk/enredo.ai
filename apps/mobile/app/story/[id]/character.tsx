@@ -11,16 +11,17 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, CheckCircle2, X } from 'lucide-react-native';
+import { ArrowLeft, Bell, CheckCircle2, Compass, Hand, Lamp, Moon, Shield, Sparkles, Swords, UserRound, VenetianMask, X } from 'lucide-react-native';
 import { api } from '../../../src/api/client';
 import { StartReadingResponse, StoryPlayableCharacter, StoryPremise } from '../../../src/api/types';
 import { StateBlock } from '../../../src/components/state-block';
 import { colors } from '../../../src/theme/colors';
 import { typography } from '../../../src/theme/typography';
+import { goBackSafe } from '../../../src/utils/navigation-helper';
 import { handleReadingError } from '../../../src/utils/reading-error-helper';
 
 const ACCENT = '#CEBDFF';
-const PANEL_ALT = '#1B1824';
+const PANEL_ALT = '#1c1b1b';
 const SOFT_TEXT = '#B7AFC8';
 
 export default function StoryCharacterScreen() {
@@ -28,66 +29,116 @@ export default function StoryCharacterScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedCharacterId, setSelectedCharacterId] = React.useState<string | null>(null);
+  const selectedPremiseId = Array.isArray(premiseId) ? premiseId[0] : premiseId;
 
-  const { data: premise } = useQuery<StoryPremise | null>({
-    queryKey: ['story-premise-single', premiseId],
+  const {
+    data: premise,
+    isLoading: premiseLoading,
+    isError: premiseError,
+    refetch: refetchPremise,
+  } = useQuery<StoryPremise | null>({
+    queryKey: ['story-premise-single', selectedPremiseId],
     queryFn: async () => {
-      if (!premiseId || !id) return null;
+      if (!selectedPremiseId || !id) return null;
       const { data } = await api.get(`/story-setup/stories/${id}/premises`);
-      return (data as StoryPremise[]).find((item) => item.id === premiseId) || null;
+      const list = Array.isArray(data) ? data : (data?.premises ?? data?.data ?? []);
+      return (list as StoryPremise[]).find((item) => item.id === selectedPremiseId) || null;
     },
-    enabled: Boolean(id && premiseId),
+    enabled: Boolean(id && selectedPremiseId),
   });
 
-  const { data: characters = [], isLoading } = useQuery<StoryPlayableCharacter[]>({
-    queryKey: ['premise-characters', premiseId],
+  const {
+    data: characters = [],
+    isLoading,
+    isError: charactersError,
+    refetch: refetchCharacters,
+  } = useQuery<StoryPlayableCharacter[]>({
+    queryKey: ['premise-characters', selectedPremiseId],
     queryFn: async () => {
       try {
-        const { data } = await api.get(`/story-setup/premises/${premiseId}/characters`);
+        const { data } = await api.get(`/story-setup/premises/${selectedPremiseId}/characters`);
         return data;
       } catch (error: any) {
         if (error.response?.status === 404) return [];
         throw error;
       }
     },
-    enabled: Boolean(premiseId),
+    enabled: Boolean(selectedPremiseId),
   });
 
-  const generateCharactersMutation = useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post(`/story-setup/premises/${premiseId}/characters/generate`, { force: false });
-      return data as StoryPlayableCharacter[];
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['premise-characters', premiseId], data);
-    },
-    onError: () => Alert.alert('Erro', 'Não foi possível preparar personagens jogáveis.'),
-  });
+  const hasPendingPortraits = React.useMemo(
+    () => characters.some(
+      (character) => !character.imageUrl && character.imageGenerationStatus === 'PENDING' && !character.imageError,
+    ),
+    [characters],
+  );
+
+  React.useEffect(() => {
+    if (!hasPendingPortraits) return undefined;
+
+    const intervalId = setInterval(() => {
+      refetchCharacters();
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [hasPendingPortraits, refetchCharacters]);
 
   const startSessionMutation = useMutation({
     mutationFn: async () => {
       const { data } = await api.post<StartReadingResponse>('/reading/start', {
         storyId: id,
-        premiseId,
+        premiseId: selectedPremiseId,
         characterId: selectedCharacterId,
       });
       return data;
     },
     onSuccess: (data) => {
       if (data.session?.id) {
-        router.push(`/reader/${data.session.id}`);
+        router.push(`/reader/${data.session.id}` as any);
       } else {
-        Alert.alert('Erro', 'Id de sessão inválido.');
+        Alert.alert('Erro', 'Sessão de leitura não foi criada. Tente novamente.');
       }
     },
     onError: (e: any) => {
+      const errorCode = e?.response?.data?.error;
+      const status = e?.response?.status;
+      if (status === 401) {
+        Alert.alert('Sessão expirada', 'Sua sessão expirou. Faça login novamente para continuar.', [
+          { text: 'Fazer login', onPress: () => router.replace('/(auth)/login') },
+        ]);
+        return;
+      }
       handleReadingError(e);
     },
   });
 
-  if (isLoading) {
+  if (!selectedPremiseId) {
     return (
       <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => goBackSafe(`/story/${id}/premise`)} style={styles.sideButton}>
+            <ArrowLeft color={ACCENT} size={20} />
+          </TouchableOpacity>
+        </View>
+        <StateBlock
+          fullScreen
+          title="Escolha uma premissa primeiro"
+          description="Antes de selecionar um personagem, volte e escolha o ponto de partida desta história."
+          actionLabel="Voltar para premissas"
+          onAction={() => goBackSafe(`/story/${id}/premise`)}
+        />
+      </View>
+    );
+  }
+
+  if (premiseLoading || isLoading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => goBackSafe(`/story/${id}/premise`)} style={styles.sideButton}>
+            <ArrowLeft color={ACCENT} size={20} />
+          </TouchableOpacity>
+        </View>
         <StateBlock
           fullScreen
           loading
@@ -98,17 +149,39 @@ export default function StoryCharacterScreen() {
     );
   }
 
+  if (premiseError || charactersError) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => goBackSafe(`/story/${id}/premise`)} style={styles.sideButton}>
+            <ArrowLeft color={ACCENT} size={20} />
+          </TouchableOpacity>
+        </View>
+        <StateBlock
+          fullScreen
+          title="Não foi possível carregar personagens"
+          description="Verifique sua conexão e tente novamente antes de gerar ou escolher personagens jogáveis."
+          actionLabel="Tentar novamente"
+          onAction={() => {
+            refetchPremise();
+            refetchCharacters();
+          }}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.push(`/story/${id}/premise`)}
+          onPress={() => goBackSafe(`/story/${id}/premise`)}
           style={styles.sideButton}
         >
           <ArrowLeft color={ACCENT} size={20} />
         </TouchableOpacity>
         <Text style={styles.brand}>Enredo.ai</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.sideButton}>
+        <TouchableOpacity onPress={() => goBackSafe(`/story/${id}/premise`)} style={styles.sideButton}>
           <X color={SOFT_TEXT} size={20} />
         </TouchableOpacity>
       </View>
@@ -139,11 +212,21 @@ export default function StoryCharacterScreen() {
                 >
                   <View style={styles.imageWrap}>
                     {character.imageUrl ? (
-                      <Image source={{ uri: character.imageUrl }} style={styles.image} />
-                    ) : (
-                      <View style={styles.imageFallback}>
-                        <Text style={styles.imageInitial}>{character.name.slice(0, 1)}</Text>
+                      <>
+                        <Image source={{ uri: character.imageUrl }} style={[styles.image, !selected && styles.unselectedImage]} />
+                        {!selected ? (
+                          <View pointerEvents="none" style={styles.unselectedImageOverlay} />
+                        ) : null}
+                      </>
+                    ) : (character.imageGenerationStatus === 'PENDING' && !character.imageError) ? (
+                      <View style={styles.imagePending}>
+                        <ActivityIndicator color={ACCENT} size="small" />
+                        <Text style={styles.imagePendingText}>Preparando retrato...</Text>
                       </View>
+                    ) : (character.imageGenerationStatus === 'FAILED' || character.imageError) ? (
+                      <CharacterFallbackArt character={character} selected={selected} statusLabel="Retrato indisponível" />
+                    ) : (
+                      <CharacterFallbackArt character={character} selected={selected} />
                     )}
                     {selected ? (
                       <View style={styles.selectedBadge}>
@@ -154,10 +237,10 @@ export default function StoryCharacterScreen() {
                   </View>
 
                   <View style={styles.cardBody}>
-                    <Text style={styles.role}>{character.roleLabel}</Text>
-                    <Text style={styles.name}>{character.name}</Text>
+                    <Text style={styles.role}>{character.roleLabel || 'Personagem'}</Text>
+                    <Text style={styles.name} numberOfLines={1}>{character.name}</Text>
                     <Text style={styles.description}>
-                      {character.initialGoal || character.description || 'Um papel central nesta premissa.'}
+                      {character.startingSituation || character.initialGoal || character.description || 'Um papel central nesta premissa.'}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -166,11 +249,10 @@ export default function StoryCharacterScreen() {
           </View>
         ) : (
           <StateBlock
-            title="Esta premissa ainda não tem os 3 personagens jogáveis"
-            description="Cada personagem precisa ter função narrativa, objetivo e presença própria nesta versão da história."
-            loading={generateCharactersMutation.isPending}
-            actionLabel={generateCharactersMutation.isPending ? undefined : 'Gerar 3 personagens'}
-            onAction={generateCharactersMutation.isPending ? undefined : () => generateCharactersMutation.mutate()}
+            title="Personagens em preparação"
+            description="Os personagens jogáveis para esta premissa ainda estão sendo gerados pela equipe editorial. Escolha outra premissa ou volte mais tarde."
+            actionLabel="Voltar para premissas"
+            onAction={() => goBackSafe(`/story/${id}/premise`)}
           />
         )}
       </ScrollView>
@@ -192,6 +274,73 @@ export default function StoryCharacterScreen() {
   );
 }
 
+function CharacterFallbackArt({
+  character,
+  selected,
+  statusLabel,
+}: {
+  character: StoryPlayableCharacter;
+  selected: boolean;
+  statusLabel?: string;
+}) {
+  const palette = normalizePalette(character.imageFallback?.palette);
+  const Icon = getCharacterIcon(character.imageFallback?.symbol, character.narrativeFunction);
+
+  return (
+    <View style={[styles.characterFallbackBase, { backgroundColor: palette[0] }, !selected && styles.unselectedFallback]}>
+      <View style={[styles.characterGlowBack, { backgroundColor: palette[2] }]} />
+      <View style={[styles.characterGlowFront, { backgroundColor: palette[1] }]} />
+      <View style={[styles.characterSilhouette, { borderColor: palette[1] + '55' }]}>
+        <Icon color={palette[1]} size={54} strokeWidth={1.55} />
+      </View>
+      <Text style={[styles.characterFallbackInitial, { color: palette[1] }]}>
+        {character.name.slice(0, 1).toUpperCase()}
+      </Text>
+      <Text style={styles.characterFallbackName} numberOfLines={1}>
+        {character.name}
+      </Text>
+      <Text style={styles.characterFallbackRole} numberOfLines={1}>
+        {statusLabel || character.imageFallback?.subtitle || character.roleLabel}
+      </Text>
+      {!selected ? <View pointerEvents="none" style={styles.unselectedImageOverlay} /> : null}
+    </View>
+  );
+}
+
+function normalizePalette(palette?: string[]): string[] {
+  return [
+    palette?.[0] || '#111018',
+    palette?.[1] || ACCENT,
+    palette?.[2] || '#342459',
+  ];
+}
+
+function getCharacterIcon(symbol?: string, narrativeFunction?: string): React.ComponentType<any> {
+  switch (symbol || narrativeFunction) {
+    case 'compass':
+    case 'HERO': return Compass;
+    case 'lamp':
+    case 'MENTOR': return Lamp;
+    case 'hand':
+    case 'ALLY': return Hand;
+    case 'scale':
+    case 'SKEPTIC': return Shield;
+    case 'crossed-lines':
+    case 'RIVAL': return Swords;
+    case 'mask':
+    case 'VILLAIN': return VenetianMask;
+    case 'cards':
+    case 'TRICKSTER': return Sparkles;
+    case 'moon':
+    case 'SHADOW': return Moon;
+    case 'bell':
+    case 'HARBINGER': return Bell;
+    case 'shield':
+    case 'GUARDIAN': return Shield;
+    default: return UserRound;
+  }
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   centered: { alignItems: 'center', justifyContent: 'center' },
@@ -208,7 +357,7 @@ const styles = StyleSheet.create({
   sideButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   brand: { ...typography.h3, color: ACCENT, fontStyle: 'italic' },
   content: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 120 },
-  title: { ...typography.h1, color: '#F5F1FF', fontSize: 38, lineHeight: 44, marginBottom: 12 },
+  title: { ...typography.h1, color: '#e5e2e1', fontSize: 38, lineHeight: 44, marginBottom: 12 },
   subtitle: { ...typography.body, color: SOFT_TEXT, marginBottom: 20 },
   premisePill: {
     borderRadius: 20,
@@ -219,7 +368,7 @@ const styles = StyleSheet.create({
     marginBottom: 22,
   },
   premisePillLabel: { ...typography.label, color: ACCENT, fontSize: 10, marginBottom: 6 },
-  premisePillTitle: { ...typography.body, color: '#F5F1FF', fontWeight: '700' },
+  premisePillTitle: { ...typography.body, color: '#e5e2e1', fontWeight: '700' },
   cards: { gap: 18 },
   card: {
     borderRadius: 26,
@@ -228,13 +377,60 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(206, 189, 255, 0.08)',
   },
-  selectedCard: {
-    borderColor: 'rgba(206, 189, 255, 0.24)',
-  },
-  imageWrap: { height: 340, backgroundColor: '#111018' },
+  selectedCard: { borderColor: 'rgba(206, 189, 255, 0.42)' },
+  imageWrap: { height: 340, backgroundColor: '#111018', position: 'relative', overflow: 'hidden' },
   image: { width: '100%', height: '100%', resizeMode: 'cover' },
-  imageFallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  imageInitial: { ...typography.h1, color: ACCENT, fontSize: 92, lineHeight: 98 },
+  unselectedImage: { opacity: 0.28 },
+  unselectedImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10, 10, 12, 0.72)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(206, 189, 255, 0.08)',
+    zIndex: 1,
+  },
+  characterFallbackBase: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  unselectedFallback: { opacity: 0.62 },
+  characterGlowBack: {
+    position: 'absolute',
+    right: -64,
+    top: -50,
+    width: 210,
+    height: 210,
+    borderRadius: 999,
+    opacity: 0.34,
+  },
+  characterGlowFront: {
+    position: 'absolute',
+    left: -48,
+    bottom: -52,
+    width: 170,
+    height: 170,
+    borderRadius: 999,
+    opacity: 0.18,
+  },
+  characterSilhouette: {
+    width: 126,
+    height: 126,
+    borderRadius: 63,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  characterFallbackInitial: {
+    position: 'absolute',
+    right: 20,
+    bottom: 16,
+    ...typography.h1,
+    fontSize: 104,
+    lineHeight: 108,
+    opacity: 0.1,
+  },
+  characterFallbackName: { ...typography.h2, color: '#e5e2e1', fontSize: 26, lineHeight: 31, maxWidth: 260 },
+  characterFallbackRole: { ...typography.label, color: SOFT_TEXT, fontSize: 10, marginTop: 8, maxWidth: 260 },
+  imagePending: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  imagePendingText: { ...typography.bodySmall, color: SOFT_TEXT, fontSize: 12 },
   selectedBadge: {
     position: 'absolute',
     top: 14,
@@ -250,7 +446,7 @@ const styles = StyleSheet.create({
   selectedBadgeText: { ...typography.label, color: '#2F1561', fontSize: 9 },
   cardBody: { padding: 18 },
   role: { ...typography.label, color: ACCENT, fontSize: 10, marginBottom: 8 },
-  name: { ...typography.h2, color: '#F5F1FF', marginBottom: 8 },
+  name: { ...typography.h2, color: '#e5e2e1', marginBottom: 8 },
   description: { ...typography.bodySmall, color: SOFT_TEXT, lineHeight: 22 },
   emptyCard: {
     borderRadius: 26,
@@ -259,7 +455,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(206, 189, 255, 0.08)',
   },
-  emptyTitle: { ...typography.h3, color: '#F5F1FF', marginBottom: 8 },
+  emptyTitle: { ...typography.h3, color: '#e5e2e1', marginBottom: 8 },
   emptyText: { ...typography.bodySmall, color: SOFT_TEXT, marginBottom: 18 },
   primaryButton: {
     height: 52,

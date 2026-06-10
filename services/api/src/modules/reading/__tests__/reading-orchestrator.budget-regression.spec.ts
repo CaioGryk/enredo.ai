@@ -47,6 +47,22 @@ describe('ReadingOrchestratorService - No Orphaned Session on Budget Denial', ()
     conflictPotential: '',
   };
 
+  const mockScene = {
+    sceneText: 'The free-only story begins.',
+    suggestedActions: ['Continue', 'Investigate'],
+    modelUsed: 'openrouter/free',
+    tokenUsage: { inputTokens: 10, outputTokens: 20 },
+    sceneMetadata: {},
+    memoryPatch: {
+      summary: 'A start.',
+      worldState: '',
+      characterState: '',
+      importantChoices: [],
+      openThreads: [],
+      constraints: '',
+    },
+  };
+
   beforeEach(() => {
     storyQualityService = {
       validateStoryQuality: jest.fn(() => Promise.resolve()),
@@ -61,7 +77,7 @@ describe('ReadingOrchestratorService - No Orphaned Session on Budget Denial', ()
       story: { findUnique: jest.fn().mockResolvedValue(mockStory) },
       storyPremise: { findUnique: jest.fn().mockResolvedValue(mockPremise) },
       storyPlayableCharacter: { findFirst: jest.fn().mockResolvedValue(mockCharacter) },
-      narrativeMemory: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() },
+      narrativeMemory: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn(), update: jest.fn().mockResolvedValue({}) },
       narrativeEvent: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
       readingSession: {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -100,7 +116,7 @@ describe('ReadingOrchestratorService - No Orphaned Session on Budget Denial', ()
   }
 
   describe('startReading() - new session path', () => {
-    it('should NOT create session when FREE_LLM_ONLY=true and PREMIUM user has no explicit model', async () => {
+    it('should create session with the free model when FREE_LLM_ONLY=true and PREMIUM user has no explicit model', async () => {
       mockConfigService.get.mockImplementation((key: string) => {
         if (key === 'FREE_LLM_ONLY') return true;
         return false;
@@ -118,14 +134,22 @@ describe('ReadingOrchestratorService - No Orphaned Session on Budget Denial', ()
         creditWallet: { balance: 0 },
       });
 
-      await expect(service.startReading('user-1', createStartReadingDto()))
-        .rejects.toThrow(/FREE_LLM_ONLY|Paid models are disabled|Model access denied/i);
+      mockNarrativeEngine.generateScene.mockResolvedValue(mockScene);
+      mockPrisma.narrativeEvent.create.mockResolvedValue({
+        id: 'event-1',
+        sceneText: mockScene.sceneText,
+        choices: mockScene.suggestedActions,
+      });
 
-      expect(mockPrisma.readingSession.create).not.toHaveBeenCalled();
-      expect(mockNarrativeEngine.generateScene).not.toHaveBeenCalled();
+      await service.startReading('user-1', createStartReadingDto());
+
+      expect(mockPrisma.readingSession.create).toHaveBeenCalled();
+      expect(mockNarrativeEngine.generateScene).toHaveBeenCalledWith(expect.objectContaining({
+        selectedModelId: 'groq/free',
+      }));
     });
 
-    it('should NOT call generateFirstScene when budget decision denies', async () => {
+    it('should not spend credits when the free-only fallback selects the free model', async () => {
       mockConfigService.get.mockImplementation((key: string) => {
         if (key === 'FREE_LLM_ONLY') return true;
         return false;
@@ -143,10 +167,20 @@ describe('ReadingOrchestratorService - No Orphaned Session on Budget Denial', ()
         creditWallet: { balance: 0 },
       });
 
-      await expect(service.startReading('user-1', createStartReadingDto()))
-        .rejects.toThrow();
+      mockNarrativeEngine.generateScene.mockResolvedValue(mockScene);
+      mockPrisma.narrativeEvent.create.mockResolvedValue({
+        id: 'event-1',
+        sceneText: mockScene.sceneText,
+        choices: mockScene.suggestedActions,
+      });
 
-      expect(mockNarrativeEngine.generateScene).not.toHaveBeenCalled();
+      await service.startReading('user-1', createStartReadingDto());
+
+      expect(mockNarrativeEngine.generateScene).toHaveBeenCalledWith(expect.objectContaining({
+        selectedModelId: 'groq/free',
+      }));
+      expect(mockPrisma.creditWallet?.update).toBeUndefined();
+      expect(mockPrisma.creditTransaction?.create).toBeUndefined();
     });
   });
 });

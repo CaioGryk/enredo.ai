@@ -1,11 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@common/prisma.service';
+import { FREE_DAILY_INTERACTION_LIMIT } from '@modules/reading/application/reading.constants';
 import {
   GetUserSubscriptionDto,
   CreditWalletDto,
   CreditTransactionDto,
   PurchaseCreditsDto,
+  AdminGrantCreditsDto,
   CREDIT_PACKAGES,
   UserUsageDto,
   SubscriptionStatusDto,
@@ -50,16 +52,16 @@ export class BillingService {
 
   private getBenefits(type: SubscriptionType): string[] {
     const freeBenefits = [
-      '10 interações gratuitas por dia',
+      `${FREE_DAILY_INTERACTION_LIMIT} interações gratuitas por dia`,
       'Acesso à biblioteca pública',
-      'Modelo básico (GPT-4o-mini)',
+      'Modelo padrão (OpenRouter Free)',
       'Respostas curtas',
     ];
 
     const premiumBenefits = [
       'Interações ilimitadas',
       'Acesso à biblioteca completa',
-      'Modelo premium (GPT-4o)',
+      'Modelo premium (GPT-4.1 Nano)',
       'Respostas longas e literárias',
       'Sem anúncios',
       'Memória narrativa expandida',
@@ -160,20 +162,50 @@ export class BillingService {
     return CREDIT_PACKAGES;
   }
 
-  async purchaseCredits(userId: string, dto: PurchaseCreditsDto): Promise<{ success: boolean; newBalance: number }> {
+  async purchaseCredits(userId: string, dto: PurchaseCreditsDto): Promise<{ success: boolean; newBalance: number; mock: boolean }> {
     const pkg = CREDIT_PACKAGES.find((p: any) => p.id === dto.packageId);
+    if (!pkg) throw new NotFoundException('Credit package not found');
 
-    if (!pkg) {
-      throw new NotFoundException('Credit package not found');
+    const stripeEnabled = this.configService.get<string>('STRIPE_ENABLED') === 'true';
+    const isMock = !stripeEnabled;
+
+    if (stripeEnabled) {
+      throw new ServiceUnavailableException('Stripe payment flow is not yet available. Purchase idempotency must be implemented first.');
     }
 
-    const wallet = await this.prisma.creditWallet.findUnique({
-      where: { userId },
-    });
+    let wallet = null as { id: string; balance: number } | null;
 
-    if (!wallet) {
-      throw new NotFoundException('Wallet not found');
+    // Idempotency: if same key was already used by this wallet, return the existing result.
+    // This is a mock/dev guard. Production payment flows must use DB-level uniqueness.
+    if (dto.idempotencyKey) {
+      wallet = await this.prisma.creditWallet.findUnique({ where: { userId } });
+      if (wallet) {
+        const purchases = await this.prisma.creditTransaction.findMany({
+          where: { walletId: wallet.id, reason: CreditTransactionReason.PURCHASE },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        });
+
+        const existing = purchases.find((purchase: any) => {
+          const metadata = purchase?.metadata;
+          return metadata
+            && typeof metadata === 'object'
+            && !Array.isArray(metadata)
+            && (metadata as Record<string, unknown>).idempotencyKey === dto.idempotencyKey;
+        });
+
+        if (existing) {
+          const meta = existing.metadata as Record<string, unknown>;
+          if (meta.packageId !== dto.packageId) {
+            throw new ConflictException('Idempotency key already used for a different credit package.');
+          }
+          return { success: true, newBalance: wallet.balance, mock: isMock };
+        }
+      }
     }
+
+    wallet = wallet ?? await this.prisma.creditWallet.findUnique({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
 
     await this.prisma.$transaction([
       this.prisma.creditWallet.update({
@@ -182,23 +214,16 @@ export class BillingService {
       }),
       this.prisma.creditTransaction.create({
         data: {
-          walletId: wallet.id,
-          type: 'EARN',
-          amount: pkg.credits,
+          walletId: wallet.id, type: 'EARN', amount: pkg.credits,
           reason: CreditTransactionReason.PURCHASE,
-          metadata: { packageId: dto.packageId, price: pkg.price },
+          metadata: { packageId: dto.packageId, price: pkg.price, mock: isMock, ...(dto.idempotencyKey ? { idempotencyKey: dto.idempotencyKey } : {}) },
         },
       }),
     ]);
 
-    const updatedWallet = await this.prisma.creditWallet.findUnique({
-      where: { userId },
-    });
+    const updatedWallet = await this.prisma.creditWallet.findUnique({ where: { userId } });
 
-    return {
-      success: true,
-      newBalance: updatedWallet?.balance || 0,
-    };
+    return { success: true, newBalance: updatedWallet?.balance || 0, mock: isMock };
   }
 
   async spendCredits(
@@ -240,6 +265,11 @@ export class BillingService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { userId },
+    });
+    const hasActivePremium = subscription?.type === SubscriptionType.PREMIUM && subscription.status === 'ACTIVE';
+
     const dailyLimit = await this.prisma.dailyUsageLimit.findUnique({
       where: {
         userId_date: { userId, date: today },
@@ -256,11 +286,16 @@ export class BillingService {
       _sum: { inputTokens: true, outputTokens: true },
     });
 
+    const dailyUsed = dailyLimit?.freeInteractionsUsed || 0;
+    const effectiveDailyLimit = hasActivePremium
+      ? 0
+      : dailyLimit?.limit || FREE_DAILY_INTERACTION_LIMIT;
+
     return {
-      dailyLimit: dailyLimit?.limit || 10,
-      dailyUsed: dailyLimit?.freeInteractionsUsed || 0,
-      dailyRemaining: (dailyLimit?.limit || 10) - (dailyLimit?.freeInteractionsUsed || 0),
-      isLimited: (dailyLimit?.freeInteractionsUsed || 0) >= (dailyLimit?.limit || 10),
+      dailyLimit: effectiveDailyLimit,
+      dailyUsed,
+      dailyRemaining: hasActivePremium ? 0 : effectiveDailyLimit - dailyUsed,
+      isLimited: hasActivePremium ? false : dailyUsed >= effectiveDailyLimit,
       monthlyUsage: {
         totalInteractions: monthlyUsage._sum.inputTokens ? 1 : 0,
         totalCostUsd: 0,
@@ -278,5 +313,41 @@ export class BillingService {
         provider: 'MOCK',
       },
     });
+  }
+
+  async adminGrantCredits(adminUserId: string, targetUserId: string, dto: AdminGrantCreditsDto): Promise<{ success: boolean; newBalance: number }> {
+    if (!dto.amount || dto.amount <= 0 || !Number.isInteger(dto.amount)) {
+      throw new BadRequestException('Amount must be a positive integer.');
+    }
+    const note = dto.note?.trim();
+    if (!note || note.length < 3) {
+      throw new BadRequestException('Note must be at least 3 characters.');
+    }
+    if (note.length > 200) {
+      throw new BadRequestException('Note must be at most 200 characters.');
+    }
+
+    const wallet = await this.prisma.creditWallet.findUnique({ where: { userId: targetUserId } });
+    if (!wallet) throw new NotFoundException('Target user wallet not found');
+
+    await this.prisma.$transaction([
+      this.prisma.creditWallet.update({
+        where: { id: wallet.id },
+        data: { balance: { increment: dto.amount } },
+      }),
+      this.prisma.creditTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'EARN',
+          amount: dto.amount,
+          reason: CreditTransactionReason.PROMO,
+          metadata: { source: 'ADMIN_GRANT', adminUserId, targetUserId, note },
+        },
+      }),
+    ]);
+
+    const updated = await this.prisma.creditWallet.findUnique({ where: { userId: targetUserId } });
+
+    return { success: true, newBalance: updated?.balance || 0 };
   }
 }

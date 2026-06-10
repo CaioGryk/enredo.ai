@@ -2,7 +2,7 @@ import { Controller, Get, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { LibraryService } from './library.service';
 import { GetStoriesDto, StoryResponseDto, StoryWithCharactersDto, StoryListResponseDto, CharacterResponseDto } from './dto/library.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { Request } from 'express';
 import { User } from '@prisma/client';
 
@@ -19,6 +19,8 @@ export class LibraryController {
   }
 
   @Get('stories/:id')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get story details with characters' })
   @ApiParam({ name: 'id', description: 'Story ID' })
   @ApiResponse({ status: 200, description: 'Story details', type: StoryWithCharactersDto })
@@ -33,6 +35,8 @@ export class LibraryController {
   }
 
   @Get('stories/:id/characters')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get characters of a story' })
   @ApiParam({ name: 'id', description: 'Story ID' })
   @ApiResponse({ status: 200, description: 'Story characters', type: CharacterResponseDto, isArray: true })

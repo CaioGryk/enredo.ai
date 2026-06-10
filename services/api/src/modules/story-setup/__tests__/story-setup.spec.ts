@@ -110,6 +110,57 @@ describe('StorySetupService', () => {
 
       await expect(storySetupService.getPremises('invalid-id')).rejects.toThrow(NotFoundException);
     });
+
+    it('should trigger cover generation for premises with coverPrompt + NOT_REQUESTED', async () => {
+      const premises = [
+        { id: 'prem-1', storyId: 'story-1', title: 'P1', synopsis: 'S1', coverPrompt: 'Cover prompt', coverUrl: null, coverGenerationStatus: 'NOT_REQUESTED', coverError: null, sortOrder: 0, isPremium: false, isAiGenerated: true, createdAt: new Date(), updatedAt: new Date() },
+      ];
+
+      imageGenerationService.isEnabled.mockReturnValue(true);
+      imageGenerationService.generatePremiseCover = jest.fn().mockResolvedValue({ success: true, imageUrl: 'http://cover.png' });
+
+      prismaService.story.findUnique.mockResolvedValue({ id: 'story-1', visibility: 'PUBLIC', moderationStatus: 'APPROVED', creatorUserId: null });
+      prismaService.storyPremise.findMany.mockResolvedValue(premises);
+      prismaService.storyPremise.update.mockResolvedValue({});
+
+      const result = await storySetupService.getPremises('story-1');
+
+      expect(imageGenerationService.generatePremiseCover).toHaveBeenCalled();
+      expect(result[0].coverGenerationStatus).toBe('PENDING');
+    });
+
+    it('should NOT regenerate cover when coverUrl already exists', async () => {
+      const premises = [
+        { id: 'prem-1', storyId: 'story-1', title: 'P1', synopsis: 'S1', coverPrompt: 'Cover', coverUrl: 'http://existing.png', coverGenerationStatus: 'SUCCESS', coverError: null, sortOrder: 0, isPremium: false, isAiGenerated: true, createdAt: new Date(), updatedAt: new Date() },
+      ];
+
+      imageGenerationService.isEnabled.mockReturnValue(true);
+      imageGenerationService.generatePremiseCover = jest.fn();
+
+      prismaService.story.findUnique.mockResolvedValue({ id: 'story-1', visibility: 'PUBLIC', moderationStatus: 'APPROVED', creatorUserId: null });
+      prismaService.storyPremise.findMany.mockResolvedValue(premises);
+
+      await storySetupService.getPremises('story-1');
+
+      expect(imageGenerationService.generatePremiseCover).not.toHaveBeenCalled();
+    });
+
+    it('should NOT retrigger cover for FAILED premises', async () => {
+      const premises = [
+        { id: 'prem-1', storyId: 'story-1', title: 'P1', synopsis: 'S1', coverPrompt: 'Cover', coverUrl: null, coverGenerationStatus: 'FAILED', coverError: 'Timeout', sortOrder: 0, isPremium: false, isAiGenerated: true, createdAt: new Date(), updatedAt: new Date() },
+      ];
+
+      imageGenerationService.isEnabled.mockReturnValue(true);
+      imageGenerationService.generatePremiseCover = jest.fn();
+
+      prismaService.story.findUnique.mockResolvedValue({ id: 'story-1', visibility: 'PUBLIC', moderationStatus: 'APPROVED', creatorUserId: null });
+      prismaService.storyPremise.findMany.mockResolvedValue(premises);
+
+      const result = await storySetupService.getPremises('story-1');
+
+      expect(imageGenerationService.generatePremiseCover).not.toHaveBeenCalled();
+      expect(result[0].coverGenerationStatus).toBe('FAILED');
+    });
   });
 
   describe('getCharacters', () => {
@@ -168,6 +219,123 @@ describe('StorySetupService', () => {
       prismaService.storyPremise.findUnique.mockResolvedValue(null);
 
       await expect(storySetupService.getCharacters('invalid-id', 'user-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should trigger portrait generation for characters with visualPrompt + NOT_REQUESTED and persist base64 provider output', async () => {
+      const premiseId = 'premise-1';
+      const characters = [
+        { id: 'char-1', premiseId, name: 'Hero', roleLabel: 'Hero', narrativeFunction: 'HERO' as NarrativeFunction, visualPrompt: 'A brave warrior', imageUrl: null, imageGenerationStatus: 'NOT_REQUESTED', imageError: null, sortOrder: 0, isPremium: false, isAiGenerated: true, createdAt: new Date(), updatedAt: new Date() },
+      ];
+
+      imageGenerationService.isEnabled.mockReturnValue(true);
+      imageGenerationService.generateCharacterPortrait = jest.fn().mockResolvedValue({ success: true, base64Image: '/9j/jpeg-data' });
+
+      prismaService.storyPremise.findUnique.mockResolvedValue({ id: premiseId, storyId: 'story-1' });
+      prismaService.story.findUnique.mockResolvedValue({ id: 'story-1', visibility: 'PUBLIC', moderationStatus: 'APPROVED', creatorUserId: null });
+      prismaService.storyPlayableCharacter.findMany.mockResolvedValue(characters);
+      prismaService.storyPlayableCharacter.update.mockResolvedValue({});
+
+      const result = await storySetupService.getCharacters(premiseId, 'user-1');
+
+      expect(imageGenerationService.generateCharacterPortrait).toHaveBeenCalled();
+      expect(result[0].imageGenerationStatus).toBe('PENDING');
+      expect(prismaService.storyPlayableCharacter.update).toHaveBeenCalledWith({
+        where: { id: 'char-1' },
+        data: {
+          imageUrl: 'data:image/jpeg;base64,/9j/jpeg-data',
+          imageGenerationStatus: 'SUCCESS',
+          imageError: null,
+        },
+      });
+    });
+
+    it('should NOT regenerate portrait when imageUrl already exists', async () => {
+      const premiseId = 'premise-1';
+      const characters = [
+        { id: 'char-1', premiseId, name: 'Hero', roleLabel: 'Hero', narrativeFunction: 'HERO' as NarrativeFunction, visualPrompt: 'A brave warrior', imageUrl: 'data:image/png;base64,existing', imageGenerationStatus: 'SUCCESS', imageError: null, sortOrder: 0, isPremium: false, isAiGenerated: true, createdAt: new Date(), updatedAt: new Date() },
+      ];
+
+      imageGenerationService.isEnabled.mockReturnValue(true);
+      imageGenerationService.generateCharacterPortrait = jest.fn();
+
+      prismaService.storyPremise.findUnique.mockResolvedValue({ id: premiseId, storyId: 'story-1' });
+      prismaService.story.findUnique.mockResolvedValue({ id: 'story-1', visibility: 'PUBLIC', moderationStatus: 'APPROVED', creatorUserId: null });
+      prismaService.storyPlayableCharacter.findMany.mockResolvedValue(characters);
+
+      await storySetupService.getCharacters(premiseId, 'user-1');
+
+      expect(imageGenerationService.generateCharacterPortrait).not.toHaveBeenCalled();
+    });
+
+    it('should NOT regenerate when status is PENDING', async () => {
+      const premiseId = 'premise-1';
+      const characters = [
+        { id: 'char-1', premiseId, name: 'Hero', roleLabel: 'Hero', narrativeFunction: 'HERO' as NarrativeFunction, visualPrompt: 'A brave warrior', imageUrl: null, imageGenerationStatus: 'PENDING', imageError: null, sortOrder: 0, isPremium: false, isAiGenerated: true, createdAt: new Date(), updatedAt: new Date() },
+      ];
+
+      imageGenerationService.isEnabled.mockReturnValue(true);
+      imageGenerationService.generateCharacterPortrait = jest.fn();
+
+      prismaService.storyPremise.findUnique.mockResolvedValue({ id: premiseId, storyId: 'story-1' });
+      prismaService.story.findUnique.mockResolvedValue({ id: 'story-1', visibility: 'PUBLIC', moderationStatus: 'APPROVED', creatorUserId: null });
+      prismaService.storyPlayableCharacter.findMany.mockResolvedValue(characters);
+
+      await storySetupService.getCharacters(premiseId, 'user-1');
+
+      expect(imageGenerationService.generateCharacterPortrait).not.toHaveBeenCalled();
+    });
+
+    it('should NOT regenerate when status is FAILED', async () => {
+      const premiseId = 'premise-1';
+      const characters = [
+        { id: 'char-1', premiseId, name: 'Hero', roleLabel: 'Hero', narrativeFunction: 'HERO' as NarrativeFunction, visualPrompt: 'A brave warrior', imageUrl: null, imageGenerationStatus: 'FAILED', imageError: 'Timeout', sortOrder: 0, isPremium: false, isAiGenerated: true, createdAt: new Date(), updatedAt: new Date() },
+      ];
+
+      imageGenerationService.isEnabled.mockReturnValue(true);
+      imageGenerationService.generateCharacterPortrait = jest.fn();
+
+      prismaService.storyPremise.findUnique.mockResolvedValue({ id: premiseId, storyId: 'story-1' });
+      prismaService.story.findUnique.mockResolvedValue({ id: 'story-1', visibility: 'PUBLIC', moderationStatus: 'APPROVED', creatorUserId: null });
+      prismaService.storyPlayableCharacter.findMany.mockResolvedValue(characters);
+
+      const result = await storySetupService.getCharacters(premiseId, 'user-1');
+
+      expect(imageGenerationService.generateCharacterPortrait).not.toHaveBeenCalled();
+      expect(result[0].imageGenerationStatus).toBe('FAILED');
+    });
+
+    it('should NOT trigger portrait when image generation is disabled', async () => {
+      const premiseId = 'premise-1';
+      const characters = [
+        { id: 'char-1', premiseId, name: 'Hero', roleLabel: 'Hero', narrativeFunction: 'HERO' as NarrativeFunction, visualPrompt: 'A brave warrior', imageUrl: null, imageGenerationStatus: 'NOT_REQUESTED', imageError: null, sortOrder: 0, isPremium: false, isAiGenerated: true, createdAt: new Date(), updatedAt: new Date() },
+      ];
+
+      imageGenerationService.isEnabled.mockReturnValue(false);
+      imageGenerationService.generateCharacterPortrait = jest.fn();
+
+      prismaService.storyPremise.findUnique.mockResolvedValue({ id: premiseId, storyId: 'story-1' });
+      prismaService.story.findUnique.mockResolvedValue({ id: 'story-1', visibility: 'PUBLIC', moderationStatus: 'APPROVED', creatorUserId: null });
+      prismaService.storyPlayableCharacter.findMany.mockResolvedValue(characters);
+
+      const result = await storySetupService.getCharacters(premiseId, 'user-1');
+
+      expect(imageGenerationService.generateCharacterPortrait).not.toHaveBeenCalled();
+      expect(result[0].imageGenerationStatus).toBe('NOT_REQUESTED');
+    });
+  });
+
+  describe('generated image URL normalization', () => {
+    it('should preserve provider data URLs before falling back to base64 MIME inference', () => {
+      expect(storySetupService['resolveGeneratedImageUrl']({
+        imageUrl: 'data:image/webp;base64,provider-url',
+        base64Image: '/9j/jpeg-data',
+      })).toBe('data:image/webp;base64,provider-url');
+    });
+
+    it('should infer JPEG for Cloudflare JSON base64 output', () => {
+      expect(storySetupService['resolveGeneratedImageUrl']({
+        base64Image: '/9j/jpeg-data',
+      })).toBe('data:image/jpeg;base64,/9j/jpeg-data');
     });
   });
 
@@ -371,6 +539,56 @@ describe('StorySetupService', () => {
 
       // Without premise.story, storyId should be null
       expect(dto.storyId).toBeNull();
+    });
+  });
+
+  describe('getCachedPremises - playableCharacterCount', () => {
+    it('should include playableCharacterCount in the premise DTO', async () => {
+      const mockPremises = [
+        {
+          id: 'premise-1', storyId: 'story-1', title: 'Premise A', synopsis: 'Syn A', basePrompt: 'Base A',
+          openingScene: null, tone: null, styleGuide: null, worldRules: null,
+          coverPrompt: null, coverUrl: null, coverGenerationStatus: 'NOT_REQUESTED', coverError: null,
+          sortOrder: 0, isPremium: false, isAiGenerated: false, createdAt: new Date(), updatedAt: new Date(),
+          _count: { characters: 3 },
+        },
+        {
+          id: 'premise-2', storyId: 'story-1', title: 'Premise B', synopsis: 'Syn B', basePrompt: 'Base B',
+          openingScene: null, tone: null, styleGuide: null, worldRules: null,
+          coverPrompt: null, coverUrl: null, coverGenerationStatus: 'NOT_REQUESTED', coverError: null,
+          sortOrder: 1, isPremium: false, isAiGenerated: false, createdAt: new Date(), updatedAt: new Date(),
+          _count: { characters: 0 },
+        },
+      ];
+
+      prismaService.storyPremise.findMany.mockResolvedValue(mockPremises);
+      prismaService.story.findUnique.mockResolvedValue({
+        id: 'story-1', visibility: 'PUBLIC', moderationStatus: 'APPROVED', creatorUserId: null,
+      });
+
+      const result = await storySetupService.getCachedPremises('story-1');
+
+      expect(result).toHaveLength(2);
+      expect(result[0].playableCharacterCount).toBe(3);
+      expect(result[1].playableCharacterCount).toBe(0);
+    });
+
+    it('should default playableCharacterCount to 0 when _count is missing', async () => {
+      const mockPremises = [{
+        id: 'premise-1', storyId: 'story-1', title: 'Premise A', synopsis: 'Syn A', basePrompt: 'Base A',
+        openingScene: null, tone: null, styleGuide: null, worldRules: null,
+        coverPrompt: null, coverUrl: null, coverGenerationStatus: 'NOT_REQUESTED', coverError: null,
+        sortOrder: 0, isPremium: false, isAiGenerated: false, createdAt: new Date(), updatedAt: new Date(),
+      }];
+
+      prismaService.storyPremise.findMany.mockResolvedValue(mockPremises);
+      prismaService.story.findUnique.mockResolvedValue({
+        id: 'story-1', visibility: 'PUBLIC', moderationStatus: 'APPROVED', creatorUserId: null,
+      });
+
+      const result = await storySetupService.getCachedPremises('story-1');
+
+      expect(result[0].playableCharacterCount).toBe(0);
     });
   });
 });

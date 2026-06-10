@@ -1,60 +1,32 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
   ImageBackground,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { BookCheck, CheckCircle2, Play, Search } from 'lucide-react-native';
+import { BookOpen, ChevronRight, Play, Search, Sparkles, Zap } from 'lucide-react-native';
 import { api } from '../../src/api/client';
 import { ReadingSessionSummary, SessionListResponse, Story, StoryListResponse } from '../../src/api/types';
 import { StateBlock } from '../../src/components/state-block';
 import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
 
-type Filter = 'ALL' | 'CONTINUE' | 'PREMIUM' | 'FREE';
-
-const filters: { id: Filter; label: string }[] = [
-  { id: 'ALL', label: 'Tudo' },
-  { id: 'CONTINUE', label: 'Continuar lendo' },
-  { id: 'PREMIUM', label: 'Premium' },
-  { id: 'FREE', label: 'Gratis' },
-];
-
 const ACCENT = '#CEBDFF';
-const PANEL = '#15131B';
-const PANEL_ALT = '#1B1824';
 const SOFT_TEXT = '#B7AFC8';
-
-const curatedCoverImages: Record<string, string> = {
-  'O Último Trem': 'https://lh3.googleusercontent.com/aida-public/AB6AXuDgQ7acJ_9YHObe_C_H-4mPIFk7kQDxoexw_JWlfnO_Y_inNVQGJ5eYN6Ag5WTS0-dyVOYHs69O7ESaHDmAkkUg9RJkcfOFaSjniPWTHSdzTmlq_EPNaT_x3JzmeAl3KNtcY2QHr5NB8P5mgVUG-gJpUwbNeQEwHdP3AmE54_dJFYRljoyWT3MkKbDV7JuwwARkqMydnZ1R2VJp53CAm2BfFKT-HeNWrm6IHigFkQw-ZuY5-DdWoEOCa6fWt1lxQA29XSkEBZZAwUS2',
-  'Noite de Halloween': 'https://lh3.googleusercontent.com/aida-public/AB6AXuBZnfa5Oh7XqFJZB_Kf2YyUVWWs-5dAoun-jL7sKendyMLqCLHdmADYOnhSuZyjARcORVS7KpD0BJScfjteiwsBafx6rNKYu4KJLYUdlcH30TpOdWotfJdpWqZBujho0anQcxamgweWNfs9eg-3svDQZUEbVAYJoWKGKiUikBh7bzW4b-_ZMORgUdtWGeN8vBPk-aKpk_qoIPymTDUzbCv8VwQQvMDBGYXuSE1IJkawOcx_ns6AH6g2U_tqG6feCYRK7NFMN5hHmqmc',
-  'A Última Biblioteca': 'https://lh3.googleusercontent.com/aida-public/AB6AXuAfLscPlEzbDU0TsuAvcdiYL5zI1wPacI9XMlKaX0ctY-6JTzFrnPWimY29W6L5ymwGxSWn85ZV6OIduP12tEFOwobs8h-rgdr39UmFtU9g5Ar7NxL2rbBpG7gnQW1YlkUX7cep0N_Wz-HOgTWYue3J1eGtz2EpJtPqdGmUidIFOLmUVcsW-T_uEhBl8OolaitKe0u1IlJUmbA_RnAPTcTRkLLMZhCktqCknTZ03LbdqMDaeBYy-XvyE8_4GiUUWjZtq74KOWqL7iSF',
-  'O Clube dos Mentirosos': 'https://lh3.googleusercontent.com/aida-public/AB6AXuDgQ7acJ_9YHObe_C_H-4mPIFk7kQDxoexw_JWlfnO_Y_inNVQGJ5eYN6Ag5WTS0-dyVOYHs69O7ESaHDmAkkUg9RJkcfOFaSjniPWTHSdzTmlq_EPNaT_x3JzmeAl3KNtcY2QHr5NB8P5mgVUG-gJpUwbNeQEwHdP3AmE54_dJFYRljoyWT3MkKbDV7JuwwARkqMydnZ1R2VJp53CAm2BfFKT-HeNWrm6IHigFkQw-ZuY5-DdWoEOCa6fWt1lxQA29XSkEBZZAwUS2',
-  'Amor nas Estrelas': 'https://lh3.googleusercontent.com/aida-public/AB6AXuCalBEMdb2ZXJ1OnM1NjjrSHPxMh9NKFA3Nba6zcs3GFiL5t1i8AN90hFy94YkUNJY2hSIgyjfcrGMNjZvtOeT9pkBqXTcqNPFPj43YGtSEtxTev01g1olgGWgnxUrPNZwZcbRL5bEDRghY8rvtnEKFFMMfps17z6aPefqEVAdep_GkIk8OJBQsZ8N9y5fJKiF8VG0Er-_HlSWTp5mn_-51PmjYqp_xZchrbmTVwiItxru3kOTGfoymYTnzlB5bq_onf241oPTwsU3P',
-  'O Enigma do Lighthouse': 'https://lh3.googleusercontent.com/aida-public/AB6AXuBZnfa5Oh7XqFJZB_Kf2YyUVWWs-5dAoun-jL7sKendyMLqCLHdmADYOnhSuZyjARcORVS7KpD0BJScfjteiwsBafx6rNKYu4KJLYUdlcH30TpOdWotfJdpWqZBujho0anQcxamgweWNfs9eg-3svDQZUEbVAYJoWKGKiUikBh7bzW4b-_ZMORgUdtWGeN8vBPk-aKpk_qoIPymTDUzbCv8VwQQvMDBGYXuSE1IJkawOcx_ns6AH6g2U_tqG6feCYRK7NFMN5hHmqmc',
-};
 
 export default function LibraryScreen() {
   const router = useRouter();
-  const [filter, setFilter] = useState<Filter>('ALL');
 
-  const { data: stories = [], isLoading, error } = useQuery<Story[]>({
-    queryKey: ['stories', filter],
+  const { data: stories = [], isLoading, error, refetch } = useQuery<Story[]>({
+    queryKey: ['stories'],
     queryFn: async () => {
-      const params =
-        filter === 'PREMIUM'
-          ? { isPremium: true }
-          : filter === 'FREE'
-            ? { isPremium: false }
-            : undefined;
-      const { data } = await api.get<StoryListResponse>('/library/stories', { params });
+      const { data } = await api.get<StoryListResponse>('/library/stories');
       return data.stories;
     },
   });
@@ -69,26 +41,24 @@ export default function LibraryScreen() {
     },
   });
 
-  const featuredStory = useMemo(() => stories.find((story) => story.isPremium) || stories[0], [stories]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [previewStory, setPreviewStory] = useState<Story | null>(null);
 
-  const originalStories = useMemo(() => {
-    if (!stories.length) return [];
-    const premiumFirst = stories.filter((story) => story.isPremium);
-    const fallback = stories.filter((story) => !story.isPremium);
-    return [...premiumFirst, ...fallback].slice(0, 4);
-  }, [stories]);
+  const filteredStories = useMemo(() => {
+    if (!searchQuery.trim()) return stories;
+    const q = searchQuery.toLowerCase();
+    return stories.filter(
+      (s) =>
+        s.title.toLowerCase().includes(q) ||
+        (s.genres || []).some((g) => g.toLowerCase().includes(q)),
+    );
+  }, [stories, searchQuery]);
 
-  const communityStories = useMemo(() => {
-    if (!stories.length) return [];
-    const excluded = new Set(originalStories.map((story) => story.id));
-    return stories.filter((story) => !excluded.has(story.id)).slice(0, 6);
-  }, [originalStories, stories]);
-
-  const trendingStories = useMemo(() => stories.slice(0, 6), [stories]);
-
-  const premiumStories = useMemo(() => stories.filter((story) => story.isPremium).slice(0, 3), [stories]);
-
-  const continueSession = activeSessions?.[0];
+  const activeStoryIds = new Set((activeSessions || []).map((s) => s.storyId));
+  const freeStories = useMemo(() => filteredStories.filter((s) => !s.isPremium), [filteredStories]);
+  const premiumStories = useMemo(() => filteredStories.filter((s) => s.isPremium), [filteredStories]);
+  const highlightStories = useMemo(() => freeStories.slice(0, 5), [freeStories]);
+  const trendingStories = useMemo(() => freeStories.slice(0, 6), [freeStories]);
 
   if (isLoading) {
     return (
@@ -108,10 +78,24 @@ export default function LibraryScreen() {
       <View style={styles.container}>
         <StateBlock
           fullScreen
-          title="Nao conseguimos carregar a biblioteca"
-          description="Tente novamente em instantes para voltar a explorar historias, cenas e leituras."
+          title="Não conseguimos carregar a biblioteca"
+          description="Tente novamente em instantes para voltar a explorar histórias, cenas e leituras."
           actionLabel="Tentar novamente"
-          onAction={() => router.replace('/(tabs)/library')}
+          onAction={() => refetch()}
+        />
+      </View>
+    );
+  }
+
+  if (!stories.length) {
+    return (
+      <View style={styles.container}>
+        <StateBlock
+          fullScreen
+          title="Biblioteca em preparação"
+          description="Estamos organizando novas histórias para você explorar. Tente novamente em instantes."
+          actionLabel="Tentar novamente"
+          onAction={() => refetch()}
         />
       </View>
     );
@@ -119,682 +103,1018 @@ export default function LibraryScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <View style={styles.brandGroup}>
-          <BookCheck color={ACCENT} size={22} />
-          <Text style={styles.brand}>Enredo.ai</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerBrand} onTouchEnd={() => setSearchQuery('')}>
+          <BookOpen color={ACCENT} size={20} />
+          <Text style={styles.headerBrandText}>
+            <Text style={styles.headerBrandAccent}>Enredo</Text>
+            <Text style={styles.headerBrandDot}>.ai</Text>
+          </Text>
         </View>
-        <TouchableOpacity activeOpacity={0.8} style={styles.searchButton}>
-          <Search color={SOFT_TEXT} size={20} />
-        </TouchableOpacity>
+        <View style={styles.aiBadge}>
+          <Sparkles color={ACCENT} size={12} />
+          <Text style={styles.aiBadgeText}>Enredo AI Ativo</Text>
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.heroBlock}>
-          <View style={styles.heroCopy}>
-            <Text style={styles.heroEyebrow}>IA narrativa</Text>
-            <Text style={styles.heroTitle}>Sua proxima historia comeca aqui.</Text>
-            <Text style={styles.heroDescription}>
-              Descubra originais Enredo.ai, historias da comunidade e cenas prontas para virar sua proxima leitura.
+      {/* Search */}
+      <View style={styles.searchWrapper}>
+        <Search color={SOFT_TEXT} size={18} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Pesquisar enredos, gêneros..."
+          placeholderTextColor={SOFT_TEXT}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery ? (
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
+            <Text style={styles.searchClearText}>✕</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {searchQuery && filteredStories.length === 0 ? (
+          <View style={styles.searchEmptyState}>
+            <Text style={styles.searchEmptyTitle}>Nenhum resultado</Text>
+            <Text style={styles.searchEmptyDesc}>
+              Nenhuma história encontrada para "{searchQuery}". Tente outro termo ou explore as seções abaixo.
             </Text>
-          </View>
-          <View style={styles.memberBadge}>
-            <CheckCircle2 color={colors.background} fill={ACCENT} size={14} />
-            <Text style={styles.memberText}>MEMBRO FREE</Text>
-          </View>
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-          {filters.map((option) => (
-            <TouchableOpacity
-              key={option.id}
-              activeOpacity={0.86}
-              style={[styles.filterChip, filter === option.id && styles.filterChipActive]}
-              onPress={() => setFilter(option.id)}
-            >
-              <Text style={[styles.filterChipText, filter === option.id && styles.filterChipTextActive]}>
-                {option.label}
-              </Text>
+            <TouchableOpacity style={styles.searchEmptyClear} onPress={() => setSearchQuery('')}>
+              <Text style={styles.searchEmptyClearText}>Limpar busca</Text>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          </View>
+        ) : null}
 
-        {filter === 'CONTINUE' ? (
-          <ContinueReadingCard
-            session={continueSession}
-            onPress={() => continueSession && router.push(`/reader/${continueSession.id}`)}
-          />
-        ) : (
-          <>
-            <SectionHeader title="Enredo.ai Originals" actionLabel="Ver tudo" />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalCards}>
-              {originalStories.map((story) => (
-                <OriginalCard key={story.id} story={story} onPress={() => router.push(`/story/${story.id}`)} />
+        {/* Continue Reading */}
+        {activeSessions && activeSessions.length > 0 && (
+          <View style={styles.continueSection}>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              style={styles.continueCard}
+              onPress={() => activeSessions[0] && router.push(`/reader/${activeSessions[0].id}` as any)}
+            >
+              <View style={styles.continueVisual}>
+                <Play color={colors.background} fill={ACCENT} size={24} />
+              </View>
+              <View style={styles.continueBody}>
+                <Text style={styles.continueMeta}>Continuar lendo</Text>
+                <Text style={styles.continueTitle} numberOfLines={1}>
+                  {activeSessions[0].storyTitle}
+                </Text>
+                <Text style={styles.continueSub}>
+                  Cena {activeSessions[0].currentSceneIndex + 1}
+                </Text>
+              </View>
+              <ChevronRight color={ACCENT} size={20} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Highlights (free stories, horizontal landscape) */}
+        {highlightStories.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Destaques</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.originalsRow}>
+              {highlightStories.map((story) => (
+                <TouchableOpacity
+                  key={story.id}
+                  activeOpacity={0.92}
+                  style={styles.originalCard}
+                  onPress={() => setPreviewStory(story)}
+                >
+                  {getStoryImage(story) ? (
+                    <ImageBackground source={{ uri: getStoryImage(story)! }} style={styles.originalCardImage} imageStyle={styles.originalCardRadius}>
+                      <View style={styles.originalOverlay}>
+                        <View style={styles.originalBadge}>
+                          <Text style={styles.originalBadgeText}>DESTAQUE</Text>
+                        </View>
+                        <View style={styles.originalCardInfo}>
+                          <Text style={styles.originalCardGenre}>{(story.genres?.[0] || 'NARRATIVA').toUpperCase()}</Text>
+                          <Text style={styles.originalCardTitle} numberOfLines={2}>{story.title}</Text>
+                        </View>
+                      </View>
+                    </ImageBackground>
+                  ) : (
+                    <FallbackCard story={story} style={styles.originalCardImage}>
+                      <View style={styles.originalOverlay}>
+                        <View style={styles.originalBadge}>
+                          <Text style={styles.originalBadgeText}>DESTAQUE</Text>
+                        </View>
+                        <View style={styles.originalCardInfo}>
+                          <Text style={styles.originalCardGenre}>{(story.genres?.[0] || 'NARRATIVA').toUpperCase()}</Text>
+                          <Text style={styles.originalCardTitle} numberOfLines={2}>{story.title}</Text>
+                        </View>
+                      </View>
+                    </FallbackCard>
+                  )}
+                </TouchableOpacity>
               ))}
             </ScrollView>
-
-            {communityStories.length ? (
-              <>
-                <SectionHeader title="Comunidade" />
-                <View style={styles.communityGrid}>
-                  {communityStories.map((story) => (
-                    <CommunityCard key={story.id} story={story} onPress={() => router.push(`/story/${story.id}`)} />
-                  ))}
-                </View>
-              </>
-            ) : null}
-
-            {trendingStories.length ? (
-              <>
-                <SectionHeader title="Tendencias" />
-                <FlatList
-                  horizontal
-                  data={trendingStories}
-                  keyExtractor={(item) => item.id}
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.trendingList}
-                  renderItem={({ item }) => (
-                    <TrendingCard story={item} onPress={() => router.push(`/story/${item.id}`)} />
-                  )}
-                />
-              </>
-            ) : null}
-
-            {premiumStories.length ? (
-              <>
-                <SectionHeader title="Premium" />
-                <View style={styles.premiumList}>
-                  {premiumStories.map((story) => (
-                    <PremiumCard key={story.id} story={story} onPress={() => router.push(`/story/${story.id}`)} />
-                  ))}
-                </View>
-              </>
-            ) : null}
-          </>
+          </View>
         )}
+
+        {/* Trending */}
+        {trendingStories.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Tendências</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingRow}>
+              {trendingStories.map((story) => (
+                <TouchableOpacity
+                  key={story.id}
+                  activeOpacity={0.9}
+                  style={styles.trendingCard}
+                  onPress={() => setPreviewStory(story)}
+                >
+                  <View style={styles.trendingImageWrap}>
+                    {getStoryImage(story) ? (
+                      <ImageBackground source={{ uri: getStoryImage(story)! }} style={styles.trendingImage} imageStyle={styles.trendingCardRadius}>
+                        <View style={styles.trendingHover}>
+                          <Text style={styles.trendingHoverText}>Ler agora</Text>
+                        </View>
+                      </ImageBackground>
+                    ) : (
+                      <FallbackCard story={story} style={styles.trendingImage}>
+                        <View style={styles.trendingHover}>
+                          <Text style={styles.trendingHoverText}>Ler agora</Text>
+                        </View>
+                      </FallbackCard>
+                    )}
+                    {activeStoryIds.has(story.id) ? (
+                      <View style={styles.trendingActiveDot} />
+                    ) : null}
+                  </View>
+                  <Text style={styles.trendingCardTitle} numberOfLines={1}>{story.title}</Text>
+                  <Text style={styles.trendingCardGenre}>{(story.genres?.[0] || 'Narrativa').toUpperCase()}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Full catalog */}
+        {filteredStories.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitleInline}>Todas as histórias</Text>
+              <Text style={styles.sectionCount}>{filteredStories.length}</Text>
+            </View>
+            <View style={styles.allStoriesList}>
+              {filteredStories.map((story) => (
+                <TouchableOpacity
+                  key={story.id}
+                  activeOpacity={0.9}
+                  style={styles.allStoryCard}
+                  onPress={() => setPreviewStory(story)}
+                >
+                  <View style={styles.allStoryImageWrap}>
+                    {getStoryImage(story) ? (
+                      <ImageBackground
+                        source={{ uri: getStoryImage(story)! }}
+                        style={styles.allStoryImage}
+                        imageStyle={styles.allStoryImageRadius}
+                      />
+                    ) : (
+                      <FallbackCard story={story} style={styles.allStoryImage} />
+                    )}
+                  </View>
+                  <View style={styles.allStoryBody}>
+                    <View style={styles.allStoryMetaRow}>
+                      <Text style={styles.allStoryGenre} numberOfLines={1}>
+                        {(story.genres?.[0] || 'Narrativa').toUpperCase()}
+                      </Text>
+                      <Text style={[styles.allStoryPlan, story.isPremium && styles.allStoryPlanPremium]}>
+                        {story.isPremium ? 'PREMIUM' : 'GRATIS'}
+                      </Text>
+                    </View>
+                    <Text style={styles.allStoryTitle} numberOfLines={2}>
+                      {story.title}
+                    </Text>
+                    <Text style={styles.allStorySynopsis} numberOfLines={2}>
+                      {story.synopsis}
+                    </Text>
+                  </View>
+                  <ChevronRight color={ACCENT} size={18} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Premium */}
+        {premiumStories.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Conteúdo Premium</Text>
+            {premiumStories.map((story) => (
+              <TouchableOpacity
+                key={story.id}
+                activeOpacity={0.9}
+                style={styles.premiumCard}
+                onPress={() => setPreviewStory(story)}
+              >
+                <View style={styles.premiumImageWrap}>
+                  {getStoryImage(story) ? (
+                    <ImageBackground source={{ uri: getStoryImage(story)! }} style={styles.premiumImage} imageStyle={styles.premiumCardRadius} />
+                  ) : (
+                    <FallbackCard story={story} style={styles.premiumImage} />
+                  )}
+                </View>
+                <View style={styles.premiumBody}>
+                  <View style={styles.premiumTagRow}>
+                    <Zap color={GOLD} size={10} fill={GOLD} />
+                    <Text style={styles.premiumTagText}>PREMIUM STORY</Text>
+                  </View>
+                  <Text style={styles.premiumCardTitle} numberOfLines={1}>{story.title}</Text>
+                  <Text style={styles.premiumCardSynopsis} numberOfLines={2}>{story.synopsis}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        <View style={styles.bottomSpacer} />
       </ScrollView>
-    </View>
-  );
-}
 
-function SectionHeader({ title, actionLabel }: { title: string; actionLabel?: string }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {actionLabel ? <Text style={styles.sectionAction}>{actionLabel}</Text> : null}
-    </View>
-  );
-}
-
-function OriginalCard({ story, onPress }: { story: Story; onPress: () => void }) {
-  const image = getStoryImage(story);
-  return (
-    <TouchableOpacity activeOpacity={0.9} style={styles.originalCard} onPress={onPress}>
-      {image ? (
-        <ImageBackground source={{ uri: image }} style={styles.originalCardImage} imageStyle={styles.originalCardRadius}>
-          <View style={styles.originalOverlay}>
-            <View style={styles.originalTag}>
-              <Text style={styles.originalTagText}>ORIGINAL</Text>
+      {/* Story Preview Bottom Sheet */}
+      {previewStory ? (
+        <View style={styles.sheetOverlay}>
+          <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setPreviewStory(null)} />
+          <View style={styles.sheetPanel}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHero}>
+              {getStoryImage(previewStory) ? (
+                <ImageBackground source={{ uri: getStoryImage(previewStory)! }} style={styles.sheetHeroImage} imageStyle={styles.premiumCardRadius}>
+                  <View style={styles.sheetHeroOverlay} />
+                  <TouchableOpacity style={styles.sheetCloseBtn} onPress={() => setPreviewStory(null)}>
+                    <Text style={styles.sheetCloseText}>✕</Text>
+                  </TouchableOpacity>
+                </ImageBackground>
+              ) : (
+                <FallbackCard story={previewStory} style={styles.sheetHeroImage}>
+                  <TouchableOpacity style={styles.sheetCloseBtn} onPress={() => setPreviewStory(null)}>
+                    <Text style={styles.sheetCloseText}>✕</Text>
+                  </TouchableOpacity>
+                </FallbackCard>
+              )}
             </View>
-            <View>
-              <Text style={styles.originalGenre}>{(story.genres?.[0] || 'NARRATIVA').toUpperCase()}</Text>
-              <Text style={styles.originalTitle} numberOfLines={2}>
-                {story.title}
-              </Text>
+            <View style={styles.sheetBody}>
+              <View style={styles.sheetMetaRow}>
+                <View style={[styles.sheetGenrePill, previewStory.isPremium && styles.sheetGenrePillPremium]}>
+                  <Text style={[styles.sheetGenreText, previewStory.isPremium && styles.sheetGenreTextPremium]}>
+                    {(previewStory.genres?.[0] || 'NARRATIVA').toUpperCase()}
+                  </Text>
+                </View>
+                {previewStory.isPremium ? (
+                  <View style={styles.sheetPremiumIndicator}>
+                    <Zap color={GOLD} size={11} fill={GOLD} />
+                    <Text style={styles.sheetPremiumText}>Premium</Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text style={styles.sheetStoryTitle}>{previewStory.title}</Text>
+              <Text style={styles.sheetSynopsis}>{previewStory.synopsis}</Text>
+              <TouchableOpacity
+                style={styles.sheetStartBtn}
+                onPress={() => {
+                  setPreviewStory(null);
+                  router.push(`/story/${previewStory.id}`);
+                }}
+              >
+                <BookOpen color="#381385" size={18} fill="#381385" />
+                <Text style={styles.sheetStartText}>Iniciar Leitura Interativa</Text>
+              </TouchableOpacity>
+              {activeStoryIds.has(previewStory.id) ? (
+                <TouchableOpacity
+                  style={styles.sheetContinueBtn}
+                  onPress={() => {
+                    const session = (activeSessions || []).find((s) => s.storyId === previewStory.id);
+                    setPreviewStory(null);
+                    if (session) router.push(`/reader/${session.id}` as any);
+                  }}
+                >
+                  <Play color={ACCENT} size={16} fill={ACCENT} />
+                  <Text style={styles.sheetContinueText}>Continuar leitura</Text>
+                </TouchableOpacity>
+              ) : null}
+              <Text style={styles.sheetFooterNote}>Capítulos integrados com tomadas de decisões inteligentes.</Text>
             </View>
           </View>
-        </ImageBackground>
-      ) : (
-        <FallbackArt story={story} style={styles.originalCardImage}>
-          <View style={styles.originalOverlay}>
-            <View style={styles.originalTag}>
-              <Text style={styles.originalTagText}>ORIGINAL</Text>
-            </View>
-            <View>
-              <Text style={styles.originalGenre}>{(story.genres?.[0] || 'NARRATIVA').toUpperCase()}</Text>
-              <Text style={styles.originalTitle} numberOfLines={2}>
-                {story.title}
-              </Text>
-            </View>
-          </View>
-        </FallbackArt>
-      )}
-    </TouchableOpacity>
-  );
-}
-
-function CommunityCard({ story, onPress }: { story: Story; onPress: () => void }) {
-  const image = getStoryImage(story);
-  return (
-    <TouchableOpacity activeOpacity={0.88} style={styles.communityCard} onPress={onPress}>
-      {image ? (
-        <ImageBackground source={{ uri: image }} style={styles.communityImage} imageStyle={styles.communityRadius}>
-          <StoryTypeBadge premium={story.isPremium} />
-        </ImageBackground>
-      ) : (
-        <FallbackArt story={story} style={styles.communityImage}>
-          <StoryTypeBadge premium={story.isPremium} />
-        </FallbackArt>
-      )}
-      <View style={styles.communityBody}>
-        <Text style={styles.communityGenre}>{story.genres?.[0] || 'Narrativa'}</Text>
-        <Text style={styles.communityTitle} numberOfLines={2}>
-          {story.title}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-function TrendingCard({ story, onPress }: { story: Story; onPress: () => void }) {
-  const image = getStoryImage(story);
-  return (
-    <TouchableOpacity activeOpacity={0.86} style={styles.trendingCard} onPress={onPress}>
-      {image ? (
-        <ImageBackground source={{ uri: image }} style={styles.trendingImage} imageStyle={styles.trendingRadius} />
-      ) : (
-        <FallbackArt story={story} style={styles.trendingImage} />
-      )}
-      <Text style={styles.trendingTitle} numberOfLines={1}>
-        {story.title}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-function PremiumCard({ story, onPress }: { story: Story; onPress: () => void }) {
-  const image = getStoryImage(story);
-  return (
-    <TouchableOpacity activeOpacity={0.88} style={styles.premiumCard} onPress={onPress}>
-      {image ? (
-        <ImageBackground source={{ uri: image }} style={styles.premiumImage} imageStyle={styles.premiumRadius} />
-      ) : (
-        <FallbackArt story={story} style={styles.premiumImage} />
-      )}
-      <View style={styles.premiumBody}>
-        <Text style={styles.premiumEyebrow}>PREMIUM STORY</Text>
-        <Text style={styles.premiumTitle} numberOfLines={2}>
-          {story.title}
-        </Text>
-        <Text style={styles.premiumDescription} numberOfLines={2}>
-          {story.synopsis}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-function ContinueReadingCard({ session, onPress }: { session?: ReadingSessionSummary; onPress: () => void }) {
-  if (!session) {
-    return (
-      <StateBlock
-        title="Nenhuma leitura em andamento"
-        description="Comece uma nova historia para ver suas leituras e cenas recentes aparecendo aqui."
-      />
-    );
-  }
-
-  return (
-    <TouchableOpacity activeOpacity={0.9} style={styles.continueCard} onPress={onPress}>
-      <View style={styles.continueVisual}>
-        <Play color={colors.background} fill={ACCENT} size={28} />
-      </View>
-      <View style={styles.continueBody}>
-        <Text style={styles.continueMeta}>Em progresso • Cena {session.currentSceneIndex + 1}</Text>
-        <Text style={styles.continueTitle}>{session.storyTitle}</Text>
-        <Text style={styles.continueDescription}>Toque para voltar ao ponto exato onde a narrativa ficou.</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-function StoryTypeBadge({ premium }: { premium: boolean }) {
-  return (
-    <View style={[styles.typeBadge, premium ? styles.typeBadgePremium : styles.typeBadgeFree]}>
-      <Text style={styles.typeBadgeText}>{premium ? 'PREMIUM' : 'GRATIS'}</Text>
-    </View>
-  );
-}
-
-function FallbackArt({
-  story,
-  style,
-  children,
-}: {
-  story: Story;
-  style?: any;
-  children?: React.ReactNode;
-}) {
-  const palette = getPalette(story);
-  return (
-    <View style={[style, styles.fallbackBase, { backgroundColor: palette[0] }]}>
-      <View style={[styles.fallbackGlow, { backgroundColor: palette[2] }]} />
-      <View style={[styles.fallbackAccent, { backgroundColor: palette[1] }]} />
-      <Text style={[styles.fallbackMonogram, { color: palette[1] }]}>E</Text>
-      {children}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 function getStoryImage(story: Story): string | undefined {
-  return story.coverUrl || story.coverImageUrl || curatedCoverImages[story.title];
+  return story.coverUrl || story.coverImageUrl;
 }
 
-function getPalette(story: Story): string[] {
-  const text = `${story.title} ${story.synopsis} ${(story.genres || []).join(' ')}`.toLowerCase();
-  if (containsAny(text, ['terror', 'horror', 'gótico', 'gotico', 'sombras'])) return ['#0E0A12', '#CFAFFF', '#47204E'];
-  if (containsAny(text, ['romance', 'amor', 'paix'])) return ['#171018', '#E4B9D0', '#6D2C47'];
-  if (containsAny(text, ['sci-fi', 'ficção', 'ficcao', 'cyber', 'neon'])) return ['#09131E', '#82D7FF', '#3B47A8'];
-  if (containsAny(text, ['fantasia', 'reino', 'magia'])) return ['#0D1117', '#CEBDFF', '#413078'];
-  return [PANEL, ACCENT, '#342459'];
+const GENRE_COLORS: Record<string, string[]> = {
+  terror: ['#0D0B10', '#D8C08A'],
+  horror: ['#0D0B10', '#D8C08A'],
+  romance: ['#171012', '#F0C6A8'],
+  ficção: ['#07131B', '#8EE3FF'],
+  fantasia: ['#0F1410', '#D6BF75'],
+  drama: ['#101114', '#D9B66F'],
+  histórico: ['#11100D', '#CDB58A'],
+  mistério: ['#0F1117', '#CFC2FF'],
+  suspense: ['#0F1117', '#CFC2FF'],
+  thriller: ['#0F1117', '#CFC2FF'],
+  cyber: ['#07131B', '#8EE3FF'],
+  sci: ['#07131B', '#8EE3FF'],
+  corporativo: ['#101114', '#D9B66F'],
+  investig: ['#0F1117', '#CFC2FF'],
+};
+
+function getGenreColors(story: Story): string[] {
+  const text = `${story.title} ${(story.genres || []).join(' ')}`.toLowerCase();
+  for (const [key, colors] of Object.entries(GENRE_COLORS)) {
+    if (text.includes(key)) return colors;
+  }
+  return ['#131313', ACCENT];
 }
 
-function containsAny(text: string, terms: string[]) {
-  return terms.some((term) => text.includes(term));
+function FallbackCard({ story, style, children }: { story: Story; style: any; children?: React.ReactNode }) {
+  const [bg, accent] = getGenreColors(story);
+  return (
+    <View style={[style, { backgroundColor: bg }]}>
+      <View style={[styles.fallbackGlow, { backgroundColor: accent }]} />
+      <View style={styles.fallbackIconCircle}>
+        <Sparkles color={accent} size={28} strokeWidth={1.4} />
+      </View>
+      {children ? (
+        children
+      ) : (
+        <View style={styles.fallbackTextOverlay}>
+          <Text style={[styles.fallbackGenreText, { color: accent }]}>
+            {(story.genres?.[0] || 'NARRATIVA').toUpperCase()}
+          </Text>
+          <Text style={styles.fallbackTitleText} numberOfLines={2}>
+            {story.title}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
 }
+
+const AZUL_PROFUNDO = '#381385';
+const DOURADO = '#FFB95F';
+const GOLD = '#ffb95f';
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  centered: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBar: {
-    height: 64,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(206, 189, 255, 0.12)',
-    backgroundColor: 'rgba(10, 10, 12, 0.96)',
+  /* ─── Header ─── */
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 10,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  brandGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  brand: {
-    ...typography.h3,
-    color: ACCENT,
-    fontStyle: 'italic',
-    fontSize: 21,
-  },
-  searchButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  content: {
-    paddingTop: 18,
-    paddingBottom: 120,
-  },
-  heroBlock: {
-    marginHorizontal: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-    marginBottom: 24,
-    gap: 16,
-    borderRadius: 30,
-    backgroundColor: 'rgba(22, 20, 29, 0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-  },
-  heroCopy: {
-    gap: 12,
-  },
-  heroEyebrow: {
-    ...typography.label,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(206, 189, 255, 0.1)',
-    color: ACCENT,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.16)',
-  },
-  heroTitle: {
-    ...typography.h1,
-    color: '#F5F1FF',
-    fontSize: 38,
-    lineHeight: 44,
-  },
-  heroDescription: {
-    ...typography.body,
-    color: SOFT_TEXT,
-  },
-  memberBadge: {
-    alignSelf: 'flex-start',
+  headerBrand: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.14)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
   },
-  memberText: {
-    ...typography.label,
-    color: '#F5F1FF',
-    fontSize: 10,
-  },
-  filters: {
-    paddingHorizontal: 20,
-    gap: 10,
-    marginBottom: 30,
-  },
-  filterChip: {
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 999,
-    backgroundColor: 'rgba(31, 28, 40, 0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-  },
-  filterChipActive: {
-    backgroundColor: 'rgba(206, 189, 255, 0.14)',
-    borderColor: 'rgba(206, 189, 255, 0.32)',
-  },
-  filterChipText: {
-    ...typography.bodySmall,
-    color: SOFT_TEXT,
-    fontWeight: '700',
-  },
-  filterChipTextActive: {
-    color: '#F6F1FF',
-  },
-  sectionHeader: {
-    marginBottom: 14,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  sectionTitle: {
-    ...typography.h2,
-    color: '#F5F1FF',
-    fontSize: 24,
-  },
-  sectionAction: {
-    ...typography.label,
-    color: ACCENT,
-  },
-  horizontalCards: {
-    paddingHorizontal: 20,
-    gap: 16,
-    marginBottom: 36,
-  },
-  originalCard: {
-    width: 308,
-    height: 188,
-    borderRadius: 26,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-    backgroundColor: PANEL_ALT,
-  },
-  originalCardImage: {
-    flex: 1,
-  },
-  originalCardRadius: {
-    borderRadius: 26,
-  },
-  originalOverlay: {
-    flex: 1,
-    justifyContent: 'space-between',
-    padding: 18,
-    backgroundColor: 'rgba(7, 7, 10, 0.32)',
-  },
-  originalTag: {
-    alignSelf: 'flex-end',
-    backgroundColor: 'rgba(206, 189, 255, 0.92)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  originalTagText: {
-    ...typography.label,
-    color: '#281A4B',
-    fontSize: 9,
-  },
-  originalGenre: {
-    ...typography.label,
-    color: ACCENT,
-    fontSize: 10,
-    marginBottom: 6,
-  },
-  originalTitle: {
-    ...typography.h2,
-    color: '#FFFFFF',
-    fontSize: 18,
-    lineHeight: 24,
+  headerBrandText: {
+    ...typography.h3,
+    fontFamily: 'NotoSerifBold',
+    fontSize: 19,
     fontStyle: 'italic',
   },
-  communityGrid: {
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 34,
+  headerBrandAccent: {
+    color: ACCENT,
   },
-  communityCard: {
-    width: '48%',
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: PANEL_ALT,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.06)',
-    marginBottom: 16,
+  headerBrandDot: {
+    color: '#e5e2e1',
   },
-  communityImage: {
-    height: 236,
-    padding: 12,
-    alignItems: 'flex-start',
-    justifyContent: 'flex-start',
-  },
-  communityRadius: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
-  communityBody: {
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-  },
-  communityGenre: {
-    ...typography.label,
-    color: SOFT_TEXT,
-    fontSize: 9,
-    marginBottom: 6,
-  },
-  communityTitle: {
-    ...typography.h3,
-    color: '#F4F0FF',
-    fontSize: 17,
-    lineHeight: 22,
-  },
-  trendingList: {
-    paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 34,
-  },
-  trendingCard: {
-    width: 148,
-  },
-  trendingImage: {
-    width: 148,
-    height: 214,
-    borderRadius: 22,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  trendingRadius: {
-    borderRadius: 22,
-  },
-  trendingTitle: {
-    ...typography.h3,
-    color: '#F4F0FF',
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  premiumList: {
-    paddingHorizontal: 20,
-    gap: 12,
-  },
-  premiumCard: {
-    minHeight: 138,
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: PANEL_ALT,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-    flexDirection: 'row',
-  },
-  premiumImage: {
-    width: 124,
-    minHeight: 138,
-  },
-  premiumRadius: {
-    borderTopLeftRadius: 24,
-    borderBottomLeftRadius: 24,
-  },
-  premiumBody: {
-    flex: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    justifyContent: 'center',
-  },
-  premiumEyebrow: {
-    ...typography.label,
-    color: '#FFBF66',
-    fontSize: 9,
-    marginBottom: 5,
-  },
-  premiumTitle: {
-    ...typography.h3,
-    color: '#FFFFFF',
-    fontSize: 17,
-    lineHeight: 22,
-    marginBottom: 5,
-  },
-  premiumDescription: {
-    ...typography.bodySmall,
-    color: SOFT_TEXT,
-  },
-  continueCard: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 26,
-    padding: 18,
-    backgroundColor: PANEL_ALT,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
+  aiBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: 'rgba(206, 189, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(206, 189, 255, 0.16)',
+  },
+  aiBadgeText: {
+    ...typography.labelSmall,
+    color: ACCENT,
+    fontSize: 9,
+    textTransform: 'none',
+  },
+  /* ─── Search ─── */
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: 14,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(30, 30, 30, 0.60)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    ...typography.body,
+    fontFamily: 'Inter',
+    color: colors.text,
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  searchClear: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchClearText: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  scrollContent: {
+    paddingTop: 14,
+    paddingBottom: 48,
+  },
+  /* ─── Continue Reading ─── */
+  continueSection: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  continueCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(18, 18, 18, 0.60)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    gap: 14,
   },
   continueVisual: {
-    width: 82,
-    height: 82,
+    width: 48,
+    height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(206, 189, 255, 0.12)',
+    backgroundColor: ACCENT,
     alignItems: 'center',
     justifyContent: 'center',
   },
   continueBody: {
     flex: 1,
-    gap: 4,
   },
   continueMeta: {
-    ...typography.label,
+    ...typography.overline,
     color: ACCENT,
-    fontSize: 10,
-  },
-  continueTitle: {
-    ...typography.h2,
-    color: '#F5F1FF',
-    fontSize: 22,
-    lineHeight: 28,
-  },
-  continueDescription: {
-    ...typography.body,
-    color: SOFT_TEXT,
-  },
-  emptyPanel: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-    padding: 22,
-    borderRadius: 24,
-    backgroundColor: PANEL_ALT,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-    gap: 8,
-  },
-  emptyTitle: {
-    ...typography.h3,
-    color: '#F5F1FF',
-  },
-  emptyDescription: {
-    ...typography.body,
-    color: SOFT_TEXT,
-  },
-  typeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  typeBadgePremium: {
-    backgroundColor: '#FFBF66',
-  },
-  typeBadgeFree: {
-    backgroundColor: 'rgba(0, 0, 0, 0.46)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  typeBadgeText: {
-    ...typography.label,
-    color: '#17120B',
     fontSize: 9,
   },
-  fallbackBase: {
+  continueTitle: {
+    ...typography.h3,
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  continueSub: {
+    ...typography.caption,
+    fontFamily: 'Inter',
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  /* ─── Sections ─── */
+  section: {
+    marginBottom: 28,
+  },
+  sectionTitle: {
+    ...typography.h2,
+    fontFamily: 'NotoSerifBold',
+    fontStyle: 'italic',
+    color: colors.text,
+    fontSize: 22,
+    marginBottom: 16,
+    paddingHorizontal: 20,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 14,
+  },
+  sectionTitleInline: {
+    ...typography.h2,
+    fontFamily: 'NotoSerifBold',
+    fontStyle: 'italic',
+    color: colors.text,
+    fontSize: 22,
+  },
+  sectionCount: {
+    ...typography.labelSmall,
+    color: ACCENT,
+    fontSize: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(206, 189, 255, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(206, 189, 255, 0.18)',
+  },
+  /* ─── Originals (landscape 16:10) ─── */
+  originalsRow: {
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  originalCard: {
+    width: 300,
+    aspectRatio: 16 / 10,
+    borderRadius: 18,
     overflow: 'hidden',
   },
+  originalCardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  originalCardRadius: {
+    borderRadius: 18,
+  },
+  originalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-between',
+    padding: 14,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  originalBadge: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: ACCENT,
+  },
+  originalBadgeText: {
+    ...typography.labelSmall,
+    color: '#381385',
+    fontSize: 9,
+  },
+  originalCardInfo: {
+    gap: 4,
+  },
+  originalCardGenre: {
+    ...typography.overline,
+    color: ACCENT,
+    fontSize: 9,
+  },
+  originalCardTitle: {
+    ...typography.h2,
+    fontFamily: 'NotoSerifBold',
+    fontStyle: 'italic',
+    color: '#e5e2e1',
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  /* ─── Trending (small 2:3 portrait) ─── */
+  trendingRow: {
+    paddingHorizontal: 20,
+    gap: 14,
+  },
+  trendingCard: {
+    width: 120,
+    gap: 8,
+  },
+  trendingImageWrap: {
+    position: 'relative',
+    aspectRatio: 2 / 3,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  trendingImage: {
+    width: '100%',
+    height: '100%',
+  },
+  trendingCardRadius: {
+    borderRadius: 14,
+  },
+  trendingHover: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    opacity: 0.7,
+  },
+  trendingHoverText: {
+    ...typography.labelSmall,
+    color: ACCENT,
+    fontFamily: 'NotoSerifItalic',
+    fontSize: 9,
+  },
+  trendingActiveDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: GOLD,
+    borderWidth: 1.5,
+    borderColor: '#0a0a0a',
+  },
+  trendingCardTitle: {
+    ...typography.body,
+    fontFamily: 'NotoSerifItalic',
+    color: '#e5e2e1',
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  trendingCardGenre: {
+    ...typography.overline,
+    color: colors.textMuted,
+    fontSize: 7,
+  },
+  /* ─── Full catalog list ─── */
+  allStoriesList: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  allStoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 118,
+    padding: 10,
+    borderRadius: 18,
+    backgroundColor: 'rgba(18, 18, 18, 0.64)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+  },
+  allStoryImageWrap: {
+    width: 72,
+    height: 96,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  allStoryImage: {
+    width: '100%',
+    height: '100%',
+  },
+  allStoryImageRadius: {
+    borderRadius: 14,
+  },
+  allStoryBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  allStoryMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 5,
+  },
+  allStoryGenre: {
+    ...typography.overline,
+    color: ACCENT,
+    fontSize: 8,
+    flex: 1,
+  },
+  allStoryPlan: {
+    ...typography.labelSmall,
+    color: '#381385',
+    fontSize: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 7,
+    backgroundColor: ACCENT,
+    overflow: 'hidden',
+  },
+  allStoryPlanPremium: {
+    color: '#1a0f04',
+    backgroundColor: GOLD,
+  },
+  allStoryTitle: {
+    ...typography.h3,
+    fontFamily: 'NotoSerifBold',
+    fontStyle: 'italic',
+    color: '#e5e2e1',
+    fontSize: 15,
+    lineHeight: 19,
+  },
+  allStorySynopsis: {
+    ...typography.caption,
+    fontFamily: 'Inter',
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 5,
+  },
+
+  /* ─── Fallback art ─── */
   fallbackGlow: {
     position: 'absolute',
-    right: -32,
-    top: -10,
-    width: 140,
-    height: 140,
-    borderRadius: 999,
-    opacity: 0.35,
+    top: -30,
+    right: -30,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    opacity: 0.12,
   },
-  fallbackAccent: {
+  fallbackIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    alignSelf: 'center',
+  },
+  fallbackTextOverlay: {
     position: 'absolute',
-    left: 20,
-    right: 20,
-    top: 20,
-    height: 1,
-    opacity: 0.5,
+    bottom: 16,
+    left: 14,
+    right: 14,
+    gap: 4,
   },
-  fallbackMonogram: {
-    position: 'absolute',
-    right: 16,
-    bottom: 14,
-    fontFamily: 'serif',
-    fontSize: 72,
-    opacity: 0.18,
-    fontWeight: '700',
+  fallbackGenreText: {
+    ...typography.overline,
+    fontSize: 9,
   },
-  errorText: {
+  fallbackTitleText: {
+    ...typography.h3,
+    fontFamily: 'NotoSerifBold',
+    fontStyle: 'italic',
+    color: '#e5e2e1',
+    fontSize: 15,
+    lineHeight: 19,
+  },
+  /* ─── Search empty state ─── */
+  searchEmptyState: {
+    paddingHorizontal: 20,
+    paddingVertical: 32,
+    alignItems: 'center',
+    gap: 12,
+  },
+  searchEmptyTitle: {
+    ...typography.h3,
+    fontFamily: 'NotoSerifBold',
+    fontStyle: 'italic',
+    color: '#e5e2e1',
+    fontSize: 18,
+  },
+  searchEmptyDesc: {
     ...typography.body,
-    color: '#F5F1FF',
+    fontFamily: 'Inter',
+    color: colors.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 19,
+  },
+  searchEmptyClear: {
+    marginTop: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(206, 189, 255, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(206, 189, 255, 0.18)',
+  },
+  searchEmptyClearText: {
+    ...typography.labelSmall,
+    color: ACCENT,
+    fontSize: 11,
+    textTransform: 'none',
+  },
+
+  /* ─── Premium (horizontal, gold) ─── */
+  premiumCard: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(18, 18, 18, 0.60)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    height: 110,
+  },
+  premiumImageWrap: {
+    width: '33%',
+    height: '100%',
+  },
+  premiumImage: {
+    width: '100%',
+    height: '100%',
+  },
+  premiumCardRadius: {
+    borderTopLeftRadius: 18,
+    borderBottomLeftRadius: 18,
+  },
+  premiumBody: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  premiumTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  premiumTagText: {
+    ...typography.overline,
+    color: GOLD,
+    fontSize: 8,
+  },
+  premiumCardTitle: {
+    ...typography.h3,
+    fontFamily: 'NotoSerifBold',
+    fontStyle: 'italic',
+    color: '#e5e2e1',
+    fontSize: 15,
+    lineHeight: 19,
+  },
+  premiumCardSynopsis: {
+    ...typography.caption,
+    fontFamily: 'Inter',
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 4,
+  },
+  /* ─── Bottom Sheet ─── */
+  sheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 50,
+    justifyContent: 'flex-end',
+  },
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+  },
+  sheetPanel: {
+    backgroundColor: '#121212',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    overflow: 'hidden',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.10)',
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  sheetHero: {
+    aspectRatio: 16 / 10,
+    width: '100%',
+    position: 'relative',
+  },
+  sheetHeroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  sheetHeroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  sheetCloseBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.60)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  sheetCloseText: {
+    color: '#e5e2e1',
+    fontSize: 14,
+  },
+  sheetBody: {
+    padding: 20,
+    gap: 14,
+  },
+  sheetMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sheetGenrePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: 'rgba(206, 189, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(206, 189, 255, 0.16)',
+  },
+  sheetGenrePillPremium: {
+    backgroundColor: 'rgba(255, 185, 95, 0.10)',
+    borderColor: 'rgba(255, 185, 95, 0.25)',
+  },
+  sheetGenreText: {
+    ...typography.overline,
+    color: ACCENT,
+    fontSize: 9,
+  },
+  sheetGenreTextPremium: {
+    color: GOLD,
+  },
+  sheetPremiumIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 185, 95, 0.08)',
+  },
+  sheetPremiumText: {
+    ...typography.labelSmall,
+    color: GOLD,
+    fontSize: 8,
+    textTransform: 'none',
+  },
+  sheetStoryTitle: {
+    ...typography.h1,
+    fontFamily: 'NotoSerifBold',
+    fontStyle: 'italic',
+    color: '#e5e2e1',
+    fontSize: 24,
+    lineHeight: 30,
+  },
+  sheetSynopsis: {
+    ...typography.body,
+    fontFamily: 'Inter',
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  sheetStartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 15,
+    borderRadius: 14,
+    backgroundColor: ACCENT,
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  sheetStartText: {
+    ...typography.label,
+    color: '#381385',
+    fontSize: 13,
+  },
+  sheetContinueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(206, 189, 255, 0.20)',
+    backgroundColor: 'rgba(206, 189, 255, 0.06)',
+  },
+  sheetContinueText: {
+    ...typography.label,
+    color: ACCENT,
+    fontSize: 13,
+  },
+  sheetFooterNote: {
+    ...typography.caption,
+    fontFamily: 'Inter',
+    color: colors.textMuted,
+    textAlign: 'center',
+    fontSize: 10,
+  },
+  bottomSpacer: {
+    height: 0,
   },
 });

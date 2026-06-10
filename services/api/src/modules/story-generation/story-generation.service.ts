@@ -2,14 +2,15 @@ import { Injectable, BadRequestException, ForbiddenException, Logger } from '@ne
 import { PrismaService } from '@common/prisma.service';
 import { StoryLifecycleService } from '@modules/story-lifecycle/story-lifecycle.service';
 import { StoryQualityService } from '@modules/story-quality/story-quality.service';
-import { AiService } from '@modules/ai/ai.service';
+import { AiGenerationContext, AiService } from '@modules/ai/ai.service';
 import { StoryGenerationBudgetGuard, StoryGenerationBudgetDecision } from './story-generation-budget.guard';
 import { StoryGenerationInputGuard, SafeStoryGenerationInput } from './story-generation-input.guard';
 import { StoryGenerationObservabilityService } from './services/story-generation-observability.service';
 import { CreateStoryGenerationDto } from './dto/create-story-generation.dto';
 import { StoryGenerationResponseDto, GenerationMetadataDto, NextActionsDto } from './dto/story-generation-response.dto';
-import { SubscriptionType } from '@prisma/client';
+import { SubscriptionType, UserRole } from '@prisma/client';
 import { StoryGenerationUsageStatus } from '@prisma/client';
+import { getProviderForModelId } from '@modules/ai/model-catalog';
 
 @Injectable()
 export class StoryGenerationService {
@@ -69,7 +70,8 @@ export class StoryGenerationService {
       }
 
       // 3. Generate story draft (AI or mock) using safeInput
-      const draft = await this.generateDraft(safeInput, modelId);
+      const generationContext: AiGenerationContext = user.role === UserRole.ADMIN ? 'ADMIN_CATALOG' : 'USER_STORY';
+      const draft = await this.generateDraft(safeInput, modelId, generationContext);
 
       // 4. Validate draft in memory BEFORE save
       this.validateDraft(draft);
@@ -86,7 +88,7 @@ export class StoryGenerationService {
         worldRules: draft.worldRules,
         language: draft.language,
         maturityRating: draft.maturityRating,
-      });
+      }, { skipCreationLimit: user.role === UserRole.ADMIN });
 
       storyId = story.id;
 
@@ -164,14 +166,25 @@ export class StoryGenerationService {
     return 'Unknown error';
   }
 
-  private async generateDraft(safeInput: SafeStoryGenerationInput, modelId: string): Promise<GeneratedStoryDraft> {
+  private async generateDraft(
+    safeInput: SafeStoryGenerationInput,
+    modelId: string,
+    context: AiGenerationContext,
+  ): Promise<GeneratedStoryDraft> {
     if (this.aiService.isMockMode()) {
       return this.generateMockDraft(safeInput);
     }
 
-    // TODO: Real AI generation using AiService
-    // For now, fall back to mock
-    return this.generateMockDraft(safeInput);
+    return this.aiService.generateStoryDraft({
+      keywords: safeInput.keywords,
+      genre: safeInput.genre,
+      tone: safeInput.tone,
+      targetAudience: safeInput.targetAudience,
+      constraints: safeInput.constraints,
+      modelId,
+      maxTokens: 1500,
+      context,
+    });
   }
 
   private generateMockDraft(safeInput: SafeStoryGenerationInput): GeneratedStoryDraft {
@@ -275,12 +288,7 @@ export class StoryGenerationService {
   }
 
   private getProviderFromModelId(modelId: string): string | null {
-    // TODO: Get provider from model catalog
-    // For now, return null for mock, or parse from modelId
-    if (modelId?.includes('openrouter')) return 'openrouter';
-    if (modelId?.includes('openai')) return 'openai';
-    if (modelId?.includes('anthropic')) return 'anthropic';
-    return null;
+    return getProviderForModelId(modelId) || null;
   }
 }
 

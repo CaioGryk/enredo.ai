@@ -3,6 +3,7 @@ import { PrismaService } from '@common/prisma.service';
 import { AiService } from '@modules/ai/ai.service';
 import { ImageGenerationService } from '@modules/ai/image-generation.service';
 import { StoryQualityService } from '@modules/story-quality/story-quality.service';
+import { safeImageUrl } from '@common/safe-image-url';
 import { SubscriptionType, NarrativeFunction, ReadingSessionStatus, StoryVisibility, StoryModerationStatus } from '@prisma/client';
 import {
   PremiseResponseDto,
@@ -27,7 +28,10 @@ export class StorySetupService {
     const premises = await this.prisma.storyPremise.findMany({
       where: { storyId },
       orderBy: { sortOrder: 'asc' },
+      include: { _count: { select: { characters: true } } },
     });
+
+    this.backfillPremiseCovers(premises);
 
     return premises.map(p => this.mapPremiseToDto(p));
   }
@@ -53,6 +57,7 @@ export class StorySetupService {
     if (!force) {
       const existing = await this.prisma.storyPremise.findMany({
         where: { storyId },
+        include: { _count: { select: { characters: true } } },
       });
       if (existing.length > 0) {
         return existing.map(p => this.mapPremiseToDto(p));
@@ -110,11 +115,13 @@ export class StorySetupService {
             premise.coverPrompt || undefined,
           );
 
-          if (imageResult.success && imageResult.base64Image) {
+          const generatedCoverUrl = this.resolveGeneratedImageUrl(imageResult);
+
+          if (imageResult.success && generatedCoverUrl) {
             await this.prisma.storyPremise.update({
               where: { id: premise.id },
               data: {
-                coverUrl: `data:image/png;base64,${imageResult.base64Image}`,
+                coverUrl: generatedCoverUrl,
                 coverGenerationStatus: 'SUCCESS' as any,
                 coverError: null,
               },
@@ -159,6 +166,7 @@ export class StorySetupService {
     const freshPremises = await this.prisma.storyPremise.findMany({
       where: { id: { in: premises.map(p => p.id) } },
       orderBy: { sortOrder: 'asc' },
+      include: { _count: { select: { characters: true } } },
     });
 
     return freshPremises.map(p => this.mapPremiseToDto(p));
@@ -174,7 +182,6 @@ export class StorySetupService {
       throw new NotFoundException('StoryPremise', premiseId);
     }
 
-    // Check access to parent story
     await this.assertCanAccessStory(premise.storyId, userId);
 
     const characters = await this.prisma.storyPlayableCharacter.findMany({
@@ -182,6 +189,8 @@ export class StorySetupService {
       orderBy: { sortOrder: 'asc' },
       include: { premise: { include: { story: true } } },
     });
+
+    this.backfillCharacterPortraits(characters);
 
     return characters.map(c => this.mapCharacterToDto(c));
   }
@@ -226,8 +235,12 @@ export class StorySetupService {
 
     const generated = await this.aiService.generatePlayableCharacters({
       storyTitle: premise.story.title,
+      storySynopsis: premise.story.synopsis,
       premiseTitle: premise.title,
       premiseSynopsis: premise.synopsis,
+      premiseBasePrompt: premise.basePrompt,
+      premiseTone: premise.tone,
+      premiseWorldRules: premise.worldRules,
       count: 3,
     });
 
@@ -253,6 +266,7 @@ export class StorySetupService {
             secret: g.secret,
             relationshipToPlayer: g.relationshipToPlayer,
             initialGoal: g.initialGoal,
+            startingSituation: g.startingSituation,
             conflictPotential: g.conflictPotential,
             visualPrompt: g.visualPrompt,
             imageGenerationStatus: 'PENDING' as any,
@@ -283,11 +297,13 @@ export class StorySetupService {
               character.visualPrompt,
             );
 
-            if (imageResult.success && imageResult.base64Image) {
+            const generatedImageUrl = this.resolveGeneratedImageUrl(imageResult);
+
+            if (imageResult.success && generatedImageUrl) {
               await this.prisma.storyPlayableCharacter.update({
                 where: { id: character.id },
                 data: {
-                  imageUrl: `data:image/png;base64,${imageResult.base64Image}`,
+                  imageUrl: generatedImageUrl,
                   imageGenerationStatus: 'SUCCESS' as any,
                   imageError: null,
                 },
@@ -460,10 +476,11 @@ export class StorySetupService {
       styleGuide: premise.styleGuide,
       worldRules: premise.worldRules,
       coverPrompt: premise.coverPrompt,
-      coverUrl: premise.coverUrl ?? null,
+      coverUrl: safeImageUrl(premise.coverUrl),
       coverGenerationStatus: premise.coverGenerationStatus || 'NOT_REQUESTED',
       coverError: premise.coverError ?? null,
       coverFallback: this.buildPremiseFallback(premise),
+      playableCharacterCount: premise._count?.characters ?? 0,
       sortOrder: premise.sortOrder,
       isPremium: premise.isPremium,
       isAiGenerated: premise.isAiGenerated,
@@ -486,9 +503,10 @@ export class StorySetupService {
       secret: character.secret,
       relationshipToPlayer: character.relationshipToPlayer,
       initialGoal: character.initialGoal,
+      startingSituation: character.startingSituation ?? null,
       conflictPotential: character.conflictPotential,
       visualPrompt: character.visualPrompt,
-      imageUrl: character.imageUrl ?? null,
+      imageUrl: safeImageUrl(character.imageUrl),
       imageGenerationStatus: character.imageGenerationStatus || 'NOT_REQUESTED',
       imageError: character.imageError ?? null,
       imageFallback: this.buildCharacterFallback(character),
@@ -498,6 +516,138 @@ export class StorySetupService {
       createdAt: character.createdAt,
       updatedAt: character.updatedAt,
     };
+  }
+
+  private backfillPremiseCovers(premises: any[]): void {
+    if (!this.imageGenerationService.isEnabled()) return;
+
+    for (const premise of premises) {
+      const needsCover =
+        premise.coverPrompt &&
+        !premise.coverUrl &&
+        premise.coverGenerationStatus === 'NOT_REQUESTED';
+
+      if (!needsCover) continue;
+
+      premise.coverGenerationStatus = 'PENDING';
+
+      this.prisma.storyPremise.update({
+        where: { id: premise.id },
+        data: { coverGenerationStatus: 'PENDING' },
+      }).catch((err: Error) => {
+        this.logger.error(`Failed to mark premise ${premise.id} cover as PENDING: ${err.message}`);
+      });
+
+      this.imageGenerationService.generatePremiseCover(premise.title, premise.synopsis || '', premise.coverPrompt)
+        .then((result) => {
+          const generatedCoverUrl = this.resolveGeneratedImageUrl(result);
+          if (result.success && generatedCoverUrl) {
+            return this.prisma.storyPremise.update({
+              where: { id: premise.id },
+              data: {
+                coverUrl: generatedCoverUrl,
+                coverGenerationStatus: 'SUCCESS',
+                coverError: null,
+              },
+            });
+          } else {
+            return this.prisma.storyPremise.update({
+              where: { id: premise.id },
+              data: {
+                coverGenerationStatus: 'FAILED',
+                coverError: (result.error || 'Generation failed').substring(0, 500),
+              },
+            });
+          }
+        })
+        .catch((err: Error) => {
+          const safeError = (err.message || 'Unknown error').substring(0, 500);
+          this.logger.error(`Premise cover generation failed for ${premise.id}: ${safeError}`);
+          return this.prisma.storyPremise.update({
+            where: { id: premise.id },
+            data: {
+              coverGenerationStatus: 'FAILED',
+              coverError: safeError,
+            },
+          });
+        });
+    }
+  }
+
+  private backfillCharacterPortraits(characters: any[]): void {
+    if (!this.imageGenerationService.isEnabled()) return;
+
+    for (const character of characters) {
+      const needsPortrait =
+        character.visualPrompt &&
+        !character.imageUrl &&
+        character.imageGenerationStatus === 'NOT_REQUESTED';
+
+      if (!needsPortrait) continue;
+
+      character.imageGenerationStatus = 'PENDING';
+
+      this.prisma.storyPlayableCharacter.update({
+        where: { id: character.id },
+        data: { imageGenerationStatus: 'PENDING' },
+      }).catch((err: Error) => {
+        this.logger.error(`Failed to mark character ${character.id} as PENDING: ${err.message}`);
+      });
+
+      const portraitPrompt =
+        `Editorial character portrait of ${character.name}: ${character.visualPrompt}. ${character.narrativeFunction ? `${character.narrativeFunction} archetype.` : ''} Dramatic lighting, cinematic quality, no text, no logos.`;
+
+      this.imageGenerationService.generateCharacterPortrait(character.name, character.visualPrompt, portraitPrompt)
+        .then((result) => {
+          const generatedImageUrl = this.resolveGeneratedImageUrl(result);
+
+          if (result.success && generatedImageUrl) {
+            return this.prisma.storyPlayableCharacter.update({
+              where: { id: character.id },
+              data: {
+                imageUrl: generatedImageUrl,
+                imageGenerationStatus: 'SUCCESS',
+                imageError: null,
+              },
+            });
+          } else {
+            return this.prisma.storyPlayableCharacter.update({
+              where: { id: character.id },
+              data: {
+                imageGenerationStatus: 'FAILED',
+                imageError: (result.error || 'Generation failed').substring(0, 500),
+              },
+            });
+          }
+        })
+        .catch((err: Error) => {
+          const safeError = (err.message || 'Unknown error').substring(0, 500);
+          this.logger.error(`Portrait generation failed for character ${character.id}: ${safeError}`);
+          return this.prisma.storyPlayableCharacter.update({
+            where: { id: character.id },
+            data: {
+              imageGenerationStatus: 'FAILED',
+              imageError: safeError,
+            },
+          });
+        });
+    }
+  }
+
+  private resolveGeneratedImageUrl(result: { imageUrl?: string | null; base64Image?: string | null }): string | null {
+    if (result.imageUrl) return result.imageUrl;
+    if (!result.base64Image) return null;
+
+    const mimeType = this.inferImageMimeType(result.base64Image);
+    return `data:${mimeType};base64,${result.base64Image}`;
+  }
+
+  private inferImageMimeType(base64: string): string {
+    if (base64.startsWith('/9j/')) return 'image/jpeg';
+    if (base64.startsWith('iVBOR')) return 'image/png';
+    if (base64.startsWith('R0lG')) return 'image/gif';
+    if (base64.startsWith('UklGR')) return 'image/webp';
+    return 'image/png';
   }
 
   private buildPremiseFallback(premise: any): ProceduralVisualDto {

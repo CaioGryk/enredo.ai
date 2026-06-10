@@ -110,6 +110,11 @@ export class CreateCharacterDto {
   @IsString()
   initialGoal?: string;
 
+  @ApiPropertyOptional({ description: 'Character-specific starting situation' })
+  @IsOptional()
+  @IsString()
+  startingSituation?: string;
+
   @ApiPropertyOptional({ description: 'Conflict potential' })
   @IsOptional()
   @IsString()
@@ -158,6 +163,7 @@ export class PremiseResponseDto {
   coverGenerationStatus: string;
   coverError: string | null;
   coverFallback: ProceduralVisualDto;
+  playableCharacterCount: number;
   sortOrder: number;
   isPremium: boolean;
   isAiGenerated: boolean;
@@ -178,6 +184,7 @@ export class CharacterResponseDto {
   secret: string | null;
   relationshipToPlayer: string | null;
   initialGoal: string | null;
+  startingSituation: string | null;
   conflictPotential: string | null;
   visualPrompt: string | null;
   imageUrl: string | null;

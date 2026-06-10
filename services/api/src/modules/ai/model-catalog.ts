@@ -2,7 +2,7 @@ import { SubscriptionType } from '@prisma/client';
 
 export type ModelTier = 'FREE' | 'PREMIUM' | 'CREDITS';
 export type PriceLevel = 'FREE' | 'VERY_LOW' | 'LOW' | 'MEDIUM' | 'HIGH';
-export type AIProvider = 'openai' | 'anthropic' | 'openrouter' | 'google' | 'together';
+export type AIProvider = 'openai' | 'anthropic' | 'openrouter' | 'google' | 'groq' | 'together';
 export type CostMode = 'FREE' | 'PAID' | 'CREDITS';
 
 export interface AIModel {
@@ -23,6 +23,18 @@ export interface AIModel {
 
 export const AI_MODEL_CATALOG: AIModel[] = [
   {
+    id: 'groq/free',
+    provider: 'groq',
+    displayName: 'Groq Free',
+    description: 'Primary free MVP text model via Groq. The concrete model is configured with GROQ_MODEL.',
+    tier: 'FREE',
+    priceLevel: 'FREE',
+    costMode: 'FREE',
+    isDefaultFree: true,
+    maxTokens: 1500,
+    isActive: true,
+  },
+  {
     id: 'openrouter/free',
     provider: 'openrouter',
     displayName: 'Free Router',
@@ -30,8 +42,29 @@ export const AI_MODEL_CATALOG: AIModel[] = [
     tier: 'FREE',
     priceLevel: 'FREE',
     costMode: 'FREE',
-    isDefaultFree: true,
     maxTokens: 500,
+    isActive: true,
+  },
+  {
+    id: 'deepseek/deepseek-v4-flash:free',
+    provider: 'openrouter',
+    displayName: 'DeepSeek V4 Flash Free',
+    description: 'Explicit free DeepSeek model via OpenRouter. Preferred for MVP free generation because it returns normal content instead of router-dependent reasoning-only responses.',
+    tier: 'FREE',
+    priceLevel: 'FREE',
+    costMode: 'FREE',
+    maxTokens: 1500,
+    isActive: true,
+  },
+  {
+    id: 'gemini/free',
+    provider: 'google',
+    displayName: 'Gemini Free',
+    description: 'Google Gemini free-tier fallback. The concrete model is configured with GOOGLE_TEXT_MODEL.',
+    tier: 'FREE',
+    priceLevel: 'FREE',
+    costMode: 'FREE',
+    maxTokens: 1500,
     isActive: true,
   },
   {
@@ -108,7 +141,8 @@ export function getDefaultPremiumModel(): AIModel {
 
 export function getDefaultUtilityModel(freeOnly?: boolean): AIModel {
   if (freeOnly) {
-    const freeModel = AI_MODEL_CATALOG.find(m => m.costMode === 'FREE' && m.isActive);
+    const freeModel = AI_MODEL_CATALOG.find(m => m.isDefaultFree && m.costMode === 'FREE' && m.isActive)
+      || AI_MODEL_CATALOG.find(m => m.costMode === 'FREE' && m.isActive);
     if (freeModel) return freeModel;
   }
   return AI_MODEL_CATALOG.find(m => m.isDefaultPremium && m.isActive) || AI_MODEL_CATALOG.find(m => m.tier === 'PREMIUM' && m.priceLevel === 'VERY_LOW' && m.isActive)!;

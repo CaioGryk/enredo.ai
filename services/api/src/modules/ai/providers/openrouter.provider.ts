@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SubscriptionType } from '@prisma/client';
+import { setDefaultResultOrder } from 'dns';
 import { LLMProvider, LLMResponse, GenerateConfig } from '../interfaces/llm-provider.interface';
 import { MockProvider } from './mock.provider';
 import { withRetry, isAuthError } from './fetch-retry.helper';
@@ -36,6 +37,7 @@ export class OpenRouterProvider implements LLMProvider {
     private readonly configService: ConfigService,
     private readonly mockProvider: MockProvider,
   ) {
+    setDefaultResultOrder('ipv4first');
     this.apiKey = this.configService.get<string>('OPENROUTER_API_KEY') || '';
   }
 

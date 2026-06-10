@@ -29,7 +29,8 @@ Motivo: o backend de billing ainda usa pagamento mock. A experiência de leitura
    - Expor API em domínio estável, por exemplo `https://api.enredo.ai/api`.
 
 2. **Banco Supabase**
-   - Confirmar `npx prisma db push` ou migration aplicada no projeto de produção.
+   - Confirmar migrations revisadas aplicadas via CI/CD ou procedimento aprovado.
+   - Não usar `prisma db push` como caminho de produção pública.
    - Rodar seed/curadoria inicial sem criar usuários demo públicos.
    - Rotacionar senha do banco compartilhada durante desenvolvimento.
 
@@ -117,5 +118,5 @@ Preparar o backend para deploy:
 1. escolher o provedor de hospedagem;
 2. criar `.env.production` fora do repositório;
 3. configurar domínio/API;
-4. rodar Prisma contra Supabase de produção;
+4. aplicar migrations revisadas contra Supabase de produção somente após backup e aprovação;
 5. testar login, biblioteca, story setup, leitura e limite Free no ambiente hospedado.

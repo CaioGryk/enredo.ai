@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import {
-  ActivityIndicator,
   Image,
   ImageBackground,
   ScrollView,
@@ -11,38 +10,28 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Bookmark, BookOpenText, ChevronRight, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, Play, Sparkles } from 'lucide-react-native';
 import { api } from '../../src/api/client';
 import { Character, Story, StoryCharactersResponse, StoryPremise } from '../../src/api/types';
 import { StateBlock } from '../../src/components/state-block';
 import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
+import { goBackSafe } from '../../src/utils/navigation-helper';
 
 const ACCENT = '#CEBDFF';
-const PANEL = '#15131B';
-const PANEL_ALT = '#1B1824';
 const SOFT_TEXT = '#B7AFC8';
-
-const curatedCoverImages: Record<string, string> = {
-  'O Último Trem':
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuDgQ7acJ_9YHObe_C_H-4mPIFk7kQDxoexw_JWlfnO_Y_inNVQGJ5eYN6Ag5WTS0-dyVOYHs69O7ESaHDmAkkUg9RJkcfOFaSjniPWTHSdzTmlq_EPNaT_x3JzmeAl3KNtcY2QHr5NB8P5mgVUG-gJpUwbNeQEwHdP3AmE54_dJFYRljoyWT3MkKbDV7JuwwARkqMydnZ1R2VJp53CAm2BfFKT-HeNWrm6IHigFkQw-ZuY5-DdWoEOCa6fWt1lxQA29XSkEBZZAwUS2',
-  'Noite de Halloween':
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuBZnfa5Oh7XqFJZB_Kf2YyUVWWs-5dAoun-jL7sKendyMLqCLHdmADYOnhSuZyjARcORVS7KpD0BJScfjteiwsBafx6rNKYu4KJLYUdlcH30TpOdWotfJdpWqZBujho0anQcxamgweWNfs9eg-3svDQZUEbVAYJoWKGKiUikBh7bzW4b-_ZMORgUdtWGeN8vBPk-aKpk_qoIPymTDUzbCv8VwQQvMDBGYXuSE1IJkawOcx_ns6AH6g2U_tqG6feCYRK7NFMN5hHmqmc',
-  'A Última Biblioteca':
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuAfLscPlEzbDU0TsuAvcdiYL5zI1wPacI9XMlKaX0ctY-6JTzFrnPWimY29W6L5ymwGxSWn85ZV6OIduP12tEFOwobs8h-rgdr39UmFtU9g5Ar7NxL2rbBpG7gnQW1YlkUX7cep0N_Wz-HOgTWYue3J1eGtz2EpJtPqdGmUidIFOLmUVcsW-T_uEhBl8OolaitKe0u1IlJUmbA_RnAPTcTRkLLMZhCktqCknTZ03LbdqMDaeBYy-XvyE8_4GiUUWjZtq74KOWqL7iSF',
-  'O Clube dos Mentirosos':
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuDgQ7acJ_9YHObe_C_H-4mPIFk7kQDxoexw_JWlfnO_Y_inNVQGJ5eYN6Ag5WTS0-dyVOYHs69O7ESaHDmAkkUg9RJkcfOFaSjniPWTHSdzTmlq_EPNaT_x3JzmeAl3KNtcY2QHr5NB8P5mgVUG-gJpUwbNeQEwHdP3AmE54_dJFYRljoyWT3MkKbDV7JuwwARkqMydnZ1R2VJp53CAm2BfFKT-HeNWrm6IHigFkQw-ZuY5-DdWoEOCa6fWt1lxQA29XSkEBZZAwUS2',
-  'Amor nas Estrelas':
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuCalBEMdb2ZXJ1OnM1NjjrSHPxMh9NKFA3Nba6zcs3GFiL5t1i8AN90hFy94YkUNJY2hSIgyjfcrGMNjZvtOeT9pkBqXTcqNPFPj43YGtSEtxTev01g1olgGWgnxUrPNZwZcbRL5bEDRghY8rvtnEKFFMMfps17z6aPefqEVAdep_GkIk8OJBQsZ8N9y5fJKiF8VG0Er-_HlSWTp5mn_-51PmjYqp_xZchrbmTVwiItxru3kOTGfoymYTnzlB5bq_onf241oPTwsU3P',
-  'O Enigma do Lighthouse':
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuBZnfa5Oh7XqFJZB_Kf2YyUVWWs-5dAoun-jL7sKendyMLqCLHdmADYOnhSuZyjARcORVS7KpD0BJScfjteiwsBafx6rNKYu4KJLYUdlcH30TpOdWotfJdpWqZBujho0anQcxamgweWNfs9eg-3svDQZUEbVAYJoWKGKiUikBh7bzW4b-_ZMORgUdtWGeN8vBPk-aKpk_qoIPymTDUzbCv8VwQQvMDBGYXuSE1IJkawOcx_ns6AH6g2U_tqG6feCYRK7NFMN5hHmqmc',
-};
+const DOURADO = '#ffb95f';
 
 export default function StoryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  const { data: story, isLoading: storyLoading } = useQuery<Story>({
+  const {
+    data: story,
+    isLoading: storyLoading,
+    isError: storyError,
+    refetch: refetchStory,
+  } = useQuery<Story>({
     queryKey: ['story', id],
     queryFn: async () => {
       const { data } = await api.get(`/library/stories/${id}`);
@@ -51,7 +40,12 @@ export default function StoryDetailScreen() {
     enabled: Boolean(id),
   });
 
-  const { data: charactersResponse, isLoading: charsLoading } = useQuery<StoryCharactersResponse>({
+  const {
+    data: charactersResponse,
+    isLoading: charsLoading,
+    isError: charactersError,
+    refetch: refetchCharacters,
+  } = useQuery<StoryCharactersResponse>({
     queryKey: ['story-characters', id],
     queryFn: async () => {
       const { data } = await api.get(`/library/stories/${id}/characters`);
@@ -60,7 +54,12 @@ export default function StoryDetailScreen() {
     enabled: Boolean(id),
   });
 
-  const { data: premises = [] } = useQuery<StoryPremise[]>({
+  const {
+    data: premises = [],
+    isLoading: premisesLoading,
+    isError: premisesError,
+    refetch: refetchPremises,
+  } = useQuery<StoryPremise[]>({
     queryKey: ['story-premises-preview', id],
     queryFn: async () => {
       try {
@@ -74,12 +73,17 @@ export default function StoryDetailScreen() {
     enabled: Boolean(id),
   });
 
-  const heroImage = useMemo(() => getStoryImage(story), [story]);
+  const heroImage = useMemo(() => story?.coverUrl || story?.coverImageUrl, [story]);
   const baseCharacters = charactersResponse?.characters ?? [];
 
-  if (storyLoading || charsLoading) {
+  if (storyLoading || charsLoading || premisesLoading) {
     return (
       <View style={styles.container}>
+        <View style={styles.backBar}>
+          <TouchableOpacity onPress={() => goBackSafe('/(tabs)/library')} style={styles.backButton}>
+            <ArrowLeft color={ACCENT} size={22} />
+          </TouchableOpacity>
+        </View>
         <StateBlock
           fullScreen
           loading
@@ -90,15 +94,43 @@ export default function StoryDetailScreen() {
     );
   }
 
+  if (storyError || charactersError || premisesError) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.backBar}>
+          <TouchableOpacity onPress={() => goBackSafe('/(tabs)/library')} style={styles.backButton}>
+            <ArrowLeft color={ACCENT} size={22} />
+          </TouchableOpacity>
+        </View>
+        <StateBlock
+          fullScreen
+          title="Não foi possível carregar esta história"
+          description="Verifique sua conexão e tente novamente para continuar a jornada."
+          actionLabel="Tentar novamente"
+          onAction={() => {
+            refetchStory();
+            refetchCharacters();
+            refetchPremises();
+          }}
+        />
+      </View>
+    );
+  }
+
   if (!story) {
     return (
       <View style={styles.container}>
+        <View style={styles.backBar}>
+          <TouchableOpacity onPress={() => goBackSafe('/(tabs)/library')} style={styles.backButton}>
+            <ArrowLeft color={ACCENT} size={22} />
+          </TouchableOpacity>
+        </View>
         <StateBlock
           fullScreen
           title="História não encontrada"
-          description="Essa historia pode ter sido removida ou ainda nao esta disponivel na biblioteca."
+          description="Essa história pode ter sido removida ou ainda não está disponível na biblioteca."
           actionLabel="Voltar para biblioteca"
-          onAction={() => router.replace('/(tabs)/library')}
+          onAction={() => goBackSafe('/(tabs)/library')}
         />
       </View>
     );
@@ -107,163 +139,123 @@ export default function StoryDetailScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
+        <TouchableOpacity onPress={() => goBackSafe('/(tabs)/library')} style={styles.iconButton}>
           <ArrowLeft color={ACCENT} size={24} />
         </TouchableOpacity>
         <Text style={styles.brand}>Enredo.ai</Text>
-        <TouchableOpacity style={styles.iconButton}>
-          <Bookmark color={SOFT_TEXT} size={22} />
-        </TouchableOpacity>
+        <View style={styles.iconButton} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Hero Cover */}
         <View style={styles.hero}>
           {heroImage ? (
             <ImageBackground source={{ uri: heroImage }} style={styles.heroImage} imageStyle={styles.heroImageRadius}>
-              <HeroOverlay story={story} />
+              <View style={styles.heroGradient}>
+                <View style={styles.heroBadge}>
+                  <Sparkles color={ACCENT} size={13} fill={ACCENT} />
+                  <Text style={styles.heroBadgeText}>Enredo.ai Original</Text>
+                </View>
+              </View>
             </ImageBackground>
           ) : (
             <View style={styles.heroFallback}>
-              <Text style={styles.heroFallbackMark}>E</Text>
-              <HeroOverlay story={story} />
+              <View style={styles.heroFallbackGlow} />
+              <View style={[styles.heroBadge, styles.heroBadgeFallback]}>
+                <Sparkles color={ACCENT} size={13} fill={ACCENT} />
+                <Text style={styles.heroBadgeText}>Enredo.ai Original</Text>
+              </View>
+              <Text style={styles.heroFallbackTitle}>{story.title}</Text>
+              <Text style={styles.heroFallbackGenre}>{(story.genres?.[0] || 'NARRATIVA').toUpperCase()}</Text>
             </View>
           )}
         </View>
 
-        <SectionLabel label="Sinopse" />
-        <View style={styles.synopsisBlock}>
+        {/* Title + Badges section */}
+        <View style={styles.detailsSection}>
+          <Text style={styles.titleText}>{story.title}</Text>
+          <View style={styles.badgeRow}>
+            <View style={styles.genrePill}>
+              <Text style={styles.genrePillText}>{(story.genres?.[0] || 'NARRATIVA').toUpperCase()}</Text>
+            </View>
+            <View style={[styles.tagPill, story.isPremium ? styles.tagPillPremium : styles.tagPillFree]}>
+              <Text style={[styles.tagPillText, story.isPremium && styles.tagPillTextPremium]}>
+                {story.isPremium ? 'PREMIUM' : 'GRÁTIS'}
+              </Text>
+            </View>
+            <View style={styles.tagPill}>
+              <Text style={styles.tagPillText}>{story.maturityRating || '12+'}</Text>
+            </View>
+            <View style={[styles.tagPill, styles.tagPillAccent]}>
+              <Text style={[styles.tagPillText, styles.tagPillTextAccent]}>HISTÓRIA INTERATIVA</Text>
+            </View>
+          </View>
+
+          {/* Synopsis */}
           <Text style={styles.synopsis}>{story.synopsis}</Text>
-        </View>
 
-        <View style={styles.flowCard}>
-          <Sparkles color={ACCENT} size={18} />
-          <View style={styles.flowCopy}>
-            <Text style={styles.flowTitle}>A jornada agora acontece em etapas.</Text>
-            <Text style={styles.flowText}>
-              Primeiro você escolhe uma premissa inicial. Depois assume um personagem jogável. Só então a narrativa abre espaço
-              para a conversa com a IA.
-            </Text>
+          {/* Info grid */}
+          <View style={styles.infoGrid}>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>CLASSIFICAÇÃO</Text>
+              <Text style={styles.infoValue}>{story.maturityRating || '12+'}</Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>CAPÍTULOS</Text>
+              <Text style={styles.infoValue}>{story.totalChapters || 1}</Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>ACESSO</Text>
+              <Text style={[styles.infoValue, story.isPremium && styles.infoValuePremium]}>
+                {story.isPremium ? 'PREMIUM' : 'GRÁTIS'}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        <SectionHeader label="Próxima etapa" action="ponto de partida" />
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={styles.stageCard}
-          onPress={() => router.push(`/story/${id}/premise`)}
-        >
-          <View style={styles.stageCopy}>
-            <Text style={styles.stageEyebrow}>1. Escolha sua premissa</Text>
-            <Text style={styles.stageTitle}>
-              {premises.length ? `${premises.length} premissas prontas para começar.` : 'Prepare o primeiro ponto de partida da história.'}
-            </Text>
-            <Text style={styles.stageText}>
-              Cada premissa muda a situação inicial, o clima e os conflitos que a IA vai usar para responder às suas ações.
-            </Text>
-          </View>
-          <ChevronRight color={ACCENT} size={22} />
-        </TouchableOpacity>
+          {/* Premise preview section */}
+          {premises.length > 0 ? (
+            <View style={styles.premisePreview}>
+              <Text style={styles.premisePreviewLabel}>
+                {premises.length} {premises.length === 1 ? 'premissa disponível' : 'premissas disponíveis'}
+              </Text>
+              <Text style={styles.premisePreviewText}>
+                Escolha o ponto de partida que mais instiga sua curiosidade para moldar o destino desta narrativa.
+              </Text>
+            </View>
+          ) : null}
 
-        {baseCharacters.length > 0 ? (
-          <>
-            <SectionHeader label="Elenco do mundo" action="referência narrativa" />
-            <Text style={styles.helperText}>
-              Estes personagens ajudam a IA a manter o universo coeso. A escolha jogável acontece na próxima tela, depois da
-              premissa.
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.charactersList}>
-              {baseCharacters.map((character) => (
-                <BaseCharacterCard key={character.id} character={character} />
-              ))}
-            </ScrollView>
-          </>
-        ) : null}
-
-        <SectionLabel label="Capítulos adicionados" />
-        <View style={styles.chapters}>
-          {Array.from({ length: Math.max(story.totalChapters || 1, 1) })
-            .slice(0, 4)
-            .map((_, index) => {
-              const locked = story.isPremium && index > 0;
-              return (
-                <View key={index} style={[styles.chapterRow, locked && styles.lockedChapter]}>
-                  <View>
-                    <Text style={styles.chapterTitle}>
-                      {index + 1}. {chapterTitle(index)}
-                    </Text>
-                    <Text style={styles.chapterMeta}>{locked ? 'PREMIUM' : 'GRÁTIS'} • leitura interativa</Text>
+          {/* Character preview */}
+          {baseCharacters.length > 0 ? (
+            <View style={styles.characterSection}>
+              <Text style={styles.characterSectionLabel}>Elenco do mundo</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.charactersList}>
+                {baseCharacters.map((character) => (
+                  <View key={character.id} style={styles.characterCard}>
+                    <View style={styles.characterPortrait}>
+                      {character.imageUrl ? (
+                        <Image source={{ uri: character.imageUrl }} style={styles.characterImage} />
+                      ) : (
+                        <Text style={styles.characterInitial}>{character.name.slice(0, 1)}</Text>
+                      )}
+                    </View>
+                    <Text style={styles.characterName} numberOfLines={1}>{character.name}</Text>
+                    <Text style={styles.characterRole} numberOfLines={1}>{character.role}</Text>
                   </View>
-                  {locked ? <BookOpenText color={ACCENT} size={18} /> : <BookOpenText color={ACCENT} size={18} />}
-                </View>
-              );
-            })}
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
       <View style={styles.footer}>
         <TouchableOpacity style={styles.startButton} onPress={() => router.push(`/story/${id}/premise`)}>
           <Text style={styles.startButtonText}>ESCOLHER PONTO DE PARTIDA</Text>
+          <Play color="#381385" size={16} fill="#381385" />
         </TouchableOpacity>
       </View>
     </View>
   );
-}
-
-function HeroOverlay({ story }: { story: Story }) {
-  const genre = story.genres?.[0] || 'Narrativa';
-  return (
-    <View style={styles.heroOverlay}>
-      <View style={styles.metadata}>
-        <View style={story.isPremium ? styles.badgePremium : styles.badgeFree}>
-          <Text style={styles.badgeText}>{story.isPremium ? 'PREMIUM' : 'GRÁTIS'}</Text>
-        </View>
-        <Text style={styles.maturity}>{story.maturityRating || '12+'}</Text>
-      </View>
-      <Text style={styles.title}>{story.title}</Text>
-      <Text style={styles.genre}>
-        {genre} • {story.totalChapters || 1} capítulos
-      </Text>
-    </View>
-  );
-}
-
-function SectionLabel({ label }: { label: string }) {
-  return <Text style={styles.sectionLabel}>{label}</Text>;
-}
-
-function SectionHeader({ label, action }: { label: string; action: string }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionLabel}>{label}</Text>
-      <Text style={styles.sectionAction}>{action}</Text>
-    </View>
-  );
-}
-
-function BaseCharacterCard({ character }: { character: Character }) {
-  return (
-    <View style={styles.characterCard}>
-      <View style={styles.characterPortrait}>
-        {character.imageUrl ? (
-          <Image source={{ uri: character.imageUrl }} style={styles.characterImage} />
-        ) : (
-          <Text style={styles.characterInitial}>{character.name.slice(0, 1)}</Text>
-        )}
-      </View>
-      <Text style={styles.characterName}>{character.name}</Text>
-      <Text style={styles.characterRole}>{character.role}</Text>
-    </View>
-  );
-}
-
-function getStoryImage(story?: Story): string | undefined {
-  if (!story) return undefined;
-  return story.coverUrl || story.coverImageUrl || curatedCoverImages[story.title];
-}
-
-function chapterTitle(index: number) {
-  const titles = ['O Chamado Inicial', 'Vozes no Corredor', 'A Teia de Silêncio', 'O Eco do Abismo'];
-  return titles[index] || 'Novo Capítulo';
 }
 
 const styles = StyleSheet.create({
@@ -271,16 +263,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  centered: {
-    alignItems: 'center',
+  backBar: {
+    height: 64, paddingHorizontal: 18,
     justifyContent: 'center',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(206, 189, 255, 0.12)',
+    backgroundColor: 'rgba(10, 10, 12, 0.96)',
+  },
+  backButton: {
+    width: 40, height: 40, alignItems: 'center', justifyContent: 'center',
   },
   header: {
     height: 64,
     paddingHorizontal: 18,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(206, 189, 255, 0.12)',
-    backgroundColor: 'rgba(10, 10, 12, 0.96)',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -293,20 +290,16 @@ const styles = StyleSheet.create({
   },
   brand: {
     ...typography.h3,
+    fontFamily: 'NotoSerifBold',
     color: ACCENT,
     fontStyle: 'italic',
   },
   scrollContent: {
-    paddingBottom: 130,
+    paddingBottom: 110,
   },
   hero: {
-    height: 500,
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 34,
+    aspectRatio: 3 / 4,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
   },
   heroImage: {
     flex: 1,
@@ -314,178 +307,208 @@ const styles = StyleSheet.create({
   heroImageRadius: {
     resizeMode: 'cover',
   },
-  heroFallback: {
-    flex: 1,
-    backgroundColor: PANEL_ALT,
-  },
-  heroFallbackMark: {
-    position: 'absolute',
-    right: 32,
-    top: 72,
-    fontFamily: 'serif',
-    fontSize: 180,
-    fontWeight: '700',
-    color: ACCENT,
-    opacity: 0.13,
-  },
-  heroOverlay: {
+  heroGradient: {
     flex: 1,
     justifyContent: 'flex-end',
     padding: 26,
-    backgroundColor: 'rgba(8, 8, 12, 0.34)',
+    backgroundColor: 'rgba(0,0,0,0.12)',
   },
-  metadata: {
-    flexDirection: 'row',
+  heroFallback: {
+    flex: 1,
+    backgroundColor: '#121212',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
+    justifyContent: 'center',
+    gap: 12,
   },
-  badgePremium: {
+  heroFallbackGlow: {
+    position: 'absolute',
+    top: -80,
+    right: -80,
+    width: 250,
+    height: 250,
+    borderRadius: 125,
     backgroundColor: ACCENT,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 999,
+    opacity: 0.08,
   },
-  badgeFree: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 999,
+  heroFallbackTitle: {
+    ...typography.h1,
+    fontFamily: 'NotoSerifBold',
+    fontStyle: 'italic',
+    color: '#e5e2e1',
+    fontSize: 30,
+    lineHeight: 36,
+    marginTop: 40,
   },
-  badgeText: {
-    ...typography.label,
-    color: '#2F1561',
+  heroFallbackGenre: {
+    ...typography.overline,
+    color: ACCENT,
     fontSize: 10,
   },
-  maturity: {
-    ...typography.label,
-    color: '#F4EEFF',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  title: {
-    ...typography.h1,
-    color: '#F5F1FF',
-    fontSize: 44,
-    lineHeight: 50,
-    marginBottom: 12,
-  },
-  genre: {
-    ...typography.label,
-    color: ACCENT,
-  },
-  sectionLabel: {
-    ...typography.label,
-    color: SOFT_TEXT,
-    marginHorizontal: 24,
-    marginTop: 42,
-    marginBottom: 16,
-  },
-  sectionHeader: {
-    marginTop: 42,
-    marginBottom: 16,
-    paddingHorizontal: 24,
+  heroBadge: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(206,189,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(206,189,255,0.24)',
   },
-  sectionAction: {
-    ...typography.label,
+  heroBadgeFallback: {
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
+  heroBadgeText: {
+    ...typography.labelSmall,
+    color: ACCENT,
+    fontSize: 9,
+    textTransform: 'none',
+  },
+  detailsSection: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+  },
+  titleText: {
+    ...typography.h1,
+    fontFamily: 'NotoSerifBold',
+    fontStyle: 'italic',
+    color: '#e5e2e1',
+    fontSize: 30,
+    lineHeight: 36,
+    marginBottom: 16,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 20,
+  },
+  genrePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(206, 189, 255, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(206, 189, 255, 0.18)',
+  },
+  genrePillText: {
+    ...typography.overline,
     color: ACCENT,
     fontSize: 9,
   },
-  synopsisBlock: {
-    marginHorizontal: 24,
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(206, 189, 255, 0.5)',
-    paddingLeft: 20,
+  tagPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  tagPillFree: {},
+  tagPillPremium: {
+    backgroundColor: 'rgba(255, 185, 95, 0.10)',
+    borderColor: 'rgba(255, 185, 95, 0.20)',
+  },
+  tagPillAccent: {
+    backgroundColor: 'rgba(206, 189, 255, 0.08)',
+    borderColor: 'rgba(206, 189, 255, 0.14)',
+  },
+  tagPillText: {
+    ...typography.overline,
+    color: SOFT_TEXT,
+    fontSize: 9,
+  },
+  tagPillTextPremium: {
+    color: DOURADO,
+  },
+  tagPillTextAccent: {
+    color: ACCENT,
   },
   synopsis: {
     ...typography.narrative,
-    color: '#F5F1FF',
-    fontStyle: 'italic',
+    fontFamily: 'NotoSerif',
+    color: '#e5e2e1',
+    fontSize: 17,
+    lineHeight: 28,
     opacity: 0.9,
+    marginBottom: 24,
   },
-  flowCard: {
-    marginHorizontal: 24,
-    marginTop: 32,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-    backgroundColor: PANEL_ALT,
-    borderRadius: 26,
-    padding: 20,
+  infoGrid: {
     flexDirection: 'row',
-    gap: 14,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    paddingVertical: 18,
+    marginBottom: 24,
   },
-  flowCopy: {
+  infoItem: {
     flex: 1,
+    gap: 4,
   },
-  flowTitle: {
-    ...typography.body,
-    color: '#F5F1FF',
-    fontWeight: '800',
-    marginBottom: 6,
-  },
-  flowText: {
-    ...typography.bodySmall,
+  infoLabel: {
+    ...typography.overline,
     color: SOFT_TEXT,
+    fontSize: 8,
   },
-  stageCard: {
-    marginHorizontal: 24,
+  infoValue: {
+    ...typography.body,
+    fontFamily: 'InterSemiBold',
+    color: '#e5e2e1',
+    fontSize: 13,
+  },
+  infoValuePremium: {
+    color: DOURADO,
+  },
+  premisePreview: {
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(18, 18, 18, 0.60)',
     borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-    backgroundColor: PANEL_ALT,
-    borderRadius: 26,
-    padding: 22,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+    borderColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 24,
   },
-  stageCopy: {
-    flex: 1,
-  },
-  stageEyebrow: {
-    ...typography.label,
+  premisePreviewLabel: {
+    ...typography.labelSmall,
     color: ACCENT,
     fontSize: 10,
-    marginBottom: 8,
+    textTransform: 'none',
+    marginBottom: 6,
   },
-  stageTitle: {
-    ...typography.h3,
-    color: '#F5F1FF',
-    marginBottom: 8,
-  },
-  stageText: {
-    ...typography.bodySmall,
+  premisePreviewText: {
+    ...typography.caption,
+    fontFamily: 'Inter',
     color: SOFT_TEXT,
+    fontSize: 11,
+    lineHeight: 17,
   },
-  helperText: {
-    ...typography.bodySmall,
+  characterSection: {
+    marginBottom: 24,
+  },
+  characterSectionLabel: {
+    ...typography.labelSmall,
     color: SOFT_TEXT,
-    marginHorizontal: 24,
-    marginTop: -8,
-    marginBottom: 16,
+    fontSize: 10,
+    textTransform: 'none',
+    marginBottom: 14,
   },
   charactersList: {
     gap: 14,
-    paddingHorizontal: 24,
   },
   characterCard: {
-    width: 112,
+    width: 100,
   },
   characterPortrait: {
     aspectRatio: 3 / 4,
-    backgroundColor: PANEL_ALT,
+    backgroundColor: '#121212',
     borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
+    borderColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
     overflow: 'hidden',
-    borderRadius: 24,
+    borderRadius: 18,
   },
   characterImage: {
     width: '100%',
@@ -494,48 +517,21 @@ const styles = StyleSheet.create({
   },
   characterInitial: {
     ...typography.h1,
+    fontFamily: 'NotoSerifBold',
     color: ACCENT,
-    opacity: 0.7,
+    opacity: 0.5,
   },
   characterName: {
-    ...typography.bodySmall,
-    color: '#F5F1FF',
-    fontWeight: '700',
+    ...typography.caption,
+    fontFamily: 'InterSemiBold',
+    color: '#e5e2e1',
+    fontSize: 11,
   },
   characterRole: {
-    ...typography.label,
+    ...typography.overline,
     color: SOFT_TEXT,
-    fontSize: 9,
+    fontSize: 8,
     marginTop: 2,
-  },
-  chapters: {
-    paddingHorizontal: 24,
-    gap: 18,
-  },
-  chapterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(206, 189, 255, 0.08)',
-    backgroundColor: 'rgba(255,255,255,0.015)',
-    borderRadius: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-  },
-  lockedChapter: {
-    opacity: 0.52,
-  },
-  chapterTitle: {
-    ...typography.narrative,
-    color: '#F5F1FF',
-    fontStyle: 'italic',
-  },
-  chapterMeta: {
-    ...typography.label,
-    color: SOFT_TEXT,
-    fontSize: 9,
-    marginTop: 5,
   },
   footer: {
     position: 'absolute',
@@ -544,26 +540,27 @@ const styles = StyleSheet.create({
     bottom: 0,
     padding: 18,
     paddingBottom: 28,
-    backgroundColor: 'rgba(10, 10, 12, 0.98)',
+    backgroundColor: 'rgba(10, 10, 10, 0.98)',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(206, 189, 255, 0.12)',
+    borderTopColor: 'rgba(255,255,255,0.08)',
   },
   startButton: {
-    height: 56,
+    height: 54,
     backgroundColor: ACCENT,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
-    borderRadius: 20,
+    borderRadius: 16,
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
   },
   startButtonText: {
     ...typography.label,
-    color: '#2F1561',
-  },
-  emptyText: {
-    ...typography.bodySmall,
-    color: SOFT_TEXT,
-    paddingHorizontal: 24,
+    fontFamily: 'InterBold',
+    color: '#381385',
+    fontSize: 13,
   },
 });

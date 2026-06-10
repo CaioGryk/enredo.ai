@@ -104,6 +104,7 @@ describe('NarrativeEngine - Context Window Safety Integration', () => {
   beforeEach(async () => {
     mockAiService = {
       isMockMode: jest.fn(),
+      isReadingProviderFailureEnabled: jest.fn().mockReturnValue(false),
       generateScene: jest.fn(),
       generateFirstScene: jest.fn(),
     } as any;

@@ -1,5 +1,6 @@
 import { getProviderForModel } from '../provider-helper';
 import { AiService } from '../ai.service';
+import { containsTooMuchEnglish } from '../ai.service';
 import { LLMProvider } from '../interfaces/llm-provider.interface';
 import {
   AI_MODEL_CATALOG,
@@ -154,11 +155,16 @@ describe('AI Model Catalog', () => {
     expect(AI_MODEL_CATALOG.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('has openrouter/free as default free model', () => {
+  it('has Groq as the default free model', () => {
     const freeModel = getDefaultFreeModel();
-    expect(freeModel.id).toBe('openrouter/free');
+    expect(freeModel.id).toBe('groq/free');
     expect(freeModel.tier).toBe('FREE');
     expect(freeModel.isDefaultFree).toBe(true);
+  });
+
+  it('keeps OpenRouter DeepSeek and Gemini as free fallback models', () => {
+    expect(getModelById('deepseek/deepseek-v4-flash:free')?.provider).toBe('openrouter');
+    expect(getModelById('gemini/free')?.provider).toBe('google');
   });
 
   it('has gpt-4.1-nano as default premium model', () => {
@@ -188,13 +194,13 @@ describe('AI Model Catalog', () => {
 
   it('only active models use implemented providers', () => {
     const activeModels = AI_MODEL_CATALOG.filter(m => m.isActive);
-    const implementedProviders = ['openai', 'anthropic', 'openrouter'];
+    const implementedProviders = ['openai', 'anthropic', 'openrouter', 'groq', 'google'];
     for (const model of activeModels) {
       expect(implementedProviders).toContain(model.provider);
     }
   });
 
-  it('inactive models include unimplemented providers', () => {
+  it('inactive models include unimplemented providers or disabled paid Google models', () => {
     const inactiveModels = AI_MODEL_CATALOG.filter(m => !m.isActive);
     const unimplementedProviders = ['google', 'together'];
     for (const model of inactiveModels) {
@@ -249,9 +255,19 @@ describe('Model Entitlement', () => {
 });
 
 describe('Provider Selection by Model', () => {
+  it('groq/free maps to groq provider', () => {
+    const provider = getProviderForModelId('groq/free');
+    expect(provider).toBe('groq');
+  });
+
   it('openrouter/free maps to openrouter provider', () => {
     const provider = getProviderForModelId('openrouter/free');
     expect(provider).toBe('openrouter');
+  });
+
+  it('gemini/free maps to google provider', () => {
+    const provider = getProviderForModelId('gemini/free');
+    expect(provider).toBe('google');
   });
 
   it('gpt-4.1-nano maps to openai provider', () => {
@@ -467,10 +483,10 @@ describe('AiService Mock Mode', () => {
     expect(enoughBalance.allowed).toBe(true);
   });
 
-  it('FREE default model is openrouter/free', () => {
+  it('FREE default model is Groq free model', () => {
     const { getDefaultFreeModel } = require('../model-catalog');
     const freeModel = getDefaultFreeModel();
-    expect(freeModel.id).toBe('openrouter/free');
+    expect(freeModel.id).toBe('groq/free');
     expect(freeModel.tier).toBe('FREE');
   });
 
@@ -481,7 +497,7 @@ describe('AiService Mock Mode', () => {
     expect(premiumModel.tier).toBe('PREMIUM');
   });
 
-  it('includes openThreads in the final prompt sent to the provider', async () => {
+  it('includes openThreads and Story Codex in the final prompt sent to the provider', async () => {
     const provider: LLMProvider = {
       name: 'mock',
       generate: jest.fn().mockResolvedValue({
@@ -520,11 +536,246 @@ describe('AiService Mock Mode', () => {
         importantChoices: 'Lia escolheu seguir o som no corredor.',
         openThreads: '[Cena 2] A porta selada ainda nao foi explicada (em aberto)',
       },
+      codexContext: [
+        '--- CODEX NARRATIVO ---',
+        'FATOS CANÔNICOS (NÃO CONTRADIZER):',
+        '  - Lia nunca abriu a porta selada.',
+        '--- FIM CODEX ---',
+      ].join('\n'),
     });
 
     const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
     expect(prompt).toContain('Trilhas em Aberto:');
     expect(prompt).toContain('A porta selada ainda nao foi explicada');
+    expect(prompt).toContain('--- CODEX NARRATIVO ---');
+    expect(prompt).toContain('Lia nunca abriu a porta selada.');
+  });
+
+  it('adds adult narrative policy instructions to continuation prompts', async () => {
+    const provider: LLMProvider = {
+      name: 'mock',
+      generate: jest.fn().mockResolvedValue({
+        content: JSON.stringify({
+          sceneText: 'Cena gerada',
+          choices: ['Continuar', 'Investigar'],
+          sceneMetadata: { emotion: 'intensa', pacing: 'media' },
+        }),
+        inputTokens: 20,
+        outputTokens: 10,
+        model: 'openrouter/free',
+      }),
+      estimateCost: jest.fn(),
+      getModelForPlan: jest.fn(),
+    };
+    const service = new AiService(
+      { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+      provider as any,
+      provider as any,
+      provider as any,
+      provider as any,
+    );
+
+    await service.generateScene({
+      storyTitle: 'A Porta Selada',
+      synopsis: 'Uma historia de misterio.',
+      genre: 'mistério',
+      userAction: 'aproximar-se de Lia',
+      userActionType: UserActionType.FREE_TEXT,
+      plan: SubscriptionType.FREE,
+      narrativePolicy: {
+        effectiveRomanceIntensity: 'ADULT_18',
+        adultContentAllowed: true,
+        mediaAdultContentAllowed: false,
+        userLikenessAdultContentAllowed: false,
+      },
+    });
+
+    const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+    expect(prompt).toContain('--- DIRETRIZES DE CONTEÚDO ---');
+    expect(prompt).toContain('Conteúdo adulto permitido: SIM.');
+    expect(prompt).toContain('Sem menores em qualquer contexto sexual.');
+    expect(prompt).toContain('Sem uso de imagem real, foto de perfil ou aparência do usuário em conteúdo sexual explícito.');
+  });
+
+  it('anchors continuation prompts to the selected playable character', async () => {
+    const provider: LLMProvider = {
+      name: 'mock',
+      generate: jest.fn().mockResolvedValue({
+        content: JSON.stringify({
+          sceneText: 'Cena gerada',
+          choices: ['Responder a Marco', 'Defender sua ideia'],
+          sceneMetadata: { emotion: 'conflituosa', pacing: 'media' },
+        }),
+        inputTokens: 20,
+        outputTokens: 10,
+        model: 'openrouter/free',
+      }),
+      estimateCost: jest.fn(),
+      getModelForPlan: jest.fn(),
+    };
+    const service = new AiService(
+      { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+      provider as any,
+      provider as any,
+      provider as any,
+      provider as any,
+    );
+
+    await service.generateScene({
+      storyTitle: 'Sabores em Conflito',
+      synopsis: 'Dois chefs rivais precisam salvar um restaurante.',
+      genre: 'romance gastronomico',
+      userAction: 'aceitar trabalhar com Marco',
+      userActionType: UserActionType.CHOICE,
+      plan: SubscriptionType.FREE,
+      characterContext: {
+        name: 'Luna',
+        roleLabel: 'A Guardia dos Sabores Selvagens',
+        startingSituation: 'Luna esta na cozinha e precisa defender sua visao criativa.',
+      },
+    });
+
+    const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+    expect(prompt).toContain('PERSONAGEM JOGAVEL SELECIONADO');
+    expect(prompt).toContain('Nome: Luna');
+    expect(prompt).toContain('ANCORA DE PROTAGONISTA');
+    expect(prompt).toContain('nunca escreva como se outro personagem fosse "voce"');
+    expect(prompt).toContain('Outros personagens devem ter agencia propria');
+  });
+
+  it('prints NPC personality traits in continuation prompts', async () => {
+    const provider: LLMProvider = {
+      name: 'mock',
+      generate: jest.fn().mockResolvedValue({
+        content: JSON.stringify({
+          sceneText: 'Cena gerada',
+          choices: ['Responder a Marco', 'Defender sua ideia'],
+          sceneMetadata: { emotion: 'conflituosa', pacing: 'media' },
+        }),
+        inputTokens: 20,
+        outputTokens: 10,
+        model: 'openrouter/free',
+      }),
+      estimateCost: jest.fn(),
+      getModelForPlan: jest.fn(),
+    };
+    const service = new AiService(
+      { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+      provider as any,
+      provider as any,
+      provider as any,
+      provider as any,
+    );
+
+    await service.generateScene({
+      storyTitle: 'Sabores em Conflito',
+      synopsis: 'Dois chefs rivais precisam salvar um restaurante.',
+      genre: 'romance gastronomico',
+      userAction: 'chamar a equipe para provar',
+      userActionType: UserActionType.CHOICE,
+      plan: SubscriptionType.FREE,
+      characters: [
+        {
+          name: 'Marco',
+          role: 'O Mestre dos Sonhos Açucarados',
+          description: 'Confeiteiro metódico.',
+          personality: 'Controlado, perfeccionista e provocador.',
+          motivation: 'Salvar sua reputação diante da crítica.',
+          relationshipToPlayer: 'Rival que admira Luna em segredo.',
+          conflictPotential: 'Cutuca Luna para esconder atração e medo.',
+        },
+      ],
+    });
+
+    const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+    expect(prompt).toContain('PERSONAGENS E PERSONALIDADES');
+    expect(prompt).toContain('Marco (O Mestre dos Sonhos Açucarados)');
+    expect(prompt).toContain('Personalidade: Controlado, perfeccionista e provocador.');
+    expect(prompt).toContain('Motivacao: Salvar sua reputação diante da crítica.');
+    expect(prompt).toContain('Relacao com protagonista/jogador: Rival que admira Luna em segredo.');
+    expect(prompt).toContain('Nao escreva NPCs como vozes genericas intercambiaveis.');
+  });
+
+  it('anchors first-scene prompts to the selected playable character', async () => {
+    const provider: LLMProvider = {
+      name: 'mock',
+      generate: jest.fn().mockResolvedValue({
+        content: JSON.stringify({
+          sceneText: 'Primeira cena gerada',
+          choices: ['Encarar Marco', 'Chamar Madame Dubois'],
+          sceneMetadata: { emotion: 'tensa', pacing: 'media' },
+        }),
+        inputTokens: 20,
+        outputTokens: 10,
+        model: 'openrouter/free',
+      }),
+      estimateCost: jest.fn(),
+      getModelForPlan: jest.fn(),
+    };
+    const service = new AiService(
+      { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+      provider as any,
+      provider as any,
+      provider as any,
+      provider as any,
+    );
+
+    await service.generateFirstScene({
+      title: 'Sabores em Conflito',
+      synopsis: 'Dois chefs rivais precisam salvar um restaurante.',
+      genre: 'romance gastronomico',
+      plan: SubscriptionType.FREE,
+      characterContext: {
+        name: 'Luna',
+        roleLabel: 'A Guardia dos Sabores Selvagens',
+        startingSituation: 'Luna esta na cozinha quando o desafio e anunciado.',
+      },
+    });
+
+    const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+    expect(prompt).toContain('PERSONAGEM JOGAVEL SELECIONADO');
+    expect(prompt).toContain('Nome: Luna');
+    expect(prompt).toContain('ANCORA DE PROTAGONISTA');
+    expect(prompt).toContain('Nunca comece do ponto de vista de outro personagem');
+    expect(prompt).toContain('Outros personagens devem aparecer vivos');
+  });
+
+  it('adds safe default narrative policy instructions to first-scene prompts when no policy is provided', async () => {
+    const provider: LLMProvider = {
+      name: 'mock',
+      generate: jest.fn().mockResolvedValue({
+        content: JSON.stringify({
+          sceneText: 'Primeira cena gerada',
+          choices: ['Continuar', 'Observar'],
+          sceneMetadata: { emotion: 'curiosa', pacing: 'media' },
+        }),
+        inputTokens: 20,
+        outputTokens: 10,
+        model: 'openrouter/free',
+      }),
+      estimateCost: jest.fn(),
+      getModelForPlan: jest.fn(),
+    };
+    const service = new AiService(
+      { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+      provider as any,
+      provider as any,
+      provider as any,
+      provider as any,
+    );
+
+    await service.generateFirstScene({
+      title: 'A Porta Selada',
+      synopsis: 'Uma historia de misterio.',
+      genre: 'mistério',
+      plan: SubscriptionType.FREE,
+    });
+
+    const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+    expect(prompt).toContain('--- DIRETRIZES DE CONTEÚDO ---');
+    expect(prompt).toContain('Romance permitido: apenas sugestivo e emocional.');
+    expect(prompt).toContain('Conteúdo adulto explícito: NÃO permitido.');
+    expect(prompt).toContain('Use fade-to-black se necessário.');
   });
 
   describe('FREE_LLM_ONLY Mode', () => {
@@ -580,7 +831,7 @@ describe('AiService Mock Mode', () => {
        ).toThrow('Paid models are disabled. FREE_LLM_ONLY=true restricts to free models only.');
     });
 
-    it('Premium user receives openrouter/free as defaultModelId when FREE_LLM_ONLY=true', () => {
+    it('Premium user receives Groq free defaultModelId when FREE_LLM_ONLY=true', () => {
       const { AiService } = require('../ai.service');
       const mockConfig = {
         get: (key: string) => {
@@ -599,7 +850,152 @@ describe('AiService Mock Mode', () => {
       );
 
       const defaultId = service.getDefaultModelIdForPlan('PREMIUM' as any);
-      expect(defaultId).toBe('openrouter/free');
+      expect(defaultId).toBe('groq/free');
+    });
+
+    it('falls back from Groq to OpenRouter DeepSeek for free text generation', async () => {
+      const { AiService } = require('../ai.service');
+      const mockConfig = {
+        get: (key: string) => {
+          if (key === 'FREE_LLM_ONLY') return true;
+          if (key === 'LLM_MOCK_MODE') return false;
+          return undefined;
+        },
+      };
+      const mockOpenAi = { name: 'openai', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'gpt-4.1-nano' };
+      const mockAnthropic = { name: 'anthropic', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'claude-3-5-sonnet-20241022' };
+      const mockOpenRouter = {
+        name: 'openrouter',
+        generate: jest.fn().mockResolvedValue({
+          content: 'DeepSeek fallback ok',
+          inputTokens: 10,
+          outputTokens: 5,
+          model: 'deepseek/deepseek-v4-flash:free',
+        }),
+        estimateCost: () => 0,
+        getModelForPlan: () => 'openrouter/free',
+      };
+      const mockMock = { name: 'mock', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'openrouter/free' };
+      const mockGroq = {
+        name: 'groq',
+        generate: jest.fn().mockRejectedValue(new Error('Groq temporary quota')),
+        estimateCost: () => 0,
+        getModelForPlan: () => 'groq/free',
+      };
+      const mockGoogle = { name: 'google', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'gemini/free' };
+      const service = new AiService(
+        mockConfig as any,
+        mockOpenAi as any,
+        mockAnthropic as any,
+        mockOpenRouter as any,
+        mockMock as any,
+        mockGroq as any,
+        mockGoogle as any,
+      );
+
+      const result = await service.testModel({ plan: 'FREE' as any });
+
+      expect(mockGroq.generate).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ model: 'groq/free' }));
+      expect(mockOpenRouter.generate).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ model: 'deepseek/deepseek-v4-flash:free' }));
+      expect(mockGoogle.generate).not.toHaveBeenCalled();
+      expect(result.modelId).toBe('deepseek/deepseek-v4-flash:free');
+    });
+
+    it('falls back from Groq and OpenRouter DeepSeek to Gemini for free text generation', async () => {
+      const { AiService } = require('../ai.service');
+      const mockConfig = {
+        get: (key: string) => {
+          if (key === 'FREE_LLM_ONLY') return true;
+          if (key === 'LLM_MOCK_MODE') return false;
+          return undefined;
+        },
+      };
+      const mockOpenAi = { name: 'openai', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'gpt-4.1-nano' };
+      const mockAnthropic = { name: 'anthropic', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'claude-3-5-sonnet-20241022' };
+      const mockOpenRouter = {
+        name: 'openrouter',
+        generate: jest.fn().mockRejectedValue(new Error('OpenRouter quota')),
+        estimateCost: () => 0,
+        getModelForPlan: () => 'openrouter/free',
+      };
+      const mockMock = { name: 'mock', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'openrouter/free' };
+      const mockGroq = {
+        name: 'groq',
+        generate: jest.fn().mockRejectedValue(new Error('Groq temporary quota')),
+        estimateCost: () => 0,
+        getModelForPlan: () => 'groq/free',
+      };
+      const mockGoogle = {
+        name: 'google',
+        generate: jest.fn().mockResolvedValue({
+          content: 'Gemini fallback ok',
+          inputTokens: 10,
+          outputTokens: 5,
+          model: 'gemini-2.5-flash-lite',
+        }),
+        estimateCost: () => 0,
+        getModelForPlan: () => 'gemini/free',
+      };
+      const service = new AiService(
+        mockConfig as any,
+        mockOpenAi as any,
+        mockAnthropic as any,
+        mockOpenRouter as any,
+        mockMock as any,
+        mockGroq as any,
+        mockGoogle as any,
+      );
+
+      const result = await service.testModel({ plan: 'FREE' as any });
+
+      expect(mockGroq.generate).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ model: 'groq/free' }));
+      expect(mockOpenRouter.generate).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ model: 'deepseek/deepseek-v4-flash:free' }));
+      expect(mockGoogle.generate).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ model: 'gemini/free' }));
+      expect(result.provider).toBe('google');
+      expect(result.modelId).toBe('gemini-2.5-flash-lite');
+    });
+
+    it('respects explicit openrouter/free before trying the default Groq fallback', async () => {
+      const { AiService } = require('../ai.service');
+      const mockConfig = {
+        get: (key: string) => {
+          if (key === 'FREE_LLM_ONLY') return true;
+          if (key === 'LLM_MOCK_MODE') return false;
+          return undefined;
+        },
+      };
+      const mockOpenAi = { name: 'openai', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'gpt-4.1-nano' };
+      const mockAnthropic = { name: 'anthropic', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'claude-3-5-sonnet-20241022' };
+      const mockOpenRouter = {
+        name: 'openrouter',
+        generate: jest.fn().mockResolvedValue({
+          content: 'OpenRouter explicit ok',
+          inputTokens: 10,
+          outputTokens: 5,
+          model: 'openrouter/free',
+        }),
+        estimateCost: () => 0,
+        getModelForPlan: () => 'openrouter/free',
+      };
+      const mockMock = { name: 'mock', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'openrouter/free' };
+      const mockGroq = { name: 'groq', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'groq/free' };
+      const mockGoogle = { name: 'google', generate: jest.fn(), estimateCost: () => 0, getModelForPlan: () => 'gemini/free' };
+      const service = new AiService(
+        mockConfig as any,
+        mockOpenAi as any,
+        mockAnthropic as any,
+        mockOpenRouter as any,
+        mockMock as any,
+        mockGroq as any,
+        mockGoogle as any,
+      );
+
+      const result = await service.testModel({ plan: 'FREE' as any, modelId: 'openrouter/free' });
+
+      expect(mockOpenRouter.generate).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ model: 'openrouter/free' }));
+      expect(mockGroq.generate).not.toHaveBeenCalled();
+      expect(mockGoogle.generate).not.toHaveBeenCalled();
+      expect(result.provider).toBe('openrouter');
     });
 
     it('OpenRouter missing API key throws clear configuration error', async () => {
@@ -613,7 +1009,7 @@ describe('AiService Mock Mode', () => {
       await expect(provider.generate('test', { model: 'openrouter/free' })).rejects.toThrow('OPENROUTER_API_KEY is not configured');
     });
 
-    it('AiService returns MockProvider for openrouter/free when FREE_LLM_ONLY=true, LLM_MOCK_MODE=false, OPENROUTER_API_KEY missing', () => {
+    it('AiService resolves OpenRouter provider even when key is missing so fallback can continue', () => {
       const { AiService } = require('../ai.service');
       const mockConfig = {
         get: (key: string) => {
@@ -633,8 +1029,7 @@ describe('AiService Mock Mode', () => {
         mockMock as any,
       );
 
-      // Should now throw ForbiddenException instead of silently returning mock
-      expect(() => service.getProviderForModelId('openrouter/free')).toThrow('OPENROUTER_API_KEY is not configured');
+      expect(service.getProviderForModelId('openrouter/free')).toBe(mockOpenRouter);
     });
 
     describe('OpenRouter FREE_LLM_ONLY Enforcement', () => {
@@ -755,6 +1150,1243 @@ describe('AiService Mock Mode', () => {
       catalog.forEach((model: any) => {
         expect(model.costMode).toBe('FREE');
       });
+    });
+  });
+
+  describe('JSON extraction', () => {
+    it('extracts array from plain JSON content', () => {
+      const { AiService } = require('../ai.service');
+      const service = new AiService(
+        { get: () => false } as any,
+        {} as any, {} as any, {} as any, {} as any,
+      );
+      const result = (service as any).extractJsonArray('[{"a":1}]', 'test');
+      expect(result).toBe('[{"a":1}]');
+    });
+
+    it('extracts array from fenced markdown code block', () => {
+      const { AiService } = require('../ai.service');
+      const service = new AiService(
+        { get: () => false } as any,
+        {} as any, {} as any, {} as any, {} as any,
+      );
+      const result = (service as any).extractJsonArray('```json\n[{"a":1}]\n```', 'test');
+      expect(result).toBe('[{"a":1}]');
+    });
+
+    it('extracts array with leading prose', () => {
+      const { AiService } = require('../ai.service');
+      const service = new AiService(
+        { get: () => false } as any,
+        {} as any, {} as any, {} as any, {} as any,
+      );
+      const result = (service as any).extractJsonArray('Here is your data:\n[{"a":1}]', 'test');
+      expect(result).toBe('[{"a":1}]');
+    });
+
+    it('throws when no array found', () => {
+      const { AiService } = require('../ai.service');
+      const service = new AiService(
+        { get: () => false } as any,
+        {} as any, {} as any, {} as any, {} as any,
+      );
+      expect(() => (service as any).extractJsonArray('no array here', 'test')).toThrow('No JSON array');
+    });
+  });
+
+  describe('tryGenerateJson retry', () => {
+    const mockProvider = () => ({
+      name: 'mock',
+      generate: jest.fn(),
+      estimateCost: () => 0,
+      getModelForPlan: () => 'groq/free',
+    });
+
+    it('succeeds on first attempt with valid JSON', async () => {
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+      provider.generate.mockResolvedValue({
+        content: '[{"title":"T1","synopsis":"S1","basePrompt":"B1"}]',
+        inputTokens: 10, outputTokens: 5, model: 'groq/free',
+      });
+      const service = new AiService(
+        { get: (k: string) => k === 'LLM_MOCK_MODE' ? false : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+      const result = await (service as any).tryGenerateJson('prompt', 'groq/free', 'test',
+        (p: any) => Array.isArray(p) && p.every((x: any) => x.title && x.synopsis && x.basePrompt),
+      );
+      expect(result).toEqual([{ title: 'T1', synopsis: 'S1', basePrompt: 'B1' }]);
+      expect(provider.generate).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries on malformed first response and succeeds on second', async () => {
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+      provider.generate
+        .mockResolvedValueOnce({ content: 'not json at all', inputTokens: 5, outputTokens: 2, model: 'groq/free' })
+        .mockResolvedValueOnce({ content: '[{"title":"T2","synopsis":"S2","basePrompt":"B2"}]', inputTokens: 10, outputTokens: 5, model: 'groq/free' });
+      const service = new AiService(
+        { get: (k: string) => k === 'LLM_MOCK_MODE' ? false : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+      const result = await (service as any).tryGenerateJson('prompt', 'groq/free', 'test',
+        (p: any) => Array.isArray(p) && p.every((x: any) => x.title && x.synopsis && x.basePrompt),
+      );
+      expect(result).toEqual([{ title: 'T2', synopsis: 'S2', basePrompt: 'B2' }]);
+      expect(provider.generate).toHaveBeenCalledTimes(2);
+    });
+
+    it('throws BadGateway after both attempts fail', async () => {
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+      provider.generate.mockResolvedValue({ content: 'still not json', inputTokens: 5, outputTokens: 2, model: 'groq/free' });
+      const service = new AiService(
+        { get: (k: string) => k === 'LLM_MOCK_MODE' ? false : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+      await expect(
+        (service as any).tryGenerateJson('prompt', 'groq/free', 'test',
+          (p: any) => Array.isArray(p) && p.length > 0,
+        )
+      ).rejects.toThrow('invalid JSON after 2 attempts');
+      expect(provider.generate).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('character generation JSON repair', () => {
+    const mockProvider = () => ({
+      name: 'mock',
+      generate: jest.fn(),
+      estimateCost: () => 0,
+      getModelForPlan: () => 'groq/free',
+    });
+
+    const validChar = (name: string) => ({
+      name,
+      roleLabel: 'O herói',
+      narrativeFunction: 'HERO',
+      description: 'A brave soul',
+      personality: 'Bold',
+      motivation: 'Justice',
+      secret: 'Hidden past',
+      relationshipToPlayer: 'Ally',
+      initialGoal: 'Save the world',
+      startingSituation: 'On a hilltop at dawn',
+      conflictPotential: 'Fear of failure',
+      visualPrompt: 'Cinematic portrait of ' + name,
+    });
+
+    it('repairs malformed character JSON and succeeds with valid response', () => {
+      // Test via tryGenerateJson directly (bounded retry)
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+      const chars = [validChar('Aria'), validChar('Kael'), validChar('Mira')];
+      provider.generate
+        .mockResolvedValueOnce({ content: 'Sure, here are your characters:\n```json\n' + JSON.stringify(chars).substring(0, 200) + '...\n```', inputTokens: 100, outputTokens: 200, model: 'groq/free' })
+        .mockResolvedValueOnce({ content: JSON.stringify(chars), inputTokens: 100, outputTokens: 150, model: 'groq/free' });
+      const service = new AiService(
+        { get: (k: string) => k === 'LLM_MOCK_MODE' ? false : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+      return (service as any).tryGenerateJson('prompt', 'groq/free', 'characters',
+        (p: any) => Array.isArray(p) && p.length === 3 && p.every((c: any) => c.name && c.roleLabel && c.narrativeFunction && c.description && c.personality && c.startingSituation),
+      ).then((result: any) => {
+        expect(result).toHaveLength(3);
+        expect(provider.generate).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it('throws BadGateway after both attempts fail for characters', async () => {
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+      provider.generate.mockResolvedValue({ content: '{broken}', inputTokens: 5, outputTokens: 2, model: 'groq/free' });
+      const service = new AiService(
+        { get: (k: string) => k === 'LLM_MOCK_MODE' ? false : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+      await expect(
+        (service as any).tryGenerateJson('prompt', 'groq/free', 'characters', () => false)
+      ).rejects.toThrow('invalid JSON after 2 attempts');
+      expect(provider.generate).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('PT-BR language guard', () => {
+    function mockProvider(): any {
+      return {
+        name: 'groq',
+        generate: jest.fn(),
+        estimateCost: jest.fn().mockReturnValue(0),
+        getModelForPlan: jest.fn().mockReturnValue('groq/free'),
+        isAvailable: jest.fn().mockReturnValue(true),
+      };
+    }
+
+    const mockConfigService = {
+      get: (k: string) => k === 'LLM_MOCK_MODE' ? false : undefined,
+    };
+
+    const englishStoryDraft = {
+      title: 'The Last Shadow',
+      synopsis: 'A detective investigates a mysterious disappearance in the city. The clues lead to an ancient conspiracy.',
+      genres: ['mystery'],
+      openingScene: 'The rain fell hard against the window as Detective Morgan stared at the crime scene.',
+      basePrompt: 'This is a noir detective story set in a modern city.',
+      tone: 'dark and gritty',
+      styleGuide: 'Use short sentences and vivid descriptions.',
+      worldRules: 'Magic does not exist in this world.',
+      language: 'en',
+      maturityRating: '16+',
+    };
+
+    const englishPremises = [
+      {
+        title: 'The Neon Path',
+        synopsis: 'A young hacker discovers a hidden network of digital ghosts operating in the abandoned metro tunnels.',
+        basePrompt: 'Cyberpunk thriller about underground technology.',
+        openingScene: 'The monitor flickered as data streams cascaded across the screen.',
+        tone: 'tense',
+      },
+    ];
+
+    const englishCharacters = [
+      {
+        name: 'Sarah',
+        roleLabel: 'The Hacker',
+        narrativeFunction: 'HERO',
+        description: 'A skilled programmer who left the corporate world after a personal tragedy.',
+        personality: 'Introverted but determined, she trusts her code more than people.',
+        motivation: 'To expose the truth about the digital underworld.',
+        secret: 'She knows the CEO was involved.',
+        relationshipToPlayer: 'She needs the player to crack the final firewall.',
+        initialGoal: 'Decrypt the master server logs.',
+        startingSituation: 'Sarah sits in her dark apartment, fingers hovering over the keyboard as encrypted messages flood her inbox.',
+        conflictPotential: 'The corporation will stop at nothing to protect their secrets.',
+        visualPrompt: 'A young woman in a dark room, neon lights reflecting on her glasses.',
+      },
+    ];
+
+    it('premises: rejects English content on first attempt, succeeds on retry with pt-BR', async () => {
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+
+      const ptBR = [
+        { title: 'O Caminho do Silêncio', synopsis: 'Um jovem hacker descobre uma rede oculta de inteligências digitais nos túneis do metrô abandonado.', basePrompt: 'Thriller cyberpunk sobre tecnologia esquecida.', openingScene: 'O monitor piscou enquanto dados criptografados surgiam na tela.', tone: 'tenso' },
+      ];
+
+      provider.generate
+        .mockResolvedValueOnce({ content: JSON.stringify(englishPremises), inputTokens: 100, outputTokens: 200, model: 'groq/free' })
+        .mockResolvedValueOnce({ content: JSON.stringify(ptBR), inputTokens: 100, outputTokens: 200, model: 'groq/free' });
+
+      const service = new AiService(
+        mockConfigService as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+      const result = await (service as any).tryGenerateJson('prompt', 'groq/free', 'premises',
+        (p: any) => {
+          if (!Array.isArray(p) || p.length < 1) return false;
+          if (!p.every((x: any) => x.title && x.synopsis && x.basePrompt)) return false;
+          return !containsTooMuchEnglish(...p.map((x: any) =>
+            `${x.title} ${x.synopsis} ${x.basePrompt} ${x.openingScene || ''} ${x.tone || ''}`,
+          ));
+        },
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].title).toBe('O Caminho do Silêncio');
+      expect(provider.generate).toHaveBeenCalledTimes(2);
+    });
+
+    it('characters: rejects English content on first attempt, succeeds on retry with pt-BR', async () => {
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+
+      const ptBR = [
+        { name: 'Sara', roleLabel: 'A Programadora', narrativeFunction: 'HERO', description: 'Uma desenvolvedora que deixou o mundo corporativo após uma tragédia pessoal.', personality: 'Introvertida mas determinada, confia mais no seu código do que nas pessoas.', motivation: 'Expor a verdade sobre o submundo digital.', startingSituation: 'Sara está em seu apartamento escuro, os dedos pairando sobre o teclado enquanto mensagens surgem na tela.' },
+      ];
+
+      provider.generate
+        .mockResolvedValueOnce({ content: JSON.stringify(englishCharacters), inputTokens: 100, outputTokens: 200, model: 'groq/free' })
+        .mockResolvedValueOnce({ content: JSON.stringify(ptBR), inputTokens: 100, outputTokens: 200, model: 'groq/free' });
+
+      const service = new AiService(
+        mockConfigService as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+      const result = await (service as any).tryGenerateJson('prompt', 'groq/free', 'characters',
+        (c: any) => {
+          if (!Array.isArray(c) || c.length < 1) return false;
+          if (!c.every((x: any) => x.name && x.roleLabel && x.narrativeFunction && x.description && x.personality && x.startingSituation)) return false;
+          return !containsTooMuchEnglish(...c.map((x: any) =>
+            `${x.roleLabel} ${x.description} ${x.personality} ${x.motivation || ''} ${x.secret || ''} ${x.relationshipToPlayer || ''} ${x.initialGoal || ''} ${x.startingSituation || ''} ${x.conflictPotential || ''} ${x.visualPrompt || ''}`,
+          ));
+        },
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('Sara');
+      expect(provider.generate).toHaveBeenCalledTimes(2);
+    });
+
+    it('story draft: rejects English content', async () => {
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+      provider.generate.mockResolvedValue({ content: JSON.stringify(englishStoryDraft), inputTokens: 100, outputTokens: 200, model: 'groq/free' });
+
+      const service = new AiService(
+        mockConfigService as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const parsed = (service as any).parseAndValidateStoryDraft(JSON.stringify(englishStoryDraft));
+      expect(parsed).toBeNull();
+    });
+
+    it('story draft: accepts pt-BR content', async () => {
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+
+      const ptBR = {
+        title: 'A Última Sombra',
+        synopsis: 'Uma detetive investiga o desaparecimento misterioso na cidade. As pistas levam a uma conspiração milenar.',
+        genres: ['mistério'],
+        openingScene: 'A chuva caía forte contra a janela enquanto a Detetive Moraes analisava a cena do crime.',
+        basePrompt: 'Uma história de detetive noir ambientada em São Paulo.',
+        tone: 'sombrio e realista',
+        styleGuide: 'Use frases curtas e descrições vívidas.',
+        worldRules: 'Não existe magia neste mundo.',
+        language: 'pt-BR',
+        maturityRating: '16+',
+      };
+
+      const service = new AiService(
+        mockConfigService as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const parsed = (service as any).parseAndValidateStoryDraft(JSON.stringify(ptBR));
+      expect(parsed).toBeTruthy();
+      expect(parsed.title).toBe('A Última Sombra');
+    });
+
+    it('story draft: rejects pt-BR content that is missing narrative contract fields', async () => {
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+
+      const incompleteDraft = {
+        title: 'A Última Sombra',
+        synopsis: 'Uma detetive investiga um desaparecimento misterioso que muda a cidade.',
+        genres: ['mistério'],
+        openingScene: 'A chuva caía forte contra a janela enquanto a Detetive Moraes analisava a cena do crime.',
+        language: 'pt-BR',
+        maturityRating: '16+',
+      };
+
+      const service = new AiService(
+        mockConfigService as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const parsed = (service as any).parseAndValidateStoryDraft(JSON.stringify(incompleteDraft));
+      expect(parsed).toBeNull();
+    });
+
+    it('story draft: retries English first response and returns valid pt-BR draft', async () => {
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+
+      const ptBR = {
+        title: 'A Última Sombra',
+        synopsis: 'Uma detetive investiga o desaparecimento misterioso na cidade. As pistas levam a uma conspiração milenar.',
+        genres: ['mistério'],
+        openingScene: 'A chuva caía forte contra a janela enquanto a Detetive Moraes analisava a cena do crime. No centro da sala, um relógio parado indicava uma hora impossível e uma fotografia molhada mostrava alguém que não deveria estar vivo.',
+        basePrompt: 'Continue como uma história interativa de investigação sombria, preservando pistas, escolhas abertas e tensão psicológica.',
+        tone: 'sombrio e realista',
+        styleGuide: 'Use frases curtas, descrições sensoriais e escolhas dramáticas ao fim de cada cena.',
+        worldRules: 'Não existe magia neste mundo. Toda pista deve ter origem humana, tecnológica ou psicológica.',
+        language: 'pt-BR',
+        maturityRating: '16+',
+      };
+
+      provider.generate
+        .mockResolvedValueOnce({ content: JSON.stringify(englishStoryDraft), inputTokens: 100, outputTokens: 200, model: 'groq/free' })
+        .mockResolvedValueOnce({ content: JSON.stringify(ptBR), inputTokens: 100, outputTokens: 200, model: 'groq/free' });
+
+      const service = new AiService(
+        mockConfigService as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const result = await service.generateStoryDraft({
+        keywords: ['detetive', 'sombra'],
+        modelId: 'groq/free',
+      });
+
+      expect(result.title).toBe('A Última Sombra');
+      expect(result.basePrompt).toContain('história interativa');
+      expect(provider.generate).toHaveBeenCalledTimes(2);
+    });
+
+    it('premises: throws BadGateway after both attempts return English', async () => {
+      const { AiService } = require('../ai.service');
+      const provider = mockProvider();
+      provider.generate.mockResolvedValue({ content: JSON.stringify(englishPremises), inputTokens: 100, outputTokens: 200, model: 'groq/free' });
+
+      const service = new AiService(
+        mockConfigService as any,
+        provider as any, provider as any, provider as any, provider as any, provider as any,
+      );
+      await expect(
+        (service as any).tryGenerateJson('prompt', 'groq/free', 'premises',
+          (p: any) => {
+            if (!Array.isArray(p) || p.length < 1) return false;
+            if (!p.every((x: any) => x.title && x.synopsis && x.basePrompt)) return false;
+            return !containsTooMuchEnglish(...p.map((x: any) =>
+              `${x.title} ${x.synopsis} ${x.basePrompt} ${x.openingScene || ''} ${x.tone || ''}`,
+            ));
+          },
+        )
+      ).rejects.toThrow('invalid JSON after 2 attempts');
+      expect(provider.generate).toHaveBeenCalledTimes(2);
+    });
+
+    it('admin catalog premises: tries next provider when first provider returns invalid JSON twice', async () => {
+      const { AiService } = require('../ai.service');
+      const groq = mockProvider();
+      groq.name = 'groq';
+      const openrouter = mockProvider();
+      openrouter.name = 'openrouter';
+      const google = mockProvider();
+      google.name = 'google';
+
+      groq.generate.mockResolvedValue({ content: 'not json', inputTokens: 10, outputTokens: 5, model: 'groq/free' });
+      openrouter.generate.mockResolvedValueOnce({
+        content: JSON.stringify([
+          { title: 'A Carta Selada', synopsis: 'Uma herdeira encontra uma carta que muda sua família.', basePrompt: 'Continue como romance de mistério.' },
+        ]),
+        inputTokens: 10,
+        outputTokens: 20,
+        model: 'deepseek/deepseek-v4-flash:free',
+      });
+
+      const service = new AiService(
+        {
+          get: (k: string) => {
+            if (k === 'LLM_MOCK_MODE') return false;
+            if (k === 'ADMIN_CATALOG_TEXT_PROVIDER_CHAIN') return 'groq,openrouter,google';
+            return undefined;
+          },
+        } as any,
+        {} as any,
+        {} as any,
+        openrouter as any,
+        {} as any,
+        groq as any,
+        google as any,
+      );
+
+      const result = await (service as any).tryGenerateJson('prompt', 'groq/free', 'premises',
+        (p: any) => Array.isArray(p) && p.length >= 1 && p.every((x: any) => x.title && x.synopsis && x.basePrompt),
+        'ADMIN_CATALOG',
+      );
+
+      expect(result[0].title).toBe('A Carta Selada');
+      expect(groq.generate).toHaveBeenCalledTimes(2);
+      expect(openrouter.generate).toHaveBeenCalledTimes(1);
+      expect(google.generate).not.toHaveBeenCalled();
+    });
+
+    it('user story premises: preserves bounded two-attempt behavior without provider hopping', async () => {
+      const { AiService } = require('../ai.service');
+      const groq = mockProvider();
+      groq.name = 'groq';
+      const openrouter = mockProvider();
+      openrouter.name = 'openrouter';
+
+      groq.generate.mockResolvedValue({ content: 'not json', inputTokens: 10, outputTokens: 5, model: 'groq/free' });
+
+      const service = new AiService(
+        {
+          get: (k: string) => {
+            if (k === 'LLM_MOCK_MODE') return false;
+            if (k === 'USER_STORY_TEXT_PROVIDER_CHAIN') return 'groq,openrouter';
+            return undefined;
+          },
+        } as any,
+        {} as any,
+        {} as any,
+        openrouter as any,
+        {} as any,
+        groq as any,
+        {} as any,
+      );
+
+      await expect(
+        (service as any).tryGenerateJson('prompt', 'groq/free', 'premises',
+          (p: any) => Array.isArray(p) && p.length >= 1,
+          'USER_STORY',
+        )
+      ).rejects.toThrow('invalid JSON after 2 attempts');
+      expect(groq.generate).toHaveBeenCalledTimes(2);
+      expect(openrouter.generate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Provider exhaustion skip', () => {
+    function mockProviderWithName(name: string): any {
+      return {
+        name,
+        generate: jest.fn(),
+        estimateCost: jest.fn().mockReturnValue(0),
+        getModelForPlan: jest.fn().mockReturnValue('groq/free'),
+        isAvailable: jest.fn().mockReturnValue(true),
+      };
+    }
+
+    const mockConfigService = {
+      get: jest.fn().mockReturnValue(undefined),
+    };
+
+    it('skips exhausted provider on the second call in the same service instance', async () => {
+      const { AiService } = require('../ai.service');
+      const groq = mockProviderWithName('groq');
+      const openrouter = mockProviderWithName('openrouter');
+      const gemini = mockProviderWithName('gemini');
+
+      // First call: groq returns quota error, openrouter succeeds
+      groq.generate
+        .mockRejectedValueOnce(new Error('Groq API error: status 429'))
+        .mockResolvedValueOnce({ content: 'ok', inputTokens: 10, outputTokens: 5, model: 'groq/free' });
+      openrouter.generate.mockResolvedValue({ content: 'ok', inputTokens: 10, outputTokens: 5, model: 'deepseek/deepseek-v4-flash:free' });
+
+      const service = new AiService(
+        mockConfigService as any,
+        openrouter as any, openrouter as any, openrouter as any,
+        { generate: jest.fn(), name: 'mock' } as any,
+        groq as any, gemini as any,
+      );
+
+      // First call — groq fails with 429 (exhausted), openrouter succeeds
+      (service as any).generateWithProviderFallback('test', { model: 'groq/free', maxTokens: 500, temperature: 0.7 });
+
+      // Wait for the first call to resolve
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Second call — groq should be skipped
+      groq.generate.mockClear();
+
+      (service as any).generateWithProviderFallback('test2', { model: 'groq/free', maxTokens: 500, temperature: 0.7 });
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Groq was NOT called again (skipped as exhausted)
+      expect(groq.generate).not.toHaveBeenCalled();
+    });
+
+    it('context-specific ADMIN_CATALOG_TEXT_PROVIDER_CHAIN overrides global chain', async () => {
+      const { AiService } = require('../ai.service');
+      const gemini = mockProviderWithName('gemini');
+      gemini.generate.mockResolvedValue({ content: 'ok', inputTokens: 10, outputTokens: 5, model: 'gemini/free' });
+
+      const chainConfigService = {
+        get: (key: string) => {
+          if (key === 'ADMIN_CATALOG_TEXT_PROVIDER_CHAIN') return 'gemini';
+          if (key === 'FREE_TEXT_PROVIDER_CHAIN') return 'groq,openrouter';
+          return undefined;
+        },
+      };
+
+      // Pass gemini as googleTextProvider (position 6)
+      const service = new AiService(
+        chainConfigService as any,
+        undefined as any, undefined as any, undefined as any,  // openai, anthropic, openrouter all undefined
+        { generate: jest.fn(), name: 'mock' } as any,          // mock
+        undefined, gemini as any,                               // groq=undefined, googleText=gemini
+      );
+
+      await (service as any).generateWithProviderFallback('test', { model: 'groq/free', maxTokens: 500, temperature: 0.7 }, 'ADMIN_CATALOG' as any);
+      expect(gemini.generate).toHaveBeenCalled();
+    });
+
+    it('USER_STORY context still respects USER_STORY_TEXT_PROVIDER_CHAIN', async () => {
+      const { AiService } = require('../ai.service');
+      const openrouter = mockProviderWithName('openrouter');
+      openrouter.generate.mockResolvedValue({ content: 'ok', inputTokens: 10, outputTokens: 5, model: 'deepseek/deepseek-v4-flash:free' });
+
+      const chainConfigService = {
+        get: (key: string) => {
+          const chains: Record<string, string> = {
+            'FREE_TEXT_PROVIDER_CHAIN': 'groq',
+            'USER_STORY_TEXT_PROVIDER_CHAIN': 'openrouter',
+          };
+          return chains[key];
+        },
+      };
+
+      const service = new AiService(
+        chainConfigService as any,
+        undefined as any, undefined as any, openrouter as any,
+        { generate: jest.fn(), name: 'mock' } as any,
+        undefined, undefined as any,
+      );
+
+      (service as any).generateWithProviderFallback('test', { model: 'groq/free', maxTokens: 500, temperature: 0.7 }, 'USER_STORY');
+      await new Promise((r) => setTimeout(r, 50));
+
+      // openrouter was called (USER_STORY chain)
+      expect(openrouter.generate).toHaveBeenCalled();
+    });
+  });
+
+  describe('Scene Generation Prompt Guidance (Step 98d)', () => {
+    function mockPromptProvider(): LLMProvider {
+      return {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({
+            sceneText: 'Cena gerada com personagem ativo.',
+            choices: ['Encará-lo em silêncio', 'Perguntar o que ele esconde'],
+            sceneMetadata: { emotion: 'tensa', pacing: 'media' },
+          }),
+          inputTokens: 20,
+          outputTokens: 10,
+          model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(),
+        getModelForPlan: jest.fn(),
+      };
+    }
+
+    it('continuation prompt includes character-reaction guidance', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateScene({
+        storyTitle: 'A Porta Selada',
+        synopsis: 'Uma história de mistério.',
+        genre: 'mistério',
+        userAction: 'abrir a porta',
+        userActionType: UserActionType.CHOICE,
+        plan: SubscriptionType.FREE,
+        characters: [{ name: 'Lia', role: 'investigadora' }],
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('reação significativa');
+      expect(prompt).toContain('personagens ativos');
+    });
+
+    it('continuation prompt includes shorter default scene guidance', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateScene({
+        storyTitle: 'A Porta Selada',
+        genre: 'mistério',
+        userAction: 'investigar',
+        userActionType: UserActionType.FREE_TEXT,
+        plan: SubscriptionType.FREE,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('180');
+      expect(prompt).toContain('350 palavras');
+      expect(prompt).toContain('2-4 blocos');
+    });
+
+    it('continuation prompt includes relational choice guidance', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateScene({
+        storyTitle: 'O Dono da Cidade',
+        synopsis: 'Uma fotógrafa vê algo que não devia.',
+        genre: 'suspense',
+        userAction: 'seguir o herdeiro',
+        userActionType: UserActionType.CHOICE,
+        plan: SubscriptionType.FREE,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('ESPECÍFICAS');
+      expect(prompt).toContain('RELACIONAIS');
+      expect(prompt).toContain('EVITE escolhas genéricas');
+    });
+
+    it('continuation prompt includes narration balance guidance', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateScene({
+        storyTitle: 'Entre Luxo e Mentiras',
+        genre: 'mistério',
+        userAction: 'questionar a assistente',
+        userActionType: UserActionType.CHOICE,
+        plan: SubscriptionType.FREE,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('40%');
+      expect(prompt).toContain('narração atmosférica concisa');
+      expect(prompt).toContain('NÃO descreva o ambiente em excesso');
+    });
+
+    it('continuation prompt includes dialogue and subtext guidance', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateScene({
+        storyTitle: 'Contrato de Sangue',
+        genre: 'romance',
+        userAction: 'confrontar o médico',
+        userActionType: UserActionType.FREE_TEXT,
+        plan: SubscriptionType.FREE,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('diálogo');
+      expect(prompt).toContain('subtexto');
+    });
+
+    it('first-scene prompt includes active character reaction requirement', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateFirstScene({
+        title: 'A Rainha Sem Coroa',
+        synopsis: 'Uma jovem descobre que é herdeira.',
+        genre: 'romantasy',
+        plan: SubscriptionType.FREE,
+        characters: [{ name: 'Kael', role: 'guardião', description: 'Protetor silencioso' }],
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('PELO MENOS UMA reação');
+      expect(prompt).toContain('presença ativa');
+    });
+
+    it('first-scene prompt includes shorter default pacing guidance', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateFirstScene({
+        title: 'O Príncipe das Sombras',
+        genre: 'romantasy',
+        plan: SubscriptionType.FREE,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('180');
+      expect(prompt).toContain('350 palavras');
+      expect(prompt).toContain('hook na primeira');
+    });
+
+    it('first-scene prompt includes relational choice guidance', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateFirstScene({
+        title: 'A Dívida do CEO',
+        synopsis: 'Uma jovem advogada trabalha para um CEO implacável.',
+        genre: 'romance',
+        plan: SubscriptionType.FREE,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('EVITE escolhas genéricas');
+      expect(prompt).toContain('específicas');
+    });
+
+    it('first-scene prompt avoids excessive description guidance', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateFirstScene({
+        title: 'Academia dos Sete Selos',
+        genre: 'fantasia',
+        plan: SubscriptionType.FREE,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('Não encha de exposição');
+      expect(prompt).toContain('1-2 frases de ambientação');
+    });
+
+    it('sceneInstruction with isCinematic preserves character activity guidance', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateScene({
+        storyTitle: 'A Porta Selada',
+        genre: 'mistério',
+        userAction: 'abrir a porta',
+        userActionType: UserActionType.CHOICE,
+        plan: SubscriptionType.FREE,
+        isCinematic: true,
+        walletBalance: 10,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('CINEMÁTICA');
+      expect(prompt).toContain('personagens ativos');
+      expect(prompt).toContain('evite exposição descritiva excessiva');
+    });
+
+    it('recovers scene JSON returned as an escaped JSON string', async () => {
+      const provider = mockPromptProvider();
+      provider.generate = jest.fn().mockResolvedValue({
+        content: JSON.stringify(JSON.stringify({
+          sceneText: 'Luna sentiu o calor da cozinha mudar quando Marco parou diante dela com a colher ainda erguida.',
+          choices: ['Responder ao desafio', 'Provar o creme', 'Chamar a equipe'],
+          sceneMetadata: { emotion: 'tensa', pacing: 'media' },
+        })),
+        inputTokens: 20,
+        outputTokens: 10,
+        model: 'groq/free',
+      });
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const result = await service.generateFirstScene({
+        title: 'Sabores em Conflito',
+        genre: 'romance gastronomico',
+        plan: SubscriptionType.FREE,
+      });
+
+      expect(result.sceneText).toContain('Luna sentiu o calor');
+      expect(result.sceneText).not.toContain('"sceneText"');
+      expect(result.choices).toEqual(['Responder ao desafio', 'Provar o creme', 'Chamar a equipe']);
+    });
+
+    it('rejects raw JSON leaked inside sceneText instead of rendering it in the reader', async () => {
+      const provider = mockPromptProvider();
+      provider.generate = jest.fn().mockResolvedValue({
+        content: JSON.stringify({
+          sceneText: '{ "sceneText": "A porta se abriu, mas a resposta veio truncada',
+          choices: ['Continuar lendo'],
+        }),
+        inputTokens: 20,
+        outputTokens: 10,
+        model: 'groq/free',
+      });
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await expect(service.generateFirstScene({
+        title: 'Sabores em Conflito',
+        genre: 'romance gastronomico',
+        plan: SubscriptionType.FREE,
+      })).rejects.toThrow('invalid scene text');
+    });
+  });
+
+  describe('normalizeSceneTextQuotes', () => {
+    it('strips external wrapping quotes when content is valid', async () => {
+      const provider: LLMProvider = {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({
+            sceneText: '"O estalo da porta ecoou pelo corredor vazio. Você prendeu a respiração e esperou."',
+            choices: ['Avançar devagar', 'Voltar pelo corredor'],
+            sceneMetadata: { emotion: 'tensa', pacing: 'lenta' },
+          }),
+          inputTokens: 20,
+          outputTokens: 10,
+          model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(),
+        getModelForPlan: jest.fn(),
+      };
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const result = await service.generateScene({
+        storyTitle: 'A Porta Selada',
+        genre: 'mistério',
+        userAction: 'escutar',
+        userActionType: UserActionType.CHOICE,
+        plan: SubscriptionType.FREE,
+      });
+
+      expect(result.sceneText).not.toContain('"O estalo');
+      expect(result.sceneText).toContain('O estalo da porta ecoou');
+      expect(result.sceneText).toContain('Você prendeu a respiração');
+    });
+
+    it('preserves legitimate dialogue quotes inside the text', async () => {
+      const provider: LLMProvider = {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({
+            sceneText: '"Você hesitou. Então ouviu a voz: \"Entre logo ou vou trancar a porta.\" O tom era seco."',
+            choices: ['Entrar', 'Responder'],
+            sceneMetadata: { emotion: 'tensa', pacing: 'media' },
+          }),
+          inputTokens: 20,
+          outputTokens: 10,
+          model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(),
+        getModelForPlan: jest.fn(),
+      };
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const result = await service.generateScene({
+        storyTitle: 'Test',
+        genre: 'mistério',
+        userAction: 'escutar',
+        userActionType: UserActionType.CHOICE,
+        plan: SubscriptionType.FREE,
+      });
+
+      expect(result.sceneText).toContain('"Entre logo');
+      expect(result.sceneText).not.toMatch(/^"/);
+      expect(result.sceneText).not.toMatch(/"$/);
+    });
+
+    it('does not strip text when quotes are part of content structure', async () => {
+      const provider: LLMProvider = {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({
+            sceneText: 'Ela disse: "Confio em você." Você sabia que era mentira.',
+            choices: ['Confrontar', 'Aceitar'],
+            sceneMetadata: { emotion: 'conflituosa', pacing: 'media' },
+          }),
+          inputTokens: 20,
+          outputTokens: 10,
+          model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(),
+        getModelForPlan: jest.fn(),
+      };
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const result = await service.generateScene({
+        storyTitle: 'Test',
+        genre: 'drama',
+        userAction: 'ouvir',
+        userActionType: UserActionType.CHOICE,
+        plan: SubscriptionType.FREE,
+      });
+
+      expect(result.sceneText).toContain('Ela disse');
+      expect(result.sceneText).toContain('Confio em você.');
+      expect(result.sceneText).toContain('Você sabia');
+    });
+  });
+
+  describe('Second-Person Voice (Step 98f)', () => {
+    function mockPromptProvider(): LLMProvider {
+      return {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({
+            sceneText: 'Você sente o ar frio da noite.',
+            choices: ['Seguir em frente'],
+            sceneMetadata: { emotion: 'misteriosa', pacing: 'media' },
+          }),
+          inputTokens: 20,
+          outputTokens: 10,
+          model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(),
+        getModelForPlan: jest.fn(),
+      };
+    }
+
+    it('continuation prompt enforces segunda pessoa voce narration', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateScene({
+        storyTitle: 'A Porta Selada',
+        genre: 'mistério',
+        userAction: 'escutar',
+        userActionType: UserActionType.CHOICE,
+        plan: SubscriptionType.FREE,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('SEGUNDA PESSOA');
+      expect(prompt).toContain('você');
+      expect(prompt).toContain('NUNCA use primeira pessoa');
+      expect(prompt).toContain('eu');
+      expect(prompt).toContain('meu');
+      expect(prompt).toContain('minha');
+    });
+
+    it('first-scene prompt enforces segunda pessoa voce narration', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateFirstScene({
+        title: 'A Porta Selada',
+        genre: 'mistério',
+        plan: SubscriptionType.FREE,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('SEGUNDA PESSOA');
+      expect(prompt).toContain('você');
+      expect(prompt).toContain('NUNCA use primeira pessoa');
+    });
+
+    it('allows first person in dialogue by explicitly exempting it', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateScene({
+        storyTitle: 'Test',
+        genre: 'drama',
+        userAction: 'conversar',
+        userActionType: UserActionType.CHOICE,
+        plan: SubscriptionType.FREE,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('Personagens podem falar em primeira pessoa');
+      expect(prompt).toContain('diálogos');
+    });
+  });
+
+  describe('Choice Quote Normalization (Step 98i)', () => {
+    it('strips wrapper quotes from choices', async () => {
+      const provider: LLMProvider = {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({
+            sceneText: 'Você avança pelo corredor.',
+            choices: ['"Abrir a porta devagar"', '"Perguntar quem está ali"'],
+            sceneMetadata: { emotion: 'tensa', pacing: 'media' },
+          }),
+          inputTokens: 20, outputTokens: 10, model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(), getModelForPlan: jest.fn(),
+      };
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const result = await service.generateScene({
+        storyTitle: 'Test', genre: 'mistério', userAction: 'avançar',
+        userActionType: UserActionType.CHOICE, plan: SubscriptionType.FREE,
+      });
+
+      expect(result.choices).not.toContain('"Abrir a porta devagar"');
+      expect(result.choices).toContain('Abrir a porta devagar');
+    });
+
+    it('preserves intentional internal quotes in choices', async () => {
+      const provider: LLMProvider = {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({
+            sceneText: 'Você ouve algo.',
+            choices: ['Dizer "eu confio em você"', 'Ficar em silêncio'],
+            sceneMetadata: { emotion: 'conflituosa', pacing: 'media' },
+          }),
+          inputTokens: 20, outputTokens: 10, model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(), getModelForPlan: jest.fn(),
+      };
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const result = await service.generateScene({
+        storyTitle: 'Test', genre: 'drama', userAction: 'ouvir',
+        userActionType: UserActionType.CHOICE, plan: SubscriptionType.FREE,
+      });
+
+      expect(result.choices).toContain('Dizer "eu confio em você"');
+    });
+  });
+
+  describe('Anti-Repetition Prompt Guidance (Step 98i)', () => {
+    function mockPromptProvider(): LLMProvider {
+      return {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({ sceneText: 'Você sente o ar frio.', choices: ['Seguir'], sceneMetadata: { emotion: 'misteriosa', pacing: 'media' } }),
+          inputTokens: 20, outputTokens: 10, model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(), getModelForPlan: jest.fn(),
+      };
+    }
+
+    it('continuation prompt prohibits restating previous scene', async () => {
+      const provider = mockPromptProvider();
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      await service.generateScene({
+        storyTitle: 'Test', genre: 'mistério', userAction: 'abrir a porta',
+        userActionType: UserActionType.CHOICE, plan: SubscriptionType.FREE,
+      });
+
+      const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
+      expect(prompt).toContain('NUNCA repita');
+      expect(prompt).toContain('CONTEXTO APENAS');
+      expect(prompt).toContain('SOMENTE a nova cena');
+      expect(prompt).toContain('consequência da ação do leitor');
+    });
+  });
+
+  describe('Escaped Wrapper Quote Normalization (Step 98j)', () => {
+    it('strips escaped wrapper quotes from scene text', async () => {
+      const provider: LLMProvider = {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({ sceneText: '\\"O estalo da porta ecoou pelo corredor vazio e você prendeu a respiração.\\"', choices: ['Avançar', 'Recuar'], sceneMetadata: { emotion: 'tensa', pacing: 'lenta' } }),
+          inputTokens: 20, outputTokens: 10, model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(), getModelForPlan: jest.fn(),
+      };
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const result = await service.generateScene({
+        storyTitle: 'A Porta Selada', genre: 'mistério', userAction: 'escutar',
+        userActionType: UserActionType.CHOICE, plan: SubscriptionType.FREE,
+      });
+
+      expect(result.sceneText).toContain('O estalo da porta ecoou');
+      expect(result.sceneText).not.toMatch(/^\\?"/);
+      expect(result.sceneText).not.toMatch(/\\?"$/);
+    });
+
+    it('preserves escaped internal dialogue quotes while stripping wrappers', async () => {
+      const provider: LLMProvider = {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({ sceneText: '\\"Você ouviu a voz: \\\\\\"Entre logo ou vou trancar a porta.\\\\\\" O tom era seco e definitivo.\\"', choices: ['Entrar', 'Responder'], sceneMetadata: { emotion: 'tensa', pacing: 'media' } }),
+          inputTokens: 20, outputTokens: 10, model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(), getModelForPlan: jest.fn(),
+      };
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const result = await service.generateScene({
+        storyTitle: 'Test', genre: 'mistério', userAction: 'escutar',
+        userActionType: UserActionType.CHOICE, plan: SubscriptionType.FREE,
+      });
+
+      expect(result.sceneText).toContain('Você ouviu a voz');
+      expect(result.sceneText).toContain('Entre logo');
+      expect(result.sceneText).toContain('O tom era seco');
+      expect(result.sceneText).toContain('"Entre logo ou vou trancar a porta."');
+      expect(result.sceneText).not.toContain('\\"');
+      expect(result.sceneText).not.toContain('\\\\');
+      expect(result.sceneText).not.toMatch(/^\\?"/);
+      expect(result.sceneText).not.toMatch(/\\?"$/);
+    });
+
+    it('strips escaped wrapper quotes from choices', async () => {
+      const provider: LLMProvider = {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({ sceneText: 'Você avança pelo corredor escuro.', choices: ['\\"Abrir a porta devagar\\"', '\\"Perguntar quem está ali\\"'], sceneMetadata: { emotion: 'tensa', pacing: 'media' } }),
+          inputTokens: 20, outputTokens: 10, model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(), getModelForPlan: jest.fn(),
+      };
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const result = await service.generateScene({
+        storyTitle: 'Test', genre: 'mistério', userAction: 'avançar',
+        userActionType: UserActionType.CHOICE, plan: SubscriptionType.FREE,
+      });
+
+      expect(result.choices).toContain('Abrir a porta devagar');
+      expect(result.choices).not.toContain('\\"Abrir a porta devagar\\"');
+      expect(result.choices.join(' ')).not.toContain('\\"');
+      expect(result.choices.join(' ')).not.toContain('\\\\');
+    });
+
+    it('handles smart quotes escaped wrappers', async () => {
+      const provider: LLMProvider = {
+        name: 'mock',
+        generate: jest.fn().mockResolvedValue({
+          content: JSON.stringify({ sceneText: '\u201CO cheiro de carvão ainda quente preenchia o ar da cozinha.\u201D', choices: ['Avançar', 'Recuar'], sceneMetadata: { emotion: 'nostálgica', pacing: 'media' } }),
+          inputTokens: 20, outputTokens: 10, model: 'openrouter/free',
+        }),
+        estimateCost: jest.fn(), getModelForPlan: jest.fn(),
+      };
+      const service = new AiService(
+        { get: (key: string) => key === 'LLM_MOCK_MODE' ? 'true' : undefined } as any,
+        provider as any, provider as any, provider as any, provider as any,
+      );
+
+      const result = await service.generateScene({
+        storyTitle: 'Sabores em Conflito', genre: 'romance gastronômico', userAction: 'sentir',
+        userActionType: UserActionType.CHOICE, plan: SubscriptionType.FREE,
+      });
+
+      expect(result.sceneText).toContain('O cheiro de carvão');
+      expect(result.sceneText).not.toMatch(/^[\u201C"]/);
+      expect(result.sceneText).not.toMatch(/[\u201D"]$/);
     });
   });
 });

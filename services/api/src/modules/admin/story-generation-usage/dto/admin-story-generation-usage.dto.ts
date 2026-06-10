@@ -17,7 +17,6 @@ export class AdminStoryGenerationUsageDto {
 
   user?: {
     id: string;
-    email: string;
   };
 
   story?: {

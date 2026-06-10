@@ -1,14 +1,18 @@
-import { Injectable, Inject, HttpException } from '@nestjs/common';
+import { Injectable, Inject, HttpException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, ReadingSession, Story, NarrativeMemory, NarrativeEvent, StoryPremise, StoryPlayableCharacter, SubscriptionType, ReadingSessionStatus, StoryVisibility, StoryModerationStatus } from '@prisma/client';
+import { Prisma, ReadingSession, Story, NarrativeMemory, NarrativeEvent, StoryPremise, StoryPlayableCharacter, SubscriptionType, ReadingSessionStatus, StoryVisibility, StoryModerationStatus, UserActionType } from '@prisma/client';
 import { PrismaService } from '@common/prisma.service';
 import { NarrativeEngine } from './narrative/narrative-engine.service';
-import { NarrativeContextBuilder } from './narrative/narrative-context.builder';
+import { NarrativeContextBuilder, StoryCodex } from './narrative/narrative-context.builder';
 import { GenerateSceneInput, GenerateSceneResult } from './narrative/narrative-response.types';
 import { GenerationBudgetGuard, GenerationBudgetInput, GenerationBudgetDecision } from './application/generation-budget.guard';
 import { StoryQualityService } from '@modules/story-quality/story-quality.service';
+import { NarrativePreferencesService } from '@modules/narrative-preferences/narrative-preferences.service';
 import { getDefaultFreeModel, getDefaultPremiumModel } from '../ai/model-catalog';
 import { throwReadingError, throwBudgetDenied, ReadingErrorCode } from './application/reading-errors';
+import { FREE_DAILY_INTERACTION_LIMIT, FREE_ACTIVE_SESSION_LIMIT } from './application/reading.constants';
+
+const READER_RECENT_EVENT_LIMIT = 8;
 
 @Injectable()
 export class ReadingOrchestratorService {
@@ -20,9 +24,19 @@ export class ReadingOrchestratorService {
     private readonly narrativeEngine: NarrativeEngine,
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    @Optional() private readonly narrativePrefs?: NarrativePreferencesService,
   ) {
     this.budgetGuard = new GenerationBudgetGuard();
     this.storyQualityService = storyQualityService;
+  }
+
+  private async getEffectiveNarrativePolicy(userId: string) {
+    if (!this.narrativePrefs) return undefined;
+    try {
+      return await this.narrativePrefs.getEffectivePolicy(userId);
+    } catch {
+      return undefined;
+    }
   }
 
   private isFreeLlmOnly(): boolean {
@@ -95,6 +109,8 @@ export class ReadingOrchestratorService {
     user?: any,
     selectedModel?: any,
     isCinematic?: boolean,
+    narrativePolicy?: any,
+    actionType: UserActionType = UserActionType.CHOICE,
   ): Promise<GenerateSceneResult & { session: ReadingSession; adPlacement?: any }> {
     const session = await this.prisma.readingSession.findUnique({
       where: { id: sessionId },
@@ -122,13 +138,23 @@ export class ReadingOrchestratorService {
       take: 10,
     });
 
-    const premise = await this.prisma.storyPremise.findFirst({
-      where: { storyId: session.storyId },
-    });
+    const premise = session.selectedPremiseId
+      ? await this.prisma.storyPremise.findUnique({
+          where: { id: session.selectedPremiseId },
+          include: { characters: true },
+        })
+      : await this.prisma.storyPremise.findFirst({
+          where: { storyId: session.storyId },
+          include: { characters: true },
+        });
 
-    const playableCharacter = await this.prisma.storyPlayableCharacter.findFirst({
-      where: { premiseId: session.selectedPremiseId },
-    });
+    const playableCharacter = session.selectedCharacterId
+      ? await this.prisma.storyPlayableCharacter.findUnique({
+          where: { id: session.selectedCharacterId },
+        })
+      : await this.prisma.storyPlayableCharacter.findFirst({
+          where: { premiseId: premise?.id || session.selectedPremiseId },
+        });
 
     const sceneIndex = session.currentSceneIndex + 1;
 
@@ -138,6 +164,7 @@ export class ReadingOrchestratorService {
       story,
       session,
       action,
+      actionType,
       selectedModelId: selectedModelId || undefined,
       sceneIndex,
       memory,
@@ -147,6 +174,7 @@ export class ReadingOrchestratorService {
       plan: user?.subscription?.type,
       walletBalance: user?.creditWallet?.balance,
       isCinematic,
+      narrativePolicy,
     };
 
     let result: GenerateSceneResult;
@@ -167,10 +195,11 @@ export class ReadingOrchestratorService {
           sceneText: result.sceneText,
           choices: result.suggestedActions,
           userAction: action || 'continuar',
-          userActionType: 'CHOICE',
+          userActionType: actionType,
           modelUsed: result.modelUsed,
           inputTokens: result.tokenUsage?.inputTokens || 0,
           outputTokens: result.tokenUsage?.outputTokens || 0,
+          adultContentGenerated: narrativePolicy?.adultContentAllowed === true,
         },
       });
 
@@ -186,6 +215,7 @@ export class ReadingOrchestratorService {
             openThreads: JSON.stringify(result.memoryPatch.openThreads || []),
             constraints: result.memoryPatch.constraints || '',
             sceneCount: sceneIndex,
+            codex: result.memoryPatch.codex as any,
           },
           update: {
             summary: result.memoryPatch.summary,
@@ -195,6 +225,7 @@ export class ReadingOrchestratorService {
             openThreads: JSON.stringify(result.memoryPatch.openThreads || []),
             constraints: result.memoryPatch.constraints,
             sceneCount: sceneIndex,
+            codex: result.memoryPatch.codex as any,
             updatedAt: new Date(),
           },
         });
@@ -225,7 +256,7 @@ export class ReadingOrchestratorService {
             create: {
               userId: user.id,
               date: today,
-              limit: 10,
+              limit: FREE_DAILY_INTERACTION_LIMIT,
               freeInteractionsUsed: 1,
             },
             update: {
@@ -455,10 +486,11 @@ export class ReadingOrchestratorService {
     });
   }
 
-  async getSessionEvents(sessionId: string): Promise<any[]> {
+  async getSessionEvents(sessionId: string, take?: number): Promise<any[]> {
     return this.prisma.narrativeEvent.findMany({
       where: { sessionId },
       orderBy: { generatedAt: 'desc' },
+      take,
     });
   }
 
@@ -581,8 +613,8 @@ export class ReadingOrchestratorService {
       where,
       include: {
         story: { select: { title: true, coverUrl: true } },
-        premise: { select: { title: true } },
-        character: { select: { name: true } },
+        premise: { select: { title: true, coverUrl: true } },
+        character: { select: { name: true, imageUrl: true } },
       },
       skip: (page -1) * limit,
       take: limit,
@@ -603,7 +635,7 @@ export class ReadingOrchestratorService {
         },
       });
 
-      if (activeSessionCount >= 3) {
+      if (activeSessionCount >= FREE_ACTIVE_SESSION_LIMIT) {
         throwReadingError('Free users can have up to 3 active stories. Abandon one story or upgrade to Premium.', ReadingErrorCode.DAILY_LIMIT_REACHED, 402);
       }
 
@@ -658,7 +690,7 @@ export class ReadingOrchestratorService {
         userId,
         date: today,
         freeInteractionsUsed: 0,
-        limit: 10,
+        limit: FREE_DAILY_INTERACTION_LIMIT,
       },
     });
   }
@@ -672,6 +704,7 @@ export class ReadingOrchestratorService {
     character?: any,
     selectedModelId?: string,
     isCinematic?: boolean,
+    narrativePolicy?: any,
   ): Promise<{ id: string; chapterNumber: number; sceneIndex: number; sceneText: string; choices: string[]; sceneMetadata?: { emotion?: string; pacing?: string } }> {
     await this.createInitialMemory(session.id, session.story || await this.findStoryById(session.storyId), premise, character);
 
@@ -694,6 +727,7 @@ export class ReadingOrchestratorService {
       walletBalance,
       isCinematic,
       isFirstScene: true,
+      narrativePolicy,
     };
 
     let result: GenerateSceneResult;
@@ -709,10 +743,12 @@ export class ReadingOrchestratorService {
       sceneIndex: 0,
       sceneText: result.sceneText,
       choices: result.suggestedActions,
-      action: '',
+      userAction: 'Início da história',
+      userActionType: 'FREE_TEXT',
       modelUsed: result.modelUsed,
       inputTokens: result.tokenUsage?.inputTokens || 0,
       outputTokens: result.tokenUsage?.outputTokens || 0,
+      adultContentGenerated: narrativePolicy?.adultContentAllowed === true,
     });
 
     await this.updateReadingSession(session.id, { currentSceneIndex: 0 });
@@ -736,6 +772,7 @@ export class ReadingOrchestratorService {
         openThreads: JSON.stringify(result.memoryPatch.openThreads || []),
         constraints: result.memoryPatch.constraints || narrativeMemory?.constraints || '',
         sceneCount: 1,
+        codex: result.memoryPatch.codex as any,
       });
     }
 
@@ -761,22 +798,39 @@ export class ReadingOrchestratorService {
   }
 
   private async createInitialMemory(sessionId: string, story: any, premise?: any, character?: any): Promise<void> {
-    const charactersList = story.characters
-      ?.map((c: any) => `${c.name} (${c.role}): ${c.description || 'personagem secundário'}`)
-      .join('\n') || '';
+    const charactersList = NarrativeContextBuilder.buildStoryCharacters(story, premise, character)
+      .map((c: any) => {
+        const traits = [
+          c.description || 'personagem',
+          c.personality ? `personalidade: ${c.personality}` : '',
+          c.motivation ? `motivacao: ${c.motivation}` : '',
+          c.relationshipToPlayer ? `relacao: ${c.relationshipToPlayer}` : '',
+          c.initialGoal ? `objetivo: ${c.initialGoal}` : '',
+          c.conflictPotential ? `conflito: ${c.conflictPotential}` : '',
+        ].filter(Boolean).join('; ');
+        return `${c.name} (${c.role}): ${traits}`;
+      })
+      .join('\n');
 
     const summary = [
       `Historia: ${story.title}`,
       `Sinopse: ${premise?.synopsis || story.synopsis}`,
       premise?.title ? `Premissa selecionada: ${premise.title}` : '',
       character?.name ? `Protagonista selecionado: ${character.name} (${character.roleLabel})` : '',
+      character?.startingSituation ? `Ponto de partida do personagem: ${character.startingSituation}` : '',
     ].filter(Boolean).join('\n');
     const worldState = premise?.worldRules || story.worldRules || '';
     const characterState = [
       charactersList,
-      character ? `${character.name} (${character.roleLabel}): ${character.personality || character.description || 'personagem jogavel'}; objetivo inicial: ${character.initialGoal || 'N/A'}` : '',
+      character ? `${character.name} (${character.roleLabel}): ${character.personality || character.description || 'personagem jogavel'}; objetivo inicial: ${character.initialGoal || 'N/A'}; ponto de partida: ${character.startingSituation || 'N/A'}` : '',
     ].filter(Boolean).join('\n');
     const constraints = `Tom: ${premise?.tone || story.tone || 'neutro'}\nEstilo: ${premise?.styleGuide || story.styleGuide || 'narrativo'}`;
+
+    const initialCodex = NarrativeContextBuilder.createInitialCodex({
+      story: { ...story, characters: NarrativeContextBuilder.buildStoryCharacters(story, premise, character) },
+      premise: premise ? { title: premise.title, synopsis: premise.synopsis, tone: premise.tone, styleGuide: premise.styleGuide, worldRules: premise.worldRules } : null,
+      character: character ? { name: character.name, roleLabel: character.roleLabel, narrativeFunction: character.narrativeFunction, personality: character.personality, motivation: character.motivation, secret: character.secret, relationshipToPlayer: character.relationshipToPlayer, initialGoal: character.initialGoal, startingSituation: character.startingSituation, conflictPotential: character.conflictPotential } : null,
+    });
 
     await this.prisma.narrativeMemory.upsert({
       where: { sessionId },
@@ -789,6 +843,7 @@ export class ReadingOrchestratorService {
         openThreads: '',
         constraints,
         sceneCount: 0,
+        codex: initialCodex as any,
       },
       update: {},
     });
@@ -818,6 +873,7 @@ export class ReadingOrchestratorService {
       secret: character.secret,
       relationshipToPlayer: character.relationshipToPlayer,
       initialGoal: character.initialGoal,
+      startingSituation: character.startingSituation,
       conflictPotential: character.conflictPotential,
     };
   }
@@ -843,6 +899,8 @@ export class ReadingOrchestratorService {
       this.getUserWithSubscription(userId),
       this.getOrCreateDailyLimit(userId),
     ]);
+
+    const narrativePolicy = await this.getEffectiveNarrativePolicy(userId);
 
     if (!story) {
       throwReadingError('Story not found.', ReadingErrorCode.STORY_NOT_FOUND, 404);
@@ -879,7 +937,7 @@ export class ReadingOrchestratorService {
     );
 
     if (existingSession) {
-      const events = await this.getSessionEvents(existingSession.id);
+      const events = await this.getSessionEvents(existingSession.id, READER_RECENT_EVENT_LIMIT);
       if (events.length === 0) {
         // Call guard before generateFirstScene
         const budgetInput: GenerationBudgetInput = {
@@ -906,8 +964,9 @@ export class ReadingOrchestratorService {
           user?.creditWallet?.balance,
           selectedPremise,
           selectedCharacter,
-          decision.finalModel.id,
-          false,
+           decision.finalModel.id,
+           false,
+           narrativePolicy,
         );
         return {
           session: {
@@ -965,6 +1024,7 @@ export class ReadingOrchestratorService {
       selectedCharacter,
       decision.finalModel.id,
       false,
+      narrativePolicy,
     );
 
     let adPlacement: any = undefined;
@@ -1007,13 +1067,19 @@ export class ReadingOrchestratorService {
     // Private or non-approved stories require creator access
     this.assertCanAccessStory(sessionWithStory.story, userId);
 
-    const user = await this.getUserWithSubscription(userId);
-    const usage = await this.getOrCreateDailyLimit(userId);
-    const events = await this.getSessionEvents(sessionId);
+    const [user, usage, events, narrativePolicy] = await Promise.all([
+      this.getUserWithSubscription(userId),
+      this.getOrCreateDailyLimit(userId),
+      this.getSessionEvents(sessionId, READER_RECENT_EVENT_LIMIT),
+      this.getEffectiveNarrativePolicy(userId),
+    ]);
 
     if (events.length === 0) {
       const premise = sessionWithStory.selectedPremiseId
-        ? await this.prisma.storyPremise.findUnique({ where: { id: sessionWithStory.selectedPremiseId } })
+        ? await this.prisma.storyPremise.findUnique({
+            where: { id: sessionWithStory.selectedPremiseId },
+            include: { characters: true },
+          })
         : null;
       const character = sessionWithStory.selectedCharacterId && premise
         ? await this.prisma.storyPlayableCharacter.findFirst({
@@ -1048,6 +1114,7 @@ export class ReadingOrchestratorService {
         character,
         decision.finalModel.id,
         false,
+        narrativePolicy,
       );
       return {
         session: {
@@ -1087,6 +1154,7 @@ export class ReadingOrchestratorService {
     const user = await this.getUserWithSubscription(userId);
     const walletBalance = user?.creditWallet?.balance || 0;
     const usage = await this.getOrCreateDailyLimit(userId);
+    const narrativePolicy = await this.getEffectiveNarrativePolicy(userId);
 
     // Call GenerationBudgetGuard BEFORE generateNextScene
     const budgetInput: GenerationBudgetInput = {
@@ -1114,9 +1182,11 @@ export class ReadingOrchestratorService {
       user,
       decision.finalModel,
       dto.mode === 'cinematic',
+      narrativePolicy,
+      dto.actionType,
     );
 
-    const events = await this.getSessionEvents(sessionId);
+    const events = await this.getSessionEvents(sessionId, READER_RECENT_EVENT_LIMIT);
     const shouldRefreshWallet = decision.finalModel.tier === 'CREDITS';
     const updatedWallet = shouldRefreshWallet
       ? await this.getCreditWallet(userId)
@@ -1141,6 +1211,8 @@ export class ReadingOrchestratorService {
           sceneIndex: result.session.currentSceneIndex,
           sceneText: result.sceneText,
           choices: result.suggestedActions,
+          userAction: events[0]?.userAction,
+          userActionType: events[0]?.userActionType,
           sceneMetadata: result.sceneMetadata,
           adPlacement: result.adPlacement,
         },
@@ -1167,9 +1239,11 @@ export class ReadingOrchestratorService {
         id: s.id,
         storyId: s.storyId,
         storyTitle: s.story?.title,
-        storyCoverUrl: s.story?.coverUrl ?? null,
+        storyCoverUrl: this.pickSessionSummaryImageUrl(s.story?.coverUrl, s.premise?.coverUrl, s.character?.imageUrl),
         selectedPremiseTitle: s.premise?.title ?? null,
+        selectedPremiseCoverUrl: this.pickSessionSummaryImageUrl(s.premise?.coverUrl),
         selectedCharacterName: s.character?.name ?? null,
+        selectedCharacterImageUrl: this.pickSessionSummaryImageUrl(s.character?.imageUrl),
         currentChapter: s.currentChapter,
         currentSceneIndex: s.currentSceneIndex,
         status: s.status,
@@ -1191,6 +1265,16 @@ export class ReadingOrchestratorService {
       limit: result.meta.limit,
       totalPages: result.meta.totalPages,
     };
+  }
+
+  private pickSessionSummaryImageUrl(...urls: Array<string | null | undefined>): string | null {
+    const url = urls.find((candidate) => {
+      if (!candidate) return false;
+      const normalized = candidate.trim().toLowerCase();
+      return normalized.startsWith('http://') || normalized.startsWith('https://');
+    });
+
+    return url ?? null;
   }
 
   async abandonSession(userId: string, sessionId: string): Promise<void> {

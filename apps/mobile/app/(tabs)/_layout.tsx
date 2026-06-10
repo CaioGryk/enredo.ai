@@ -3,8 +3,8 @@ import { Tabs } from 'expo-router';
 import { Book, Bookmark, Clapperboard, Sparkles, User } from 'lucide-react-native';
 
 const ACCENT = '#CEBDFF';
-const PANEL = '#15131B';
-const MUTED = '#8B839E';
+const PANEL = '#131313';
+const MUTED = '#cac4d4';
 
 export default function TabLayout() {
   return (

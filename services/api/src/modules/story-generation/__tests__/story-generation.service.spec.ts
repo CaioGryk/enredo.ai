@@ -8,8 +8,9 @@ import { StoryQualityService } from '@modules/story-quality/story-quality.servic
 import { AiService } from '@modules/ai/ai.service';
 import { PrismaService } from '@common/prisma.service';
 import { ForbiddenException, BadRequestException } from '@nestjs/common';
-import { SubscriptionType } from '@prisma/client';
+import { SubscriptionType, UserRole } from '@prisma/client';
 import { AIModel } from '@modules/ai/model-catalog';
+import { CreateStoryGenerationDto } from '../dto/create-story-generation.dto';
 
 describe('StoryGenerationService', () => {
   let service: StoryGenerationService;
@@ -49,6 +50,7 @@ describe('StoryGenerationService', () => {
 
   const mockAiService = {
     isMockMode: jest.fn().mockReturnValue(true),
+    generateStoryDraft: jest.fn(),
   };
 
   const mockInputGuard = {
@@ -120,6 +122,7 @@ describe('StoryGenerationService', () => {
     // Default mocks
     mockPrismaService.user.findUnique.mockResolvedValue({
       subscription: { type: SubscriptionType.FREE },
+      role: UserRole.USER,
     });
 
     mockBudgetGuard.decide.mockReturnValue({
@@ -140,6 +143,12 @@ describe('StoryGenerationService', () => {
   });
 
   describe('generateStory', () => {
+    it('should not expose provider context on the public generation DTO', () => {
+      const dto = new CreateStoryGenerationDto();
+
+      expect('context' in dto).toBe(false);
+    });
+
     it('should generate story for FREE user within limit', async () => {
       const dto = {
         keywords: ['mistério', 'cidade futurista'],
@@ -179,6 +188,7 @@ describe('StoryGenerationService', () => {
     it('should use default premium model for PREMIUM user', async () => {
       mockPrismaService.user.findUnique.mockResolvedValue({
         subscription: { type: SubscriptionType.PREMIUM },
+        role: UserRole.USER,
       });
 
       mockBudgetGuard.decide.mockReturnValue({
@@ -246,7 +256,25 @@ describe('StoryGenerationService', () => {
           synopsis: expect.any(String),
           genres: expect.any(Array),
           openingScene: expect.any(String),
-        })
+        }),
+        { skipCreationLimit: false },
+      );
+    });
+
+    it('should bypass user story creation limit only for ADMIN users', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        subscription: { type: SubscriptionType.FREE },
+        role: UserRole.ADMIN,
+      });
+
+      await service.generateStory('admin-1', { keywords: ['catálogo', 'beta'] });
+
+      expect(mockStoryLifecycleService.createStory).toHaveBeenCalledWith(
+        'admin-1',
+        expect.objectContaining({
+          title: expect.any(String),
+        }),
+        { skipCreationLimit: true },
       );
     });
 
@@ -258,6 +286,124 @@ describe('StoryGenerationService', () => {
       await service.generateStory('user-1', dto);
 
       expect(mockStoryQualityService.validateStoryQuality).toHaveBeenCalledWith('story-new');
+    });
+
+    it('should call real AI draft generation when mock mode is disabled', async () => {
+      mockAiService.isMockMode.mockReturnValue(false);
+      mockBudgetGuard.decide.mockReturnValue({
+        allowed: true,
+        finalModel: { id: 'openrouter/free', maxTokens: 500, tier: 'FREE' } as AIModel,
+        maxOutputTokens: 500,
+        budgetTier: 'FREE',
+      });
+      mockInputGuard.validate.mockReturnValue({
+        keywords: ['halloween', 'apartamento 13'],
+        genre: 'terror',
+        tone: 'dramático',
+        targetAudience: 'adulto',
+        constraints: 'sem gore',
+      } as SafeStoryGenerationInput);
+      mockAiService.generateStoryDraft.mockResolvedValue({
+        title: 'Apartamento Treze',
+        synopsis: 'Uma moradora revive as últimas horas dos mortos presos no apartamento treze.',
+        genres: ['terror', 'mistério'],
+        openingScene: 'A chave gira sozinha na fechadura enquanto uma voz infantil chama pelo seu nome atrás da parede.',
+        basePrompt: 'Continue como terror interativo.',
+        tone: 'dramático',
+        styleGuide: 'Sensorial e tenso.',
+        worldRules: 'Mortos repetem suas últimas horas.',
+        language: 'pt-BR',
+        maturityRating: '12+',
+      });
+
+      const result = await service.generateStory('user-1', { keywords: ['halloween'] });
+
+      expect(mockAiService.generateStoryDraft).toHaveBeenCalledWith({
+        keywords: ['halloween', 'apartamento 13'],
+        genre: 'terror',
+        tone: 'dramático',
+        targetAudience: 'adulto',
+        constraints: 'sem gore',
+        modelId: 'openrouter/free',
+        maxTokens: 1500,
+        context: 'USER_STORY',
+      });
+      expect(result.generation.mode).toBe('AI');
+      expect(result.generation.provider).toBe('openrouter');
+      expect(result.story.title).toBe('Apartamento Treze');
+    });
+
+    it('should route ADMIN story draft generation through ADMIN_CATALOG context', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        subscription: { type: SubscriptionType.FREE },
+        role: UserRole.ADMIN,
+      });
+      mockAiService.isMockMode.mockReturnValue(false);
+      mockBudgetGuard.decide.mockReturnValue({
+        allowed: true,
+        finalModel: { id: 'groq/free', maxTokens: 1500, tier: 'FREE' } as AIModel,
+        maxOutputTokens: 1500,
+        budgetTier: 'FREE',
+      });
+      mockInputGuard.validate.mockReturnValue({
+        keywords: ['catálogo', 'beta'],
+        genre: 'romance',
+      } as SafeStoryGenerationInput);
+      mockAiService.generateStoryDraft.mockResolvedValue({
+        title: 'Herança de Sombras',
+        synopsis: 'Uma herdeira retorna para encarar segredos de família e um romance perigoso.',
+        genres: ['romance', 'mistério'],
+        openingScene: 'A mansão respira silêncio quando ela cruza o portão, trazendo na mala uma carta sem assinatura.',
+        basePrompt: 'Continue como romance interativo de catálogo beta.',
+        tone: 'cinematográfico',
+        styleGuide: 'Sensorial, elegante e tenso.',
+        worldRules: 'Segredos familiares movem cada escolha.',
+        language: 'pt-BR',
+        maturityRating: '16+',
+      });
+
+      await service.generateStory('admin-1', { keywords: ['catálogo', 'beta'] });
+
+      expect(mockAiService.generateStoryDraft).toHaveBeenCalledWith(expect.objectContaining({
+        keywords: ['catálogo', 'beta'],
+        modelId: 'groq/free',
+        context: 'ADMIN_CATALOG',
+      }));
+      expect(mockStoryLifecycleService.createStory).toHaveBeenCalledWith(
+        'admin-1',
+        expect.objectContaining({ title: 'Herança de Sombras' }),
+        { skipCreationLimit: true },
+      );
+    });
+
+    it('should report Groq provider metadata for groq/free story generation', async () => {
+      mockAiService.isMockMode.mockReturnValue(false);
+      mockBudgetGuard.decide.mockReturnValue({
+        allowed: true,
+        finalModel: { id: 'groq/free', maxTokens: 1500, tier: 'FREE' } as AIModel,
+        maxOutputTokens: 1500,
+        budgetTier: 'FREE',
+      });
+      mockInputGuard.validate.mockReturnValue({
+        keywords: ['halloween', 'apartamento 13'],
+      } as SafeStoryGenerationInput);
+      mockAiService.generateStoryDraft.mockResolvedValue({
+        title: 'Apartamento Treze',
+        synopsis: 'Uma moradora revive as últimas horas dos mortos presos no apartamento treze.',
+        genres: ['terror'],
+        openingScene: 'A chave gira sozinha na fechadura enquanto uma voz infantil chama pelo seu nome atrás da parede.',
+        basePrompt: 'Continue como terror interativo.',
+        tone: 'dramático',
+        styleGuide: 'Sensorial e tenso.',
+        worldRules: 'Mortos repetem suas últimas horas.',
+        language: 'pt-BR',
+        maturityRating: '12+',
+      });
+
+      const result = await service.generateStory('user-1', { keywords: ['halloween'] });
+
+      expect(result.generation.modelId).toBe('groq/free');
+      expect(result.generation.provider).toBe('groq');
     });
   });
 

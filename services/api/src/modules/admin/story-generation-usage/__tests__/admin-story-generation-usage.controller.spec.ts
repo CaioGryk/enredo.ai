@@ -21,7 +21,7 @@ describe('AdminStoryGenerationUsageController', () => {
     totalTokens: 300,
     estimatedCost: 0.05,
     createdAt: new Date(),
-    user: { id: 'user-1', email: 'user@test.com' },
+    user: { id: 'user-1' },
     story: { id: 'story-1', title: 'Test Story', origin: 'USER_GENERATED', visibility: 'PRIVATE', moderationStatus: 'NOT_SUBMITTED' },
   };
 

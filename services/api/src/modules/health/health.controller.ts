@@ -24,6 +24,8 @@ export class HealthController {
     return {
       status: databaseStatus === 'ok' ? 'ok' : 'degraded',
       service: 'enredo-api',
+      environment: process.env.NODE_ENV || 'development',
+      version: process.env.APP_VERSION || process.env.npm_package_version || '0.1.0',
       timestamp,
       database: databaseStatus,
     };

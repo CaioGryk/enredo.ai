@@ -23,6 +23,7 @@ O contexto do projeto foi dividido em arquivos focados para facilitar o trabalho
 | **[ROADMAP.md](./docs/context/ROADMAP.md)** | Roadmap de produto (MVP → Fase 4) | Planejamento de features |
 | **[KNOWN_ISSUES.md](./docs/context/KNOWN_ISSUES.md)** | Riscos conhecidos, débitos técnicos | Avaliação de riscos |
 | **[CHANGELOG_STEPS.md](./docs/context/CHANGELOG_STEPS.md)** | Log histórico completo (Steps 1-42+) | Histórico de implementação |
+| **[content-adult-policy.md](./docs/content-adult-policy.md)** | Política planejada para preferências narrativas adultas | Antes de implementar romance adulto/18+ |
 
 ### Agentes
 

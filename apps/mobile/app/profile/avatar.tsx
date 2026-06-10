@@ -1,28 +1,27 @@
 import React from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { ArrowLeft, Camera, Image as ImageIcon, Sparkles, UserCircle2 } from 'lucide-react-native';
 import { useAuth } from '../../src/context/AuthContext';
 import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
+import { goBackSafe } from '../../src/utils/navigation-helper';
 
 const ACCENT = '#CEBDFF';
-const PANEL_ALT = '#1B1824';
+const PANEL_ALT = '#1c1b1b';
 const SOFT_TEXT = '#B7AFC8';
 
 export default function ProfileAvatarScreen() {
-  const router = useRouter();
   const { user } = useAuth();
   const initial = user?.name?.slice(0, 1)?.toUpperCase() || 'E';
 
   function showSoon(label: string) {
-    Alert.alert('Em breve', `${label} será conectado ao fluxo real de foto do perfil na próxima rodada.`);
+    Alert.alert('Indisponível no momento', `${label} estará disponível em uma versão futura.`);
   }
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => goBackSafe('/(tabs)/profile')}>
           <ArrowLeft color={ACCENT} size={20} />
           <Text style={styles.backText}>Voltar</Text>
         </TouchableOpacity>

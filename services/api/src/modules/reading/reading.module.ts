@@ -7,9 +7,10 @@ import { NarrativeModule } from './narrative/narrative.module';
 import { ModerationModule } from '../moderation/moderation.module';
 import { StoryQualityModule } from '../story-quality/story-quality.module';
 import { PrismaModule } from '@common/prisma.module';
+import { NarrativePreferencesModule } from '../narrative-preferences/narrative-preferences.module';
 
 @Module({
-  imports: [ConfigModule, NarrativeModule, ModerationModule, StoryQualityModule, PrismaModule],
+  imports: [ConfigModule, NarrativeModule, ModerationModule, StoryQualityModule, PrismaModule, NarrativePreferencesModule],
   controllers: [ReadingController],
   providers: [ReadingService, ReadingOrchestratorService],
   exports: [ReadingService],

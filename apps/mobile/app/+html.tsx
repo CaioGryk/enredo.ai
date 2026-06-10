@@ -34,7 +34,7 @@ html {
 body {
   background:
     radial-gradient(circle at top, rgba(206, 189, 255, 0.10), transparent 28%),
-    linear-gradient(180deg, #15131B 0%, #0D0D0F 100%);
+    linear-gradient(180deg, #131313 0%, #0a0a0a 100%);
   min-height: 100vh;
   margin: 0;
   padding: 24px 0;
@@ -43,7 +43,7 @@ body > div:first-child {
   width: min(100vw, 430px);
   min-height: 100vh;
   margin: 0 auto;
-  background-color: #0D0D0F;
+  background-color: #0a0a0a;
   border-radius: 28px;
   box-shadow:
     0 0 0 1px rgba(206, 189, 255, 0.10),
@@ -57,7 +57,7 @@ body > div:first-child {
   body {
     background:
       radial-gradient(circle at top, rgba(206, 189, 255, 0.10), transparent 28%),
-      linear-gradient(180deg, #15131B 0%, #0D0D0F 100%);
+      linear-gradient(180deg, #131313 0%, #0a0a0a 100%);
   }
 }
 @media (max-width: 430px) {

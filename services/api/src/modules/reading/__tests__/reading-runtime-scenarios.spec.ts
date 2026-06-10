@@ -512,6 +512,28 @@ describe('Reading Runtime Scenarios', () => {
       expect(mockPrisma.narrativeEvent.create).toHaveBeenCalled();
     });
 
+    it('should persist the action type from free-text continuation actions', async () => {
+      await service.sendAction('user-1', 'session-1', {
+        action: 'Investigate the candlelit corridor',
+        actionType: 'FREE_TEXT' as any,
+      });
+
+      expect(mockPrisma.narrativeEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userAction: 'Investigate the candlelit corridor',
+            userActionType: 'FREE_TEXT',
+          }),
+        }),
+      );
+      expect(mockNarrativeEngine.generateScene).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'Investigate the candlelit corridor',
+          actionType: 'FREE_TEXT',
+        }),
+      );
+    });
+
     it('should update the reading session current scene index', async () => {
       await service.sendAction('user-1', 'session-1', { action: 'Continue' });
 
@@ -618,7 +640,7 @@ describe('Reading Runtime Scenarios', () => {
   // ─────────────────────────────────────────────
   // Scenario 9: Budget denial before session creation
   // ─────────────────────────────────────────────
-  describe('Scenario 9 — Budget denial before session creation', () => {
+  describe('Scenario 9 — Free-only fallback before session creation', () => {
     const startDto = {
       storyId: 'story-1',
       premiseId: 'premise-1',
@@ -636,21 +658,34 @@ describe('Reading Runtime Scenarios', () => {
       mockPrisma.user.findUnique.mockResolvedValue(premiumUser);
       mockPrisma.dailyUsageLimit.findUnique.mockResolvedValue(defaultUsage);
       mockPrisma.readingSession.findFirst.mockResolvedValue(null);
+      mockPrisma.readingSession.count.mockResolvedValue(0);
+      mockPrisma.readingSession.create.mockResolvedValue({ ...mockSession, id: 'session-free-only', currentSceneIndex: 0 });
+      mockPrisma.narrativeMemory.findUnique.mockResolvedValue(null);
+      mockPrisma.narrativeMemory.upsert.mockResolvedValue({});
+      mockNarrativeEngine.generateScene.mockResolvedValue(mockScene);
+      mockPrisma.narrativeEvent.create.mockResolvedValue({
+        id: 'event-free-only',
+        chapterNumber: 1,
+        sceneIndex: 0,
+        sceneText: mockScene.sceneText,
+        choices: mockScene.suggestedActions,
+      });
+      mockPrisma.readingSession.update.mockResolvedValue({ ...mockSession, currentSceneIndex: 0 });
       mockConfigService.get.mockImplementation((key: string) => {
         if (key === 'FREE_LLM_ONLY') return true;
         return false;
       });
     });
 
-    it('should throw an error and not create session when budget guard denies', async () => {
-      await service.startReading('user-1', startDto)
-        .then(() => { throw new Error('Expected error'); })
-        .catch((err: HttpException) => {
-          expect(err.getStatus()).toBeGreaterThanOrEqual(400);
-        });
+    it('should use the free model instead of denying premium users when FREE_LLM_ONLY=true', async () => {
+      await service.startReading('user-1', startDto);
 
-      expect(mockPrisma.readingSession.create).not.toHaveBeenCalled();
-      expect(mockNarrativeEngine.generateScene).not.toHaveBeenCalled();
+      expect(mockPrisma.readingSession.create).toHaveBeenCalled();
+      expect(mockNarrativeEngine.generateScene).toHaveBeenCalledWith(expect.objectContaining({
+        selectedModelId: 'groq/free',
+      }));
+      expect(mockPrisma.creditWallet.update).not.toHaveBeenCalled();
+      expect(mockPrisma.creditTransaction.create).not.toHaveBeenCalled();
     });
   });
 
@@ -705,6 +740,59 @@ describe('Reading Runtime Scenarios', () => {
       expect(s.storyCoverUrl).toBe('https://example.com/cover.jpg');
       expect(s.selectedPremiseTitle).toBe('Premise One');
       expect(s.selectedCharacterName).toBe('Hero');
+    });
+
+    it('should use premise or character image as session cover fallback when story cover is missing', async () => {
+      mockPrisma.readingSession.findMany.mockResolvedValue([
+        {
+          id: 'session-1',
+          storyId: 'story-1',
+          currentChapter: 1,
+          currentSceneIndex: 2,
+          status: 'ACTIVE',
+          startedAt: new Date(),
+          lastSceneAt: new Date(),
+          story: { title: 'Story Without Cover', coverUrl: null },
+          premise: { title: 'Premise With Cover', coverUrl: 'https://example.com/premise.jpg' },
+          character: { name: 'Hero', imageUrl: 'https://example.com/hero.jpg' },
+        },
+        {
+          id: 'session-2',
+          storyId: 'story-2',
+          currentChapter: 1,
+          currentSceneIndex: 0,
+          status: 'ACTIVE',
+          startedAt: new Date(),
+          lastSceneAt: new Date(),
+          story: { title: 'Story Without Images', coverUrl: null },
+          premise: { title: 'Premise Without Cover', coverUrl: null },
+          character: { name: 'Hero Two', imageUrl: 'https://example.com/hero-two.jpg' },
+        },
+      ]);
+
+      const result = await (service as any).getUserSessions('user-1', {});
+
+      expect(result.sessions[0].storyCoverUrl).toBe('https://example.com/premise.jpg');
+      expect(result.sessions[1].storyCoverUrl).toBe('https://example.com/hero-two.jpg');
+    });
+
+    it('should not expose data-url images in session summaries', async () => {
+      mockPrisma.readingSession.findMany.mockResolvedValue([{
+        id: 'session-1',
+        storyId: 'story-1',
+        currentChapter: 1,
+        currentSceneIndex: 2,
+        status: 'ACTIVE',
+        startedAt: new Date(),
+        lastSceneAt: new Date(),
+        story: { title: 'Story With Inline Cover', coverUrl: 'data:image/png;base64,large-payload' },
+        premise: { title: 'Premise With Inline Cover', coverUrl: 'data:image/png;base64,large-payload' },
+        character: { name: 'Hero', imageUrl: 'data:image/png;base64,large-payload' },
+      }]);
+
+      const result = await (service as any).getUserSessions('user-1', {});
+
+      expect(result.sessions[0].storyCoverUrl).toBeNull();
     });
 
     it('should return null for optional fields when relations are missing', async () => {
@@ -853,6 +941,152 @@ describe('Reading Runtime Scenarios', () => {
     it('should accept undefined status (optional)', async () => {
       const hasError = await validateStatus(undefined);
       expect(hasError).toBe(false);
+    });
+  });
+
+  describe('Session Summary Image URL Selection (Step 98j)', () => {
+    it('story cover http(s) wins over premise and character', async () => {
+      mockPrisma.readingSession.findMany.mockResolvedValue([{
+        id: 'session-1', storyId: 'story-1', currentChapter: 1, currentSceneIndex: 2,
+        status: 'ACTIVE', startedAt: new Date(), lastSceneAt: new Date(),
+        story: { title: 'Test', coverUrl: 'https://cdn.example.com/story-cover.jpg' },
+        premise: { title: 'P1', coverUrl: 'https://cdn.example.com/premise-cover.jpg' },
+        character: { name: 'Hero', imageUrl: 'https://cdn.example.com/char.jpg' },
+      }]);
+      mockPrisma.readingSession.count.mockResolvedValue(1);
+
+      const result = await (service as any).getUserSessions('user-1', {});
+      const s = result.sessions[0];
+
+      expect(s.storyCoverUrl).toBe('https://cdn.example.com/story-cover.jpg');
+    });
+
+    it('premise cover http(s) fallback works when story cover missing', async () => {
+      mockPrisma.readingSession.findMany.mockResolvedValue([{
+        id: 'session-1', storyId: 'story-1', currentChapter: 1, currentSceneIndex: 2,
+        status: 'ACTIVE', startedAt: new Date(), lastSceneAt: new Date(),
+        story: { title: 'Test', coverUrl: null },
+        premise: { title: 'P1', coverUrl: 'https://cdn.example.com/premise-cover.jpg' },
+        character: { name: 'Hero', imageUrl: 'https://cdn.example.com/char.jpg' },
+      }]);
+      mockPrisma.readingSession.count.mockResolvedValue(1);
+
+      const result = await (service as any).getUserSessions('user-1', {});
+      const s = result.sessions[0];
+
+      expect(s.storyCoverUrl).toBe('https://cdn.example.com/premise-cover.jpg');
+      expect(s.selectedPremiseCoverUrl).toBe('https://cdn.example.com/premise-cover.jpg');
+    });
+
+    it('character image http(s) fallback works when story and premise missing', async () => {
+      mockPrisma.readingSession.findMany.mockResolvedValue([{
+        id: 'session-1', storyId: 'story-1', currentChapter: 1, currentSceneIndex: 2,
+        status: 'ACTIVE', startedAt: new Date(), lastSceneAt: new Date(),
+        story: { title: 'Test', coverUrl: null },
+        premise: { title: 'P1', coverUrl: null },
+        character: { name: 'Hero', imageUrl: 'https://cdn.example.com/char.jpg' },
+      }]);
+      mockPrisma.readingSession.count.mockResolvedValue(1);
+
+      const result = await (service as any).getUserSessions('user-1', {});
+      const s = result.sessions[0];
+
+      expect(s.storyCoverUrl).toBe('https://cdn.example.com/char.jpg');
+      expect(s.selectedCharacterImageUrl).toBe('https://cdn.example.com/char.jpg');
+    });
+
+    it('inline/base64 coverUrl is stripped and returns null', async () => {
+      mockPrisma.readingSession.findMany.mockResolvedValue([{
+        id: 'session-1', storyId: 'story-1', currentChapter: 1, currentSceneIndex: 2,
+        status: 'ACTIVE', startedAt: new Date(), lastSceneAt: new Date(),
+        story: { title: 'Test', coverUrl: 'data:image/png;base64,iVBORw0KGgo=' },
+        premise: { title: 'P1', coverUrl: 'data:image/png;base64,AAAA' },
+        character: { name: 'Hero', imageUrl: 'data:image/png;base64,BBBB' },
+      }]);
+      mockPrisma.readingSession.count.mockResolvedValue(1);
+
+      const result = await (service as any).getUserSessions('user-1', {});
+      const s = result.sessions[0];
+
+      expect(s.storyCoverUrl).toBeNull();
+      expect(s.selectedPremiseCoverUrl).toBeNull();
+      expect(s.selectedCharacterImageUrl).toBeNull();
+    });
+
+    it('mixed http and inline returns http URL only, stripping inline', async () => {
+      mockPrisma.readingSession.findMany.mockResolvedValue([{
+        id: 'session-1', storyId: 'story-1', currentChapter: 1, currentSceneIndex: 2,
+        status: 'ACTIVE', startedAt: new Date(), lastSceneAt: new Date(),
+        story: { title: 'Test', coverUrl: null },
+        premise: { title: 'P1', coverUrl: 'https://cdn.example.com/premise-cover.jpg' },
+        character: { name: 'Hero', imageUrl: 'data:image/png;base64,BBBB' },
+      }]);
+      mockPrisma.readingSession.count.mockResolvedValue(1);
+
+      const result = await (service as any).getUserSessions('user-1', {});
+      const s = result.sessions[0];
+
+      expect(s.storyCoverUrl).toBe('https://cdn.example.com/premise-cover.jpg');
+      expect(s.selectedPremiseCoverUrl).toBe('https://cdn.example.com/premise-cover.jpg');
+      expect(s.selectedCharacterImageUrl).toBeNull();
+    });
+  });
+
+  describe('QA Provider Failure Harness (Step 98l)', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('returns 503 AI_PROVIDER_UNAVAILABLE when narrative engine throws provider error', async () => {
+      mockNarrativeEngine.generateScene.mockRejectedValue(new Error('Provider unavailable (QA forced'));
+
+      mockPrisma.readingSession.findUnique.mockResolvedValue({
+        id: 'session-1', userId: 'user-1', storyId: 'story-1',
+        currentSceneIndex: 1, status: 'ACTIVE',
+      });
+
+      mockPrisma.story.findUnique.mockResolvedValue({
+        id: 'story-1', title: 'Test', synopsis: 'Syn', genres: ['drama'],
+        visibility: 'PUBLIC', moderationStatus: 'APPROVED',
+      });
+
+      mockPrisma.narrativeMemory.findUnique.mockResolvedValue({});
+      mockPrisma.storyPremise.findUnique.mockResolvedValue({ id: 'premise-1', storyId: 'story-1' });
+      mockPrisma.storyPlayableCharacter.findFirst.mockResolvedValue({ id: 'char-1', premiseId: 'premise-1' });
+      mockPrisma.narrativeEvent.findMany.mockResolvedValue([]);
+
+      try {
+        await (service as any).generateNextScene('user-1', 'session-1', 'test action');
+        fail('Expected error');
+      } catch (error: any) {
+        expect(error.status).toBe(503);
+        expect(error.message).toContain('temporarily unavailable');
+      }
+
+      expect(mockNarrativeEngine.generateScene).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not persist any event when provider fails', async () => {
+      mockNarrativeEngine.generateScene.mockRejectedValue(new Error('Provider unavailable (QA forced'));
+
+      mockPrisma.readingSession.findUnique.mockResolvedValue({
+        id: 'session-1', userId: 'user-1', storyId: 'story-1',
+        currentSceneIndex: 1, status: 'ACTIVE',
+      });
+
+      mockPrisma.story.findUnique.mockResolvedValue({
+        id: 'story-1', title: 'Test', synopsis: 'Syn', genres: ['drama'],
+        visibility: 'PUBLIC', moderationStatus: 'APPROVED',
+      });
+
+      mockPrisma.narrativeMemory.findUnique.mockResolvedValue({});
+      mockPrisma.storyPremise.findUnique.mockResolvedValue({ id: 'premise-1', storyId: 'story-1' });
+      mockPrisma.storyPlayableCharacter.findFirst.mockResolvedValue({ id: 'char-1', premiseId: 'premise-1' });
+      mockPrisma.narrativeEvent.findMany.mockResolvedValue([]);
+
+      try { await (service as any).generateNextScene('user-1', 'session-1', 'test'); } catch {}
+
+      expect(mockPrisma.narrativeEvent.create).not.toHaveBeenCalled();
     });
   });
 });

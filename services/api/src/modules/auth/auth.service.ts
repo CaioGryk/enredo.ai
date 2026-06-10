@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, ConflictException, BadRequestExcepti
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { PrismaService } from '@common/prisma.service';
 import { RegisterDto, LoginDto, SocialLoginDto, AuthResponseDto, UserProfileDto } from './dto/auth.dto';
 import { SubscriptionType, UserRole } from '@prisma/client';
@@ -12,6 +13,25 @@ type VerifiedSocialProfile = {
   name?: string;
   avatarUrl?: string;
 };
+
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function parseDuration(duration: string): number {
+  const match = duration.match(/^(\d+)(ms|s|m|h|d)$/);
+  if (!match) return 7 * 24 * 60 * 60 * 1000; // fallback 7d
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  switch (unit) {
+    case 'ms': return value;
+    case 's': return value * 1000;
+    case 'm': return value * 60 * 1000;
+    case 'h': return value * 60 * 60 * 1000;
+    case 'd': return value * 24 * 60 * 60 * 1000;
+    default: return 7 * 24 * 60 * 60 * 1000;
+  }
+}
 
 @Injectable()
 export class AuthService {
@@ -37,22 +57,10 @@ export class AuthService {
         email: dto.email,
         name: dto.name,
         passwordHash,
-        subscription: {
-          create: {
-            type: SubscriptionType.FREE,
-            status: 'ACTIVE',
-          },
-        },
-        creditWallet: {
-          create: {
-            balance: 0,
-          },
-        },
+        subscription: { create: { type: SubscriptionType.FREE, status: 'ACTIVE' } },
+        creditWallet: { create: { balance: 0 } },
       },
-      include: {
-        subscription: true,
-        creditWallet: true,
-      },
+      include: { subscription: true, creditWallet: true },
     });
 
     return this.generateTokens(user);
@@ -64,15 +72,10 @@ export class AuthService {
       include: { subscription: true },
     });
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+    if (!user) throw new UnauthorizedException('Invalid credentials');
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
-
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+    if (!isPasswordValid) throw new UnauthorizedException('Invalid credentials');
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -97,30 +100,29 @@ export class AuthService {
         name: profile.name || dto.name || profile.email.split('@')[0],
         avatarUrl: profile.avatarUrl,
         passwordHash: await bcrypt.hash(`sso:${dto.provider}:${randomUUID()}`, 12),
-        subscription: {
-          create: {
-            type: SubscriptionType.FREE,
-            status: 'ACTIVE',
-          },
-        },
-        creditWallet: {
-          create: {
-            balance: 0,
-          },
-        },
+        subscription: { create: { type: SubscriptionType.FREE, status: 'ACTIVE' } },
+        creditWallet: { create: { balance: 0 } },
       },
-      include: {
-        subscription: true,
-        creditWallet: true,
-      },
+      include: { subscription: true, creditWallet: true },
     });
 
     return this.generateTokens(user);
   }
 
-  async refreshToken(token: string): Promise<AuthResponseDto> {
+  async refreshToken(rawToken: string): Promise<AuthResponseDto> {
+    // Validate JWT structure and secret before DB lookup
+    try {
+      this.jwtService.verify(rawToken, {
+        secret: this.configService.get('REFRESH_TOKEN_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // Look up by hashed token
+    const digest = hashToken(rawToken);
     const storedToken = await this.prisma.refreshToken.findUnique({
-      where: { token },
+      where: { token: digest },
       include: { user: { include: { subscription: true } } },
     });
 
@@ -132,6 +134,7 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token expired');
     }
 
+    // Revoke old + create new
     await this.prisma.refreshToken.update({
       where: { id: storedToken.id },
       data: { revokedAt: new Date() },
@@ -150,20 +153,9 @@ export class AuthService {
   async getProfile(userId: string): Promise<UserProfileDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        avatarUrl: true,
-        createdAt: true,
-        lastActiveAt: true,
-      },
+      select: { id: true, email: true, name: true, avatarUrl: true, createdAt: true, lastActiveAt: true },
     });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
+    if (!user) throw new UnauthorizedException('User not found');
     return user as UserProfileDto;
   }
 
@@ -181,27 +173,29 @@ export class AuthService {
       expiresIn: this.configService.get('JWT_EXPIRES_IN', '15m'),
     });
 
-    const refreshToken = this.jwtService.sign(payload, {
+    const refreshToken = this.jwtService.sign({ ...payload, jti: randomUUID() }, {
       secret: this.configService.get('REFRESH_TOKEN_SECRET'),
       expiresIn: this.configService.get('REFRESH_TOKEN_EXPIRES_IN', '7d'),
     });
 
+    const refreshExpiresIn = this.configService.get('REFRESH_TOKEN_EXPIRES_IN', '7d');
+    const expiresAt = new Date(Date.now() + parseDuration(refreshExpiresIn));
+
+    // Store hashed refresh token, not raw
+    const digest = hashToken(refreshToken);
+
     await this.prisma.refreshToken.create({
       data: {
-        token: refreshToken,
+        token: digest,
         userId: user.id,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt,
       },
     });
 
     return {
       accessToken,
       refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      },
+      user: { id: user.id, email: user.email, name: user.name },
     };
   }
 
@@ -210,10 +204,7 @@ export class AuthService {
       where: { id: payload.sub },
       include: { subscription: true },
     });
-
-    if (!user) {
-      return null;
-    }
+    if (!user) return null;
 
     return {
       id: user.id,
@@ -230,43 +221,21 @@ export class AuthService {
 
   private async verifyGoogleToken(idToken: string): Promise<VerifiedSocialProfile> {
     const allowedClientIds = this.getCsvConfig('GOOGLE_CLIENT_IDS');
-    if (allowedClientIds.length === 0) {
-      throw new BadRequestException('GOOGLE_CLIENT_IDS is not configured');
-    }
+    if (allowedClientIds.length === 0) throw new BadRequestException('GOOGLE_CLIENT_IDS is not configured');
 
     const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
-    if (!response.ok) {
-      throw new UnauthorizedException('Invalid Google token');
-    }
+    if (!response.ok) throw new UnauthorizedException('Invalid Google token');
 
-    const data = await response.json() as {
-      aud?: string;
-      email?: string;
-      email_verified?: string | boolean;
-      name?: string;
-      picture?: string;
-    };
+    const data = await response.json() as { aud?: string; email?: string; email_verified?: string | boolean; name?: string; picture?: string };
 
-    if (!data.aud || !allowedClientIds.includes(data.aud)) {
-      throw new UnauthorizedException('Google token audience is not allowed');
-    }
+    if (!data.aud || !allowedClientIds.includes(data.aud)) throw new UnauthorizedException('Google token audience is not allowed');
+    if (!data.email || data.email_verified === false || data.email_verified === 'false') throw new UnauthorizedException('Google email is not verified');
 
-    if (!data.email || data.email_verified === false || data.email_verified === 'false') {
-      throw new UnauthorizedException('Google email is not verified');
-    }
-
-    return {
-      email: data.email,
-      name: data.name,
-      avatarUrl: data.picture,
-    };
+    return { email: data.email, name: data.name, avatarUrl: data.picture };
   }
 
   private getCsvConfig(key: string): string[] {
     const value = this.configService.get<string>(key) || '';
-    return value
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
   }
 }

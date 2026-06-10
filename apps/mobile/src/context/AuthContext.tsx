@@ -23,6 +23,8 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const getOnboardingCompleteKey = (userId: string) => `onboardingComplete:${userId}`;
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -54,8 +56,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Redirect to login if not authenticated and trying to access protected route
       router.replace('/(auth)/login');
     } else if (user && (inAuthGroup || isRoot)) {
-      // Redirect away from login if already authenticated
-      router.replace('/(tabs)/library');
+      // Redirect authenticated users — check onboarding first
+      tokenStorage.getItem(getOnboardingCompleteKey(user.id)).then((onboardingDone) => {
+        if (onboardingDone === 'true') {
+          router.replace('/(tabs)/library');
+        } else {
+          router.replace('/onboarding' as any);
+        }
+      });
     }
   }, [user, segments, isLoading]);
 
@@ -81,7 +89,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       }
     } catch (e) {
-      console.log('Failed to load user', e);
+      if (__DEV__) {
+        console.log('Failed to load user');
+      }
       await tokenStorage.deleteItem('accessToken');
       await tokenStorage.deleteItem('refreshToken');
     } finally {
@@ -94,7 +104,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
     setUser(data.user);
-    router.replace('/(tabs)/library');
   };
 
   const register = async (credentials: any) => {
@@ -102,7 +111,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
     setUser(data.user);
-    router.replace('/(tabs)/library');
   };
 
   const socialLogin = async (provider: 'GOOGLE', idToken: string, name?: string) => {
@@ -110,7 +118,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
     setUser(data.user);
-    router.replace('/(tabs)/library');
   };
 
   const logout = async () => {

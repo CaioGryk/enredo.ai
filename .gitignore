@@ -11,6 +11,9 @@ node_modules/
 .env.development
 .env.test
 .env.production
+.env.*
+*.env.backup
+*.env.*.backup
 
 # Next.js build output
 .next/
@@ -21,6 +24,8 @@ dist-preview/
 dist-preview-*/
 */dist-preview/
 */dist-preview-*/
+dist-codex-preview/
+*/dist-codex-preview/
 
 # Expo
 .expo/

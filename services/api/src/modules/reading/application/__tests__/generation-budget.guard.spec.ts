@@ -45,7 +45,7 @@ describe('GenerationBudgetGuard', () => {
       const decision = guard.decide({
         userId: 'user-1',
         subscriptionType: SubscriptionType.FREE,
-        requestedModelId: undefined, // use default (openrouter/free)
+        requestedModelId: undefined, // use default (groq/free)
         dailyUsageCount: 10,
         dailyUsageLimit: 50,
         creditBalance: 0,
@@ -54,7 +54,7 @@ describe('GenerationBudgetGuard', () => {
       });
 
       expect(decision.allowed).toBe(true);
-      expect(decision.finalModel.id).toBe('openrouter/free');
+      expect(decision.finalModel.id).toBe('groq/free');
       expect(decision.finalModel.tier).toBe('FREE');
     });
 
@@ -87,7 +87,7 @@ describe('GenerationBudgetGuard', () => {
       });
 
       expect(decision.allowed).toBe(true);
-      expect(decision.finalModel.id).toBe('openrouter/free');
+      expect(decision.finalModel.id).toBe('groq/free');
     });
 
     it('should ALLOW free user requesting free model explicitly', () => {
@@ -141,7 +141,7 @@ describe('GenerationBudgetGuard', () => {
       expect(decision.blockReason).toContain('Requires 2 credits');
     });
 
-    it('should ALLOW premium user with insufficient credits for cinematic mode', () => {
+    it('should DENY premium user with insufficient credits for cinematic mode (cinematic is not sponsored)', () => {
       const decision = guard.decide({
         userId: 'user-1',
         subscriptionType: SubscriptionType.PREMIUM,
@@ -153,8 +153,9 @@ describe('GenerationBudgetGuard', () => {
         isFirstScene: false,
       });
 
-      expect(decision.allowed).toBe(true);
-      expect(decision.finalModel.id).toBe('claude-3-5-sonnet-20241022');
+      expect(decision.allowed).toBe(false);
+      expect(decision.estimatedCreditCost).toBe(2);
+      expect(decision.requiresCredits).toBe(true);
     });
 
     it('should ALLOW premium user with no credits and no requested model (use default)', () => {
@@ -319,6 +320,24 @@ describe('GenerationBudgetGuard', () => {
       });
 
       expect(decision.allowed).toBe(true);
+    });
+
+    it('should fallback premium users to the free default model when freeLlmOnly=true and no model is requested', () => {
+      const decision = guard.decide({
+        userId: 'user-1',
+        subscriptionType: SubscriptionType.PREMIUM,
+        requestedModelId: undefined,
+        dailyUsageCount: 0,
+        dailyUsageLimit: 50,
+        creditBalance: 100,
+        isCinematicMode: false,
+        isFirstScene: true,
+        freeLlmOnly: true,
+      });
+
+      expect(decision.allowed).toBe(true);
+      expect(decision.finalModel.id).toBe('groq/free');
+      expect(decision.budgetTier).toBe('FREE');
     });
   });
 });

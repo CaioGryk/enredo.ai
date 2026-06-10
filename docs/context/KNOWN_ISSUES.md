@@ -153,11 +153,11 @@ Previously:
 
 | Item | Reason | Proposed Timeline |
 |------|--------|-------------------|
-| Real video provider | Not implemented | Phase 2+ |
-| Purchase idempotency | Mock payment for now | Phase 2+ |
+| Real video credentials/staging validation | Kling provider boundary exists, but no real credentials/staging execution has been validated | Step 86+ |
+| Persisted appearance opt-in/photo lookup | Provider boundary supports appearance reference, but User schema/mobile profile do not yet persist explicit video appearance consent | Step 87+ |
+| Real purchase idempotency | Mock/dev metadata guard exists; production requires provider/webhook-backed uniqueness | Phase 2+ |
 | Credit refunds | Flow not designed | Phase 3 |
-| Admin grant credits | No scaffold | Step 42+ |
-| Full social features | Backend partial | Phase 3 |
+| Social discovery/ranking | Feed, engagement, comments, reports, saved scenes, and moderation exist; deeper ranking/discovery remains future work | Phase 3 |
 | Ad provider integration | Not priority | Post-MVP |
 | Configuration from DB | Hardcoded fine for now | Phase 3 |
 | Comprehensive mobile tests | Infrastructure needed | Post-MVP |

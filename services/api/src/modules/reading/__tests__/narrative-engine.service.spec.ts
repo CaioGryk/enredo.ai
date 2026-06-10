@@ -11,6 +11,7 @@ describe('NarrativeEngine', () => {
   beforeEach(async () => {
     mockAiService = {
       isMockMode: jest.fn(),
+      isReadingProviderFailureEnabled: jest.fn().mockReturnValue(false),
       generateScene: jest.fn(),
       generateFirstScene: jest.fn(),
     } as any;
@@ -74,6 +75,70 @@ describe('NarrativeEngine', () => {
         outputTokens: 50,
         totalTokens: 150,
       });
+    });
+
+    it('should pass premise character personalities to continuation generation', async () => {
+      mockAiService.isMockMode.mockReturnValue(false);
+      mockAiService.generateScene.mockResolvedValue({
+        sceneText: 'Real AI scene text',
+        choices: ['Choice 1', 'Choice 2'],
+        modelUsed: 'gpt-4o-mini',
+        inputTokens: 100,
+        outputTokens: 50,
+        costUsd: 0.001,
+        sceneMetadata: { emotion: 'tensa', pacing: 'media' },
+      });
+
+      await narrativeEngine.generateScene({
+        ...baseInput,
+        action: 'Convidar a equipe para provar',
+        premise: {
+          title: 'Kitchen Duel',
+          synopsis: 'A tense kitchen duel.',
+          characters: [
+            {
+              id: 'char-luna',
+              name: 'Luna',
+              roleLabel: 'A Guardiã dos Sabores Selvagens',
+              narrativeFunction: 'HERO',
+              description: 'Chef instintiva e rebelde.',
+              personality: 'Impulsiva, sensorial e orgulhosa.',
+              motivation: 'Provar que cozinha crua pode ser alta gastronomia.',
+            },
+            {
+              id: 'char-marco',
+              name: 'Marco',
+              roleLabel: 'O Mestre dos Sonhos Açucarados',
+              narrativeFunction: 'RIVAL',
+              description: 'Confeiteiro metódico.',
+              personality: 'Controlado, perfeccionista e provocador.',
+              motivation: 'Salvar sua reputação diante da crítica.',
+              relationshipToPlayer: 'Rival que admira Luna em segredo.',
+              conflictPotential: 'Cutuca Luna para esconder atração e medo.',
+            },
+          ],
+        },
+        playableCharacter: {
+          id: 'char-luna',
+          name: 'Luna',
+          roleLabel: 'A Guardiã dos Sabores Selvagens',
+          personality: 'Impulsiva, sensorial e orgulhosa.',
+        },
+      });
+
+      const callArgs = mockAiService.generateScene.mock.calls[0][0];
+      expect(callArgs.characters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'Marco',
+            role: 'O Mestre dos Sonhos Açucarados',
+            personality: 'Controlado, perfeccionista e provocador.',
+            motivation: 'Salvar sua reputação diante da crítica.',
+            relationshipToPlayer: 'Rival que admira Luna em segredo.',
+            conflictPotential: 'Cutuca Luna para esconder atração e medo.',
+          }),
+        ]),
+      );
     });
 
     it('should parse sceneMetadata from AI response', async () => {
@@ -374,6 +439,7 @@ describe('NarrativeEngine', () => {
           narrativeFunction: 'HERO',
           personality: 'Brave',
           motivation: 'Save the day',
+          startingSituation: 'Wake up inside the locked school with a bloody key.',
         },
         isFirstScene: true,
       };
@@ -383,6 +449,155 @@ describe('NarrativeEngine', () => {
       const callArgs = mockAiService.generateFirstScene.mock.calls[0][0];
       expect(callArgs.premiseContext).toBeDefined();
       expect(callArgs.characterContext).toBeDefined();
+      expect(callArgs.characterContext?.startingSituation).toBe('Wake up inside the locked school with a bloody key.');
+    });
+
+    it('should pass premise character personalities to first-scene generation', async () => {
+      mockAiService.isMockMode.mockReturnValue(false);
+      mockAiService.generateFirstScene.mockResolvedValue({
+        sceneText: 'First scene',
+        choices: ['Continue'],
+        modelUsed: 'gpt-4o-mini',
+        inputTokens: 100,
+        outputTokens: 50,
+        costUsd: 0.001,
+        sceneMetadata: { emotion: 'neutra', pacing: 'media' },
+      });
+
+      await narrativeEngine.generateScene({
+        ...baseInput,
+        premise: {
+          title: 'Kitchen Duel',
+          synopsis: 'A tense kitchen duel.',
+          characters: [
+            {
+              id: 'char-luna',
+              name: 'Luna',
+              roleLabel: 'A Guardiã dos Sabores Selvagens',
+              narrativeFunction: 'HERO',
+              description: 'Chef instintiva e rebelde.',
+              personality: 'Impulsiva, sensorial e orgulhosa.',
+              motivation: 'Provar que cozinha crua pode ser alta gastronomia.',
+              relationshipToPlayer: 'Personagem jogável.',
+              conflictPotential: 'Desconfia da precisão fria de Marco.',
+            },
+            {
+              id: 'char-marco',
+              name: 'Marco',
+              roleLabel: 'O Mestre dos Sonhos Açucarados',
+              narrativeFunction: 'RIVAL',
+              description: 'Confeiteiro metódico.',
+              personality: 'Controlado, perfeccionista e provocador.',
+              motivation: 'Salvar sua reputação diante da crítica.',
+              relationshipToPlayer: 'Rival que admira Luna em segredo.',
+              conflictPotential: 'Cutuca Luna para esconder atração e medo.',
+            },
+          ],
+        },
+        playableCharacter: {
+          id: 'char-luna',
+          name: 'Luna',
+          roleLabel: 'A Guardiã dos Sabores Selvagens',
+          personality: 'Impulsiva, sensorial e orgulhosa.',
+        },
+        isFirstScene: true,
+      });
+
+      const callArgs = mockAiService.generateFirstScene.mock.calls[0][0];
+      expect(callArgs.characters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'Marco',
+            role: 'O Mestre dos Sonhos Açucarados',
+            personality: 'Controlado, perfeccionista e provocador.',
+            motivation: 'Salvar sua reputação diante da crítica.',
+            relationshipToPlayer: 'Rival que admira Luna em segredo.',
+            conflictPotential: 'Cutuca Luna para esconder atração e medo.',
+          }),
+        ]),
+      );
+    });
+
+    it('should pass narrative policy to generateFirstScene', async () => {
+      mockAiService.isMockMode.mockReturnValue(false);
+      mockAiService.generateFirstScene.mockResolvedValue({
+        sceneText: 'First scene',
+        choices: ['Continue'],
+        modelUsed: 'gpt-4o-mini',
+        inputTokens: 100,
+        outputTokens: 50,
+        costUsd: 0.001,
+        sceneMetadata: { emotion: 'neutra', pacing: 'media' },
+      });
+
+      const narrativePolicy = {
+        effectiveRomanceIntensity: 'ADULT_18',
+        adultContentAllowed: true,
+        mediaAdultContentAllowed: false,
+        userLikenessAdultContentAllowed: false,
+      };
+
+      await narrativeEngine.generateScene({
+        ...baseInput,
+        isFirstScene: true,
+        narrativePolicy,
+      });
+
+      const callArgs = mockAiService.generateFirstScene.mock.calls[0][0];
+      expect(callArgs.narrativePolicy).toEqual(narrativePolicy);
+    });
+
+    it('should include the generated first scene in the initial codex timeline', async () => {
+      mockAiService.isMockMode.mockReturnValue(false);
+      mockAiService.generateFirstScene.mockResolvedValue({
+        sceneText: 'Lia acordou na torre norte com uma chave fria na mão.',
+        choices: ['Examinar a chave'],
+        modelUsed: 'gpt-4o-mini',
+        inputTokens: 100,
+        outputTokens: 50,
+        costUsd: 0.001,
+        sceneMetadata: { emotion: 'misteriosa', pacing: 'lenta' },
+      });
+
+      const result = await narrativeEngine.generateScene({
+        ...baseInput,
+        isFirstScene: true,
+      });
+
+      expect(result.memoryPatch?.codex?.timeline).toEqual([
+        expect.objectContaining({
+          scene: 0,
+          summary: expect.stringContaining('Lia acordou na torre norte'),
+        }),
+      ]);
+    });
+
+    it('should pass narrative policy to continuation generation', async () => {
+      mockAiService.isMockMode.mockReturnValue(false);
+      mockAiService.generateScene.mockResolvedValue({
+        sceneText: 'Continuation scene',
+        choices: ['Continue'],
+        modelUsed: 'gpt-4o-mini',
+        inputTokens: 100,
+        outputTokens: 50,
+        costUsd: 0.001,
+        sceneMetadata: { emotion: 'neutra', pacing: 'media' },
+      });
+
+      const narrativePolicy = {
+        effectiveRomanceIntensity: 'INTENSE',
+        adultContentAllowed: false,
+        mediaAdultContentAllowed: false,
+        userLikenessAdultContentAllowed: false,
+      };
+
+      await narrativeEngine.generateScene({
+        ...baseInput,
+        narrativePolicy,
+      });
+
+      const callArgs = mockAiService.generateScene.mock.calls[0][0];
+      expect(callArgs.narrativePolicy).toEqual(narrativePolicy);
     });
 
     it('should throw error when provider fails for first scene', async () => {
@@ -395,6 +610,36 @@ describe('NarrativeEngine', () => {
       };
 
       await expect(narrativeEngine.generateScene(firstSceneInput)).rejects.toThrow('Scene generation failed');
+    });
+  });
+
+  describe('QA Provider Failure Harness (Step 98l)', () => {
+    const baseInput: GenerateSceneInput = {
+      userId: 'user-1',
+      sessionId: 'session-1',
+      story: { id: 'story-1', title: 'Test', synopsis: 'A test story', genres: ['adventure'] },
+      session: {} as any,
+      sceneIndex: 1,
+    };
+
+    it('harness is disabled by default', () => {
+      mockAiService.isReadingProviderFailureEnabled.mockReturnValue(false);
+      expect(mockAiService.isReadingProviderFailureEnabled()).toBe(false);
+    });
+
+    it('throws provider error when harness is enabled', async () => {
+      mockAiService.isReadingProviderFailureEnabled.mockReturnValue(true);
+
+      await expect(narrativeEngine.generateScene(baseInput)).rejects.toThrow('Provider unavailable');
+      expect(mockAiService.generateScene).not.toHaveBeenCalled();
+    });
+
+    it('throws provider error for first scene when harness is enabled', async () => {
+      mockAiService.isReadingProviderFailureEnabled.mockReturnValue(true);
+
+      const firstSceneInput: GenerateSceneInput = { ...baseInput, isFirstScene: true };
+      await expect(narrativeEngine.generateScene(firstSceneInput)).rejects.toThrow('Provider unavailable');
+      expect(mockAiService.generateFirstScene).not.toHaveBeenCalled();
     });
   });
 });

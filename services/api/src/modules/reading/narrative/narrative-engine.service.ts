@@ -9,6 +9,10 @@ export class NarrativeEngine {
   constructor(private readonly aiService: AiService) {}
 
   async generateScene(input: GenerateSceneInput): Promise<GenerateSceneResult> {
+    if (this.aiService.isReadingProviderFailureEnabled()) {
+      throw new Error('Provider unavailable (QA forced)');
+    }
+
     if (this.aiService.isMockMode()) {
       return input.isFirstScene
         ? this.generateMockFirstScene(input)
@@ -28,7 +32,7 @@ export class NarrativeEngine {
   private async generateAIFirstScene(input: GenerateSceneInput): Promise<GenerateSceneResult> {
     const premiseContext = NarrativeContextBuilder.buildPremiseContext(input.premise);
     const characterContext = NarrativeContextBuilder.buildCharacterContext(input.playableCharacter);
-    const storyCharacters = NarrativeContextBuilder.buildStoryCharacters(input.story);
+    const storyCharacters = NarrativeContextBuilder.buildStoryCharacters(input.story, input.premise, input.playableCharacter);
 
     const currentMemory = input.memory
       ? {
@@ -40,6 +44,10 @@ export class NarrativeEngine {
           constraints: input.memory.constraints || '',
         }
       : null;
+
+    const codexContext = input.memory?.codex
+      ? NarrativeContextBuilder.serializeCodexForPrompt(input.memory.codex)
+      : undefined;
 
     const plan = input.plan || SubscriptionType.FREE;
 
@@ -58,6 +66,7 @@ export class NarrativeEngine {
       modelId: input.selectedModelId,
       walletBalance: input.walletBalance,
       narrativeMemory: currentMemory,
+      codexContext,
       premiseContext: premiseContext ? {
         title: premiseContext.title,
         synopsis: premiseContext.synopsis,
@@ -76,8 +85,10 @@ export class NarrativeEngine {
         secret: characterContext.secret,
         relationshipToPlayer: characterContext.relationshipToPlayer,
         initialGoal: characterContext.initialGoal,
+        startingSituation: characterContext.startingSituation,
         conflictPotential: characterContext.conflictPotential,
       } : null,
+      narrativePolicy: input.narrativePolicy,
     });
 
     return this.parseFirstSceneResult(result, input);
@@ -87,7 +98,7 @@ export class NarrativeEngine {
     const sceneText = result.sceneText || 'Cena não gerada corretamente.';
     const rawChoices = Array.isArray(result.choices) ? result.choices : [];
     const suggestedActions = rawChoices.length > 0
-      ? rawChoices.map((c: string) => c.substring(0, 50))
+      ? rawChoices.map((c: string) => c.substring(0, 120))
       : ['Continuar', 'Explorar', 'Voltar'];
 
     const currentMemory = input.memory
@@ -115,9 +126,21 @@ export class NarrativeEngine {
       'primeira cena',
       sceneText,
       suggestedActions,
-      NarrativeContextBuilder.buildStoryCharacters(input.story),
+      NarrativeContextBuilder.buildStoryCharacters(input.story, input.premise, input.playableCharacter),
       0,
     );
+
+    const premiseCtx = NarrativeContextBuilder.buildPremiseContext(input.premise);
+    const charCtx = NarrativeContextBuilder.buildCharacterContext(input.playableCharacter);
+    const initialCodex = NarrativeContextBuilder.createInitialCodex({
+      story: { ...input.story, characters: NarrativeContextBuilder.buildStoryCharacters(input.story, input.premise, input.playableCharacter) },
+      premise: premiseCtx,
+      character: charCtx,
+    });
+    initialCodex.timeline.push({
+      scene: 0,
+      summary: sceneText.substring(0, 120).replace(/\n/g, ' '),
+    });
 
     return {
       sceneText,
@@ -140,6 +163,7 @@ export class NarrativeEngine {
         importantChoices: memoryUpdate.importantChoices || [],
         openThreads: memoryUpdate.openThreads || [],
         constraints: currentMemory.constraints || '',
+        codex: initialCodex,
       },
     };
   }
@@ -185,9 +209,21 @@ export class NarrativeEngine {
       'início',
       sceneText,
       suggestedActions,
-      NarrativeContextBuilder.buildStoryCharacters(input.story),
+      NarrativeContextBuilder.buildStoryCharacters(input.story, input.premise, input.playableCharacter),
       0,
     );
+
+    const premiseCtx = NarrativeContextBuilder.buildPremiseContext(input.premise);
+    const charCtx = NarrativeContextBuilder.buildCharacterContext(input.playableCharacter);
+    const initialCodex = NarrativeContextBuilder.createInitialCodex({
+      story: { ...input.story, characters: NarrativeContextBuilder.buildStoryCharacters(input.story, input.premise, input.playableCharacter) },
+      premise: premiseCtx,
+      character: charCtx,
+    });
+    initialCodex.timeline.push({
+      scene: 0,
+      summary: sceneText.substring(0, 120).replace(/\n/g, ' '),
+    });
 
     return {
       sceneText,
@@ -214,6 +250,7 @@ export class NarrativeEngine {
           ? memoryUpdate.openThreads
           : String(memoryUpdate.openThreads || '').split('\n').filter(Boolean),
         constraints: currentMemory.constraints,
+        codex: initialCodex,
       },
     };
   }
@@ -221,7 +258,7 @@ export class NarrativeEngine {
   private async generateAIScene(input: GenerateSceneInput): Promise<GenerateSceneResult> {
     const premiseContext = NarrativeContextBuilder.buildPremiseContext(input.premise);
     const characterContext = NarrativeContextBuilder.buildCharacterContext(input.playableCharacter);
-    const storyCharacters = NarrativeContextBuilder.buildStoryCharacters(input.story);
+    const storyCharacters = NarrativeContextBuilder.buildStoryCharacters(input.story, input.premise, input.playableCharacter);
 
     const currentMemory = input.memory
       ? {
@@ -233,6 +270,10 @@ export class NarrativeEngine {
           constraints: input.memory.constraints || '',
         }
       : null;
+
+    const codexContext = input.memory?.codex
+      ? NarrativeContextBuilder.serializeCodexForPrompt(input.memory.codex)
+      : undefined;
 
     const previousSceneText = (() => {
       if (!input.previousEvents || input.previousEvents.length === 0) {
@@ -263,14 +304,16 @@ export class NarrativeEngine {
       characterContext,
       memorySummary,
       narrativeMemory: currentMemory,
+      codexContext,
       previousSceneText,
       previousChoices,
       userAction: input.action || 'continuar',
-      userActionType: UserActionType.CHOICE,
+      userActionType: input.actionType || UserActionType.CHOICE,
       plan,
       isCinematic: input.isCinematic || false,
       modelId: input.selectedModelId,
       walletBalance: input.walletBalance,
+      narrativePolicy: input.narrativePolicy,
     });
 
     return this.parseSceneResult(result, input);
@@ -280,7 +323,7 @@ export class NarrativeEngine {
     const sceneText = result.sceneText || 'Cena não gerada corretamente.';
     const rawChoices = Array.isArray(result.choices) ? result.choices : [];
     const suggestedActions = rawChoices.length > 0
-      ? rawChoices.map((c: string) => c.substring(0, 50))
+      ? rawChoices.map((c: string) => c.substring(0, 120))
       : ['Continuar', 'Explorar', 'Voltar'];
 
     const currentMemory = input.memory
@@ -308,9 +351,17 @@ export class NarrativeEngine {
       input.action || 'continuar',
       sceneText,
       suggestedActions,
-      NarrativeContextBuilder.buildStoryCharacters(input.story),
+      NarrativeContextBuilder.buildStoryCharacters(input.story, input.premise, input.playableCharacter),
       input.sceneIndex,
     );
+
+    const existingCodex = input.memory?.codex as any;
+    const updatedCodex = NarrativeContextBuilder.computeUpdatedCodex(existingCodex, {
+      userAction: input.action || 'continuar',
+      sceneText,
+      sceneIndex: input.sceneIndex,
+      characters: NarrativeContextBuilder.buildStoryCharacters(input.story, input.premise, input.playableCharacter).map(c => ({ name: c.name, role: c.role, description: c.description })),
+    });
 
     return {
       sceneText,
@@ -333,6 +384,7 @@ export class NarrativeEngine {
         importantChoices: memoryUpdate.importantChoices || [],
         openThreads: memoryUpdate.openThreads || [],
         constraints: currentMemory.constraints || '',
+        codex: updatedCodex,
       },
     };
   }
@@ -369,9 +421,17 @@ export class NarrativeEngine {
       input.action || 'continuar',
       sceneText,
       suggestedActions,
-      NarrativeContextBuilder.buildStoryCharacters(input.story),
+      NarrativeContextBuilder.buildStoryCharacters(input.story, input.premise, input.playableCharacter),
       input.sceneIndex,
     );
+
+    const existingCodex = input.memory?.codex as any;
+    const updatedCodex = NarrativeContextBuilder.computeUpdatedCodex(existingCodex, {
+      userAction: input.action || 'continuar',
+      sceneText,
+      sceneIndex: input.sceneIndex,
+      characters: NarrativeContextBuilder.buildStoryCharacters(input.story, input.premise, input.playableCharacter).map(c => ({ name: c.name, role: c.role, description: c.description })),
+    });
 
     return {
       sceneText,
@@ -398,6 +458,7 @@ export class NarrativeEngine {
           ? memoryUpdate.openThreads
           : String(memoryUpdate.openThreads || '').split('\n').filter(Boolean),
         constraints: currentMemory.constraints,
+        codex: updatedCodex,
       },
     };
   }

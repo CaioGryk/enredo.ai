@@ -8,7 +8,18 @@
 
 Enredo.ai must evolve into a **curated library + community creation engine + social audiovisual layer**.
 
-In the extended MVP, the public library remains mostly curated/admin to ensure quality, predictable cost, and moderation. In future phases, users can create private stories via keywords, play those stories, generate media with AI, publish scenes to the social feed, and submit stories for the community/library after moderation.
+In the extended MVP, the public library remains mostly curated/admin to ensure quality, predictable cost, and moderation. In future phases, users can create private stories via keywords, play those stories, generate media with AI, publish scenes to the social feed, and allow high-engagement stories to become candidates for the main app library after moderation.
+
+**Community creation loop:**
+1. User creates a private AI story.
+2. User plays the story through the same premise → character → reader flow.
+3. User generates images and short videos from scenes in that story.
+4. User posts selected scene media to the app feed.
+5. Feed engagement is measured through likes and other quality signals.
+6. If a story reaches a configurable threshold of likes/engagement, it becomes eligible for admin/editorial review.
+7. Approved stories can be promoted into the public library/catalog.
+
+This creates a growth loop where the app starts with curated/admin stories, then gradually lets the community surface strong stories without letting unreviewed content enter the main library automatically.
 
 **Reference Concept:** Emochi/AI character apps, but Enredo.ai focuses on:
 - Library of stories (not just characters)
@@ -17,6 +28,50 @@ In the extended MVP, the public library remains mostly curated/admin to ensure q
 - Open-ended choices (not branching paths)
 - Social feed with audiovisual content
 - Cinematic visual identity
+
+---
+
+## Beta ICP and Catalog Direction
+
+**Product decision:** The closed beta should validate a female-leaning Brazilian ICP with emotionally charged interactive fiction, not a generic AI story catalog.
+
+**Primary ICP:**
+- Brazilian women, roughly 18-35, who already consume romance, dark romance, romantasy, webnovels, fanfic, doramas, and interactive story apps.
+- The strongest initial promise is not "AI can generate anything", but "you can enter intense stories, choose who you are, and shape romance, mystery, power, betrayal, and fantasy through your actions."
+
+**Commercial catalog direction for beta:**
+- Use a focused 15-story catalog:
+  - 10 stories centered on romance, dark romance soft, power dynamics, mystery, luxury, rivalry, revenge, secrets, and emotionally dangerous relationships.
+  - 5 stories centered on fantasy/romantasy with romance, magic, curses, courts, pacts, and identity.
+- This mix is intentionally more commercial and click-oriented than the previous broad catalog, while still preserving enough variety for validation.
+
+**Dark romance / power-romance guardrails:**
+- Public positioning must stay store-safe: romance, luxury, secrets, forbidden attraction, mystery, family empire, danger, and emotionally intense choices.
+- Avoid making "hot", pornography, or explicit adult content a public category, public tag, onboarding promise, or store-facing theme.
+- Avoid overtly store-risky labels in public discovery when softer wording works. Prefer "império familiar perigoso", "dono da cidade", "contrato", "herdeiro implacável", "luxo e perigo", "segredos de família" over explicit adult-first positioning.
+- Adult intensity remains a private profile preference behind age/terms gates, as defined in the Adult Narrative Preferences section.
+
+**Proposed 15-story beta catalog:**
+
+| # | Title | Lane | Core Hook |
+|---|---|---|---|
+| 1 | A Dívida do CEO | Romance / power | A young lawyer works for an implacable CEO to save her family and uncovers an old revenge hidden in the contract. |
+| 2 | O Dono da Cidade | Dark romance soft / suspense | A photographer sees something she should not and is protected by the heir of a dangerous family empire. |
+| 3 | Noiva por Contrato | Romance / luxury | A bankrupt socialite accepts a fake marriage with a cold businessman, but the agreement becomes emotional war. |
+| 4 | Entre Luxo e Mentiras | Mystery / elite drama | An assistant enters a billionaire family's inner circle and discovers crimes, desire, and betrayals. |
+| 5 | O Guarda-Costas da Herdeira | Romantic suspense | A threatened heiress lives under the protection of a mysterious guard who knows too much about her past. |
+| 6 | Contrato de Sangue | Dark romance soft | A doctor saves a powerful man and is pulled into a dangerous debt involving love, fear, and loyalty. |
+| 7 | A Ex Que Ele Nunca Esqueceu | Revenge romance | A woman returns powerful enough to ruin the man who broke her, but he still hides the truth. |
+| 8 | Beijo em Território Inimigo | Rival families | Two powerful families control the city's elite, and the protagonist falls for the heir she should hate. |
+| 9 | A Secretária do Inimigo | CEO mystery | A young woman takes a strategic job to investigate the CEO who ruined her family, but he notices the lie too quickly. |
+| 10 | O Astro e a Garota Invisível | Fame / obsession | An ordinary fan saves a celebrity in crisis and enters a world of fame, control, and forbidden attraction. |
+| 11 | A Rainha Sem Coroa | Romantasy | A young woman discovers she is heir to an occupied magical kingdom and must choose power, revenge, and love. |
+| 12 | O Príncipe das Sombras | Romantasy / pact | A human makes a pact with a shadow prince to save her sister, but each choice brings them closer to war. |
+| 13 | Academia dos Sete Selos | Fantasy academy | In a secret magical school, the protagonist discovers a forbidden gift that can free or destroy those she loves. |
+| 14 | A Caçadora e o Deus Caído | Urban fantasy | A supernatural hunter finds a banished god who offers power in exchange for trust. |
+| 15 | O Baile das Bruxas | Witch fantasy | An apprentice witch enters a masked ball where desires, alliances, and family curses are revealed. |
+
+**Validation goal:** In beta QA, measure which hooks generate more taps, premise selections, character selections, first-session starts, and continued reader actions. The goal is to learn which emotional lanes convert, not to prove the app can support every genre.
 
 ---
 
@@ -49,6 +104,15 @@ In the extended MVP, the public library remains mostly curated/admin to ensure q
 - Expensive/top-tier models: `CREDITS` tier requiring sufficient balance
 - App can request a `modelId`, but backend validates plan, balance, feature flags, provider config, `FREE_LLM_ONLY`, and cost/tier
 - `NarrativeEngine` must NOT decide billing or entitlement; it receives authorized context and calls AI layer
+
+### Character Portraits (Core MVP)
+**Product decision:** Base playable character portraits are a core MVP feature, NOT a premium/paid feature.
+- Character portraits for cached playable characters are generated automatically on first fetch via the GET characters endpoint.
+- Portraits use the character's `visualPrompt` with editorial/cinematic styling.
+- MVP provider decision: use Cloudflare Workers AI with `@cf/black-forest-labs/flux-1-schnell` as the primary no-cost portrait provider.
+- Google image generation is optional/fallback only; it must not be treated as the primary no-cost MVP portrait provider because the tested free quota for Gemini image generation returned 0.
+- Mobile shows the generated image when available, a loading state when pending, and a stylized fallback when unavailable.
+- **Controlled monetized features remain:** video generation, active story count, premium LLM models, and advanced cinematic features.
 
 ---
 
@@ -129,9 +193,28 @@ Credits are also engagement and growth tools, not just direct purchases. Backend
   1. Google SSO
   2. Camera on first access
   3. Manual edit in Profile tab
-- This photo will be used in the future for visual personalization of scenes and videos
-- Using user image requires explicit consent
-- Consent management must appear in Profile / AI Settings
+- The profile already contains an explicit opt-in control for using the user's own photo/appearance in generated videos.
+- This photo may be used for visual personalization of scenes and videos only when the opt-in is enabled.
+- If opt-in is disabled or no profile photo exists, video generation must not send a user photo or appearance reference to the media provider.
+- Step 85 product/provider decision: use Kling as the POC/MVP video provider for scene-based videos.
+- Terminology: use "appearance reference" or "likeness reference" for the user's own consented photo. Avoid "face swap" terminology and non-consensual behavior.
+- Consent management belongs in Profile / AI Settings, with a clear path to disable future use.
+
+---
+
+## Adult Narrative Preferences
+
+**Product decision:** Adult romance must be treated as a private narrative preference, not as the public positioning of Enredo.ai.
+
+- The app remains an AI interactive storytelling product, not an adult-first app.
+- Adult/hot romance should not appear as a public category, public tag, onboarding promise, or store-facing screenshot theme.
+- The preference belongs in Profile/Settings under narrative preferences.
+- Adult 18+ requires explicit opt-in, age confirmation, and acceptance of specific terms before it can affect private reading generation.
+- The backend must compute the effective allowed level; mobile cannot be trusted as the source of truth.
+- Text and media are separate risk surfaces: adult private text can be planned with gates, but adult image/video and any adult use of user likeness remain blocked for the MVP.
+- Public feed/social distribution of adult content is blocked in the MVP by backend guardrails. A future age-gated public distribution policy would require a separate product/security decision.
+
+Reference policy: `docs/content-adult-policy.md`.
 
 ---
 
@@ -159,7 +242,7 @@ Credits are also engagement and growth tools, not just direct purchases. Backend
 - Each character has clear narrative function: playable protagonist, ally, rival, antagonist, mentor, guardian, catalyst, etc.
 - User chooses premise + character before starting session
 - `ReadingSession` loads this context for AI to generate first and subsequent scenes
-- Covers/images start simple: 1 main cover per base story in MVP; character images are future or paid feature
+- Covers/images start simple: 1 main cover per base story in MVP, plus base playable character portraits as a core MVP feature
 
 ---
 
@@ -184,4 +267,4 @@ The app migrated from old editorial/gold visual to:
 
 ---
 
-**Last Updated:** After Step 42 completion
+**Last Updated:** After Adult Narrative Preferences public feed guardrails — May 2026

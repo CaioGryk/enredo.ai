@@ -1,4 +1,5 @@
 import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, DefaultValuePipe, ParseIntPipe, HttpCode, HttpStatus } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { SceneMediaService } from './scene-media.service';
@@ -35,6 +36,15 @@ export class SceneMediaController {
     return this.sceneMediaService.getMySceneMedia(userId, filters);
   }
 
+  @Get('saved')
+  async getSaved(
+    @CurrentUser('id') userId: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
+  ) {
+    return this.sceneMediaService.getSaved(userId, { page, limit });
+  }
+
   @Get(':id')
   async getById(
     @CurrentUser('id') userId: string,
@@ -62,6 +72,7 @@ export class SceneMediaController {
   }
 
   @Post(':id/generate-image')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async generateImage(
     @CurrentUser('id') userId: string,
     @Param('id') id: string,
@@ -71,12 +82,13 @@ export class SceneMediaController {
   }
 
   @Post(':id/generate-video')
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   async generateVideo(
     @CurrentUser('id') userId: string,
     @Param('id') id: string,
-    @Body() body?: { prompt?: string },
+    @Body() body?: { prompt?: string; appearanceOptIn?: boolean },
   ) {
-    return this.sceneMediaService.generateVideo(userId, id, body?.prompt);
+    return this.sceneMediaService.generateVideo(userId, id, body?.prompt, body?.appearanceOptIn);
   }
 
   @Post(':id/like')

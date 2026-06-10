@@ -60,4 +60,33 @@ describe('AdminStoryGenerationUsageService – sanitizeFailureReason', () => {
     const reason = 'OpenRouterProvider: rate limit exceeded';
     expect((service as any).sanitizeFailureReason(reason)).toBe('OpenRouterProvider: rate limit exceeded');
   });
+
+  it('should map usage user without exposing email', () => {
+    const dto = (service as any).mapToDto({
+      id: 'usage-1',
+      userId: 'user-1',
+      storyId: 'story-1',
+      modelId: 'mock-model',
+      provider: 'openrouter',
+      isMock: true,
+      status: 'SUCCESS',
+      failureReason: null,
+      inputTokens: 1,
+      outputTokens: 2,
+      totalTokens: 3,
+      estimatedCost: 0,
+      createdAt: new Date(),
+      user: { id: 'user-1', email: 'leak@test.com' },
+      story: {
+        id: 'story-1',
+        title: 'Story',
+        origin: 'USER_GENERATED',
+        visibility: 'PRIVATE',
+        moderationStatus: 'NOT_SUBMITTED',
+      },
+    });
+
+    expect(dto.user).toEqual({ id: 'user-1' });
+    expect((dto.user as any).email).toBeUndefined();
+  });
 });

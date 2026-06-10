@@ -1,4 +1,5 @@
-import { SubscriptionType } from '@prisma/client';
+import { SubscriptionType, UserActionType } from '@prisma/client';
+import { StoryCodex } from './narrative-context.builder';
 
 export type GenerateSceneInput = {
   userId: string;
@@ -6,6 +7,7 @@ export type GenerateSceneInput = {
   story: any;
   session: any;
   action?: string;
+  actionType?: UserActionType;
   selectedModelId?: string;
   sceneIndex: number;
   memory?: any;
@@ -16,6 +18,12 @@ export type GenerateSceneInput = {
   walletBalance?: number;
   isCinematic?: boolean;
   isFirstScene?: boolean;
+  narrativePolicy?: {
+    effectiveRomanceIntensity: string;
+    adultContentAllowed: boolean;
+    mediaAdultContentAllowed: boolean;
+    userLikenessAdultContentAllowed: boolean;
+  };
 };
 
 export type GenerateSceneResult = {
@@ -39,5 +47,6 @@ export type GenerateSceneResult = {
     importantChoices?: string[];
     openThreads?: string[];
     constraints?: string;
+    codex?: StoryCodex;
   };
 };

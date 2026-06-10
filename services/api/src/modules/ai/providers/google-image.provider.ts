@@ -10,11 +10,13 @@ import {
 export class GoogleImageProvider implements ImageProvider {
   name = 'google-image';
   private readonly apiKey: string;
+  private readonly model: string;
   private readonly baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
   private readonly logger = new Logger(GoogleImageProvider.name);
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GOOGLE_AI_API_KEY') || '';
+    this.model = this.configService.get<string>('GOOGLE_IMAGE_MODEL') || 'gemini-2.5-flash-image';
   }
 
   isAvailable(): boolean {
@@ -34,7 +36,7 @@ export class GoogleImageProvider implements ImageProvider {
       const enhancedPrompt = this.enhancePrompt(request.prompt, request.style);
 
       const response = await fetch(
-        `${this.baseUrl}/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${this.apiKey}`,
+        `${this.baseUrl}/models/${this.model}:generateContent?key=${this.apiKey}`,
         {
           method: 'POST',
           headers: {
@@ -59,7 +61,7 @@ export class GoogleImageProvider implements ImageProvider {
 
       if (!response.ok) {
         const errorText = await response.text();
-        this.logger.error(`Google AI API error: ${response.status} - ${errorText}`);
+        this.logger.error(`Google AI API error: status=${response.status}, bodyLength=${errorText.length}`);
         return {
           success: false,
           error: `Image generation failed: ${response.status}`,

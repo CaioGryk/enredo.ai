@@ -1,35 +1,30 @@
-import { useState } from 'react';
-import { ImageBackground, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ImageBackground, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { BookOpen, Clapperboard, Sparkles } from 'lucide-react-native';
-import { colors } from '../src/theme/colors';
+import { BookOpen, Clapperboard, Palette, Sparkles } from 'lucide-react-native';
 import { typography } from '../src/theme/typography';
 import { useAuth } from '../src/context/AuthContext';
-import { GuidedPreview } from './preview';
 
 const welcomeImage =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuD6DmzBNcV-VOKy0AlIMcveT0FckzGErl54OP6emvYzs6CZFLra8Wq7fWleOpMrhU-bSIqA5weQbbncgXVucgeiYDjj20NDiTQBYtGQ57VgDUu0cI-vcn3BY6DIuwG0Ayp8DonywgNopGkpOiE_7DOyXSa2w0il-Zz_DqLmsqC5lFMbgTi-iRI1qEbEa8TgmuVx1xzXzWcRiAF-t0sL0nizJuqksAIcdEuMz78pwx30b0nIXErNz0orQcIG1TIRSW1oUx6oe2MdEgA';
 
-const accent = '#CEBDFF';
-const accentText = '#381385';
+const ACCENT = '#CEBDFF';
+const ACCENT_TEXT = '#381385';
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const { isLoading } = useAuth();
-  const [showPreview, setShowPreview] = useState(false);
-
-  if (showPreview) {
-    return <GuidedPreview onExit={() => setShowPreview(false)} />;
-  }
 
   return (
-    <ImageBackground source={{ uri: welcomeImage }} style={styles.container} imageStyle={styles.backgroundImage}>
-      <View style={styles.overlay} />
+    <ImageBackground source={{ uri: welcomeImage }} style={styles.root} imageStyle={styles.bgImage}>
+      {/* Gradient overlays (cinematic) */}
+      <View style={styles.overlayBottom} />
+      <View style={styles.overlayTop} />
       <View style={styles.topGlow} />
 
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.brandRow}>
-          <BookOpen color={accent} size={22} />
+          <BookOpen color={ACCENT} size={22} />
           <Text style={styles.brand}>Enredo.ai</Text>
         </View>
         <View style={styles.pill}>
@@ -37,84 +32,126 @@ export default function WelcomeScreen() {
         </View>
       </View>
 
-      <View style={styles.centerCopy}>
+      {/* Hero Copy */}
+      <View style={styles.heroCopy}>
         <Text style={styles.heroTitle}>Sua história, sua voz, seu destino.</Text>
-        <Text style={styles.heroText}>
-          Mergulhe em universos infinitos onde cada escolha, cada ação e cada cena respondem ao que você cria.
+        <Text style={styles.heroSubtitle}>
+          Mergulhe em universos infinitos onde cada escolha molda a realidade.
         </Text>
       </View>
 
-      <View style={styles.featureStrip}>
-        <FeatureChip icon={<Sparkles color={accent} size={16} />} text="IA criativa em tempo real" />
-        <FeatureChip icon={<Clapperboard color={accent} size={16} />} text="Cenas e vídeos gerados por IA" />
+      {/* Feature Cards (glass, 3-column on desktop, stacked on mobile) */}
+      <View style={styles.featureCards}>
+        <FeatureCard
+          icon={<Sparkles color={ACCENT} size={24} />}
+          title="IA Criativa"
+          description="Narrativas geradas em tempo real com base nas suas decisões mais íntimas."
+        />
+        <FeatureCard
+          icon={<Clapperboard color={ACCENT} size={24} />}
+          title="Multiverso"
+          description="De épicos de fantasia a mistérios cyberpunk, explore gêneros sem limites."
+        />
+        <FeatureCard
+          icon={<Palette color={ACCENT} size={24} />}
+          title="Visual Imersivo"
+          description="Artes cinematográficas exclusivas acompanham cada capítulo da sua jornada."
+        />
       </View>
 
-      <View style={styles.footer}>
+      {/* CTAs */}
+      <View style={styles.actions}>
         <TouchableOpacity
-          style={[styles.primaryButton, isLoading && styles.disabledButton]}
+          style={[styles.primaryButton, isLoading && styles.disabled]}
           onPress={() => router.push('/(auth)/register')}
           disabled={isLoading}
+          activeOpacity={0.9}
         >
           <Text style={styles.primaryButtonText}>Começar agora</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.previewButton, isLoading && styles.disabledButton]}
-          onPress={() => setShowPreview(true)}
-          disabled={isLoading}
-        >
-          <Text style={styles.previewButtonText}>Experimentar prévia</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.secondaryButton, isLoading && styles.disabledButton]}
+          style={[styles.secondaryButton, isLoading && styles.disabled]}
           onPress={() => router.push('/(auth)/login')}
           disabled={isLoading}
+          activeOpacity={0.8}
         >
           <Text style={styles.secondaryButtonText}>Entrar</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <View style={styles.footerDivider} />
+        <View style={styles.footerLinks}>
+          <TouchableOpacity onPress={() => router.push('/legal')}>
+            <Text style={styles.footerLink}>Termos</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/legal')}>
+            <Text style={styles.footerLink}>Privacidade</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => Linking.openURL('mailto:support@enredo.ai').catch(() => Alert.alert('Contato', 'Envie um e-mail para support@enredo.ai'))}>
+            <Text style={styles.footerLink}>Contato</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.copyright}>2024 ENREDO.AI — TODOS OS DIREITOS RESERVADOS</Text>
       </View>
     </ImageBackground>
   );
 }
 
-function FeatureChip({ icon, text }: { icon: React.ReactNode; text: string }) {
+function FeatureCard({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
   return (
-    <View style={styles.featureChip}>
-      {icon}
-      <Text style={styles.featureText}>{text}</Text>
+    <View style={styles.featureCard}>
+      <View style={styles.featureIconWrap}>{icon}</View>
+      <Text style={styles.featureCardTitle}>{title}</Text>
+      <Text style={styles.featureCardDesc}>{description}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
     backgroundColor: '#0A0A0A',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 64,
-    paddingBottom: 42,
+    paddingBottom: 34,
   },
-  backgroundImage: {
+  bgImage: {
     resizeMode: 'cover',
-    opacity: 0.34,
+    opacity: 0.6,
   },
-  overlay: {
+  overlayBottom: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(10,10,10,0.74)',
+    backgroundColor: 'transparent',
+    // gradient bottom-to-top
+    borderTopWidth: 0,
+  },
+  overlayTop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10,10,10,0.72)',
   },
   topGlow: {
     position: 'absolute',
-    top: 120,
-    left: 40,
-    right: 40,
-    height: 280,
-    backgroundColor: 'rgba(206,189,255,0.10)',
-    borderRadius: 240,
+    top: 80,
+    left: 20,
+    right: 20,
+    height: 320,
+    backgroundColor: 'rgba(206,189,255,0.08)',
+    borderRadius: 280,
   },
   header: {
-    gap: 18,
+    gap: 14,
   },
   brandRow: {
     flexDirection: 'row',
@@ -123,9 +160,12 @@ const styles = StyleSheet.create({
   },
   brand: {
     ...typography.h3,
-    color: accent,
+    color: ACCENT,
     fontStyle: 'italic',
-    fontSize: 30,
+    fontSize: 28,
+    textShadowColor: 'rgba(206,189,255,0.3)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 20,
   },
   pill: {
     alignSelf: 'flex-start',
@@ -138,74 +178,70 @@ const styles = StyleSheet.create({
   },
   pillText: {
     ...typography.label,
-    color: accent,
+    color: ACCENT,
     fontSize: 10,
     letterSpacing: 2.4,
   },
-  centerCopy: {
-    gap: 18,
+  heroCopy: {
+    gap: 12,
   },
   heroTitle: {
     ...typography.h1,
-    color: '#F4F0F8',
-    fontSize: 44,
-    lineHeight: 48,
+    color: '#e5e2e1',
+    fontSize: 42,
+    lineHeight: 46,
     textAlign: 'left',
   },
-  heroText: {
+  heroSubtitle: {
     ...typography.narrative,
-    color: '#D4CDD9',
-    fontSize: 20,
-    lineHeight: 30,
-    maxWidth: 340,
+    color: '#cac4d4',
+    fontSize: 18,
+    lineHeight: 28,
+    maxWidth: 320,
   },
-  featureStrip: {
-    gap: 14,
+  featureCards: {
+    gap: 10,
   },
-  featureChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    borderRadius: 18,
-    backgroundColor: 'rgba(9,9,9,0.68)',
+  featureCard: {
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: 'rgba(18,18,18,0.7)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.05)',
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(255,255,255,0.1)',
   },
-  featureText: {
-    ...typography.body,
-    color: '#DAD2E7',
-    flex: 1,
+  featureIconWrap: {
+    marginBottom: 14,
   },
-  footer: {
-    gap: 14,
+  featureCardTitle: {
+    ...typography.h2,
+    color: '#e5e2e1',
+    fontSize: 18,
+    marginBottom: 6,
+  },
+  featureCardDesc: {
+    ...typography.bodySmall,
+    color: '#71717a',
+    lineHeight: 20,
+    fontSize: 13,
+  },
+  actions: {
+    gap: 12,
   },
   primaryButton: {
-    minHeight: 58,
+    minHeight: 60,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: accent,
+    backgroundColor: ACCENT,
+    paddingVertical: 16,
   },
   primaryButtonText: {
     ...typography.h3,
-    color: accentText,
+    color: ACCENT_TEXT,
     fontSize: 18,
-  },
-  previewButton: {
-    minHeight: 58,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(206,189,255,0.28)',
-    backgroundColor: 'rgba(206,189,255,0.08)',
-  },
-  previewButtonText: {
-    ...typography.label,
-    color: accent,
-    fontSize: 11,
+    fontWeight: '700',
   },
   secondaryButton: {
     minHeight: 58,
@@ -213,15 +249,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    backgroundColor: 'rgba(10,10,10,0.46)',
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'transparent',
+    paddingVertical: 16,
   },
   secondaryButtonText: {
     ...typography.h3,
-    color: '#F1E8FF',
+    color: '#e5e2e1',
     fontSize: 17,
   },
-  disabledButton: {
+  disabled: {
     opacity: 0.55,
+  },
+  footer: {
+    alignItems: 'center',
+    gap: 10,
+    paddingTop: 8,
+  },
+  footerDivider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginBottom: 4,
+  },
+  footerLinks: {
+    flexDirection: 'row',
+    gap: 32,
+  },
+  footerLink: {
+    ...typography.label,
+    color: '#71717a',
+    fontSize: 10,
+    letterSpacing: 2,
+  },
+  copyright: {
+    ...typography.label,
+    color: 'rgba(255,255,255,0.2)',
+    fontSize: 9,
+    letterSpacing: 1.2,
   },
 });

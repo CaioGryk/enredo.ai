@@ -18,7 +18,9 @@ import {
   Info,
   Library,
   Medal,
+  Minus,
   PenTool,
+  Plus,
   Sparkles,
   Star,
   UserCircle,
@@ -28,10 +30,11 @@ import { api } from '../../src/api/client';
 import { CreditPackage, CreditWalletResponse, LLMTestResponse, SubscriptionResponse } from '../../src/api/types';
 import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
+import { showApiError } from '../../src/utils/api-error-helper';
 
 const ACCENT = '#CEBDFF';
-const PANEL = '#15131B';
-const PANEL_ALT = '#1B1824';
+const PANEL = '#131313';
+const PANEL_ALT = '#1c1b1b';
 const SOFT_TEXT = '#B7AFC8';
 
 export default function UpgradeScreen() {
@@ -45,7 +48,12 @@ export default function UpgradeScreen() {
     },
   });
 
-  const { data: wallet } = useQuery<CreditWalletResponse>({
+  const {
+    data: wallet,
+    isLoading: walletLoading,
+    isError: walletError,
+    refetch: refetchWallet,
+  } = useQuery<CreditWalletResponse>({
     queryKey: ['credits'],
     queryFn: async () => {
       const { data } = await api.get<CreditWalletResponse>('/billing/credits');
@@ -68,25 +76,22 @@ export default function UpgradeScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscription'] });
       queryClient.invalidateQueries({ queryKey: ['models'] });
-      Alert.alert('Premium ativado', 'Seu acesso Premium foi liberado no ambiente de desenvolvimento.');
+      Alert.alert('Premium ativado', 'Seu acesso Premium foi liberado no ambiente de desenvolvimento. Nenhuma cobrança real foi feita.');
     },
-    onError: () => {
-      Alert.alert('Erro', 'Não foi possível ativar o Premium agora.');
-    },
+    onError: (e) => showApiError('Erro', e, 'Não foi possível ativar o Premium agora.'),
   });
 
   const creditMutation = useMutation({
     mutationFn: async (packageId: string) => {
-      await api.post('/billing/credits/purchase', { packageId });
+      const idempotencyKey = `mob-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      await api.post('/billing/credits/purchase', { packageId, idempotencyKey });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['credits'] });
       queryClient.invalidateQueries({ queryKey: ['models'] });
-      Alert.alert('Créditos adicionados', 'Seus créditos foram adicionados à carteira.');
+      Alert.alert('Créditos adicionados', 'Seus créditos foram adicionados à carteira no ambiente de desenvolvimento. Nenhuma cobrança real foi feita.');
     },
-    onError: () => {
-      Alert.alert('Erro', 'Não foi possível comprar créditos agora.');
-    },
+    onError: (e) => showApiError('Erro', e, 'Não foi possível comprar créditos agora.'),
   });
 
   const isPremium = subscription?.type === 'PREMIUM';
@@ -113,11 +118,28 @@ export default function UpgradeScreen() {
           <View style={styles.heroArt}>
             <View style={styles.heroGradient} />
             <Text style={styles.heroBadge}>UPGRADE</Text>
-            <Text style={styles.title}>Assinatura{'\n'}Enredo.ai</Text>
+            <Text style={styles.title}>Planos{'\n'}Enredo.ai</Text>
             <Text style={styles.subtitle}>
-              Transforme suas ideias em obras-primas cinematograficas com modelos mais fortes, sem anuncios e com creditos para video.
+              Premium remove anúncios e libera modelos melhores para suas leituras.
             </Text>
           </View>
+        </View>
+
+        <View style={styles.creditInfo}>
+          <Coins color={ACCENT} size={18} />
+          <View style={styles.creditInfoText}>
+            <Text style={styles.creditInfoTitle}>Créditos</Text>
+            <Text style={styles.creditInfoDesc}>
+              Imagem de cena: <Text style={styles.creditInfoBold}>1 crédito</Text>. Vídeo de cena: <Text style={styles.creditInfoBold}>5 créditos</Text>. Modelo cine: a partir de 2 créditos por cena.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.devNotice}>
+          <Info color="#FFBF66" size={18} />
+          <Text style={styles.devNoticeText}>
+            Pagamentos reais ainda não estão ativos. Nesta versão, Premium e pacotes de créditos são liberados por fluxo mock de desenvolvimento.
+          </Text>
         </View>
 
         <PremiumCard
@@ -133,6 +155,13 @@ export default function UpgradeScreen() {
           packages={packages}
           isPending={creditMutation.isPending}
           onPurchase={(packageId) => creditMutation.mutate(packageId)}
+        />
+
+        <TransactionHistory
+          transactions={wallet?.recentTransactions ?? []}
+          isLoading={walletLoading}
+          isError={walletError}
+          onRetry={() => refetchWallet()}
         />
 
         <ModelAccess />
@@ -158,11 +187,11 @@ function PremiumCard({
         <Text style={styles.recommendedText}>Recomendado</Text>
       </View>
       <Text style={styles.cardTitlePremium}>Premium</Text>
-      <Text style={styles.cardKicker}>Assinatura mensal</Text>
+        <Text style={styles.cardKicker}>Assinatura mensal (dev)</Text>
 
       <View style={styles.featureList}>
         <Feature icon={<Sparkles color={colors.primary} size={18} />} text="Modelos de IA avançados" />
-        <Feature icon={<Library color={colors.primary} size={18} />} text="Mais histórias ativas" />
+        <Feature icon={<Library color={colors.primary} size={18} />} text="Histórias ativas ilimitadas" />
         <Feature icon={<Ban color={colors.primary} size={18} />} text="Experiência sem anúncios" />
         <Feature icon={<PenTool color={colors.primary} size={18} />} text="Cenas longas e imersivas" />
         <Feature icon={<Star color={colors.primary} size={18} />} text="Histórias premium exclusivas" />
@@ -181,7 +210,7 @@ function PremiumCard({
         {isPending ? (
           <ActivityIndicator color={colors.background} />
         ) : (
-          <Text style={styles.primaryButtonText}>{isPremium ? 'Premium ativo' : 'Torne-se Premium'}</Text>
+          <Text style={styles.primaryButtonText}>{isPremium ? 'Premium ativo' : 'Ativar Premium dev'}</Text>
         )}
       </TouchableOpacity>
     </View>
@@ -235,7 +264,7 @@ function CreditsCard({
       </View>
 
       <Text style={styles.cardDescription}>
-        Use modelos top-tier para cenas mais longas, world-building e personagens mais complexos.
+        Use modelos top-tier para cenas mais longas, world-building e personagens mais complexos. Pacotes abaixo são mock/dev até a integração Stripe.
       </Text>
 
       <FlatList
@@ -254,7 +283,7 @@ function CreditsCard({
             <Coins color={colors.primary} size={18} />
             <Text style={styles.packageCredits}>{item.credits}</Text>
             <Text style={styles.packageLabel}>créditos</Text>
-            <Text style={styles.packagePrice}>R$ {item.price.toFixed(2).replace('.', ',')}</Text>
+            <Text style={styles.packagePrice}>R$ {(item.price ?? 0).toFixed(2).replace('.', ',')} <Text style={styles.packagePriceDev}>(dev)</Text></Text>
           </TouchableOpacity>
         )}
       />
@@ -379,6 +408,91 @@ function LLMTestSection() {
   );
 }
 
+function getTransactionLabel(reason: string) {
+  const labels: Record<string, string> = {
+    PURCHASE: 'Compra de créditos',
+    PROMO: 'Crédito promocional',
+    SCENE_GENERATION: 'Cena com modelo cine',
+    MEMORY_SUMMARY: 'Memória narrativa',
+    IMAGE_GENERATION: 'Geração de imagem',
+    VIDEO_GENERATION: 'Geração de vídeo',
+    REFERRAL: 'Indicação',
+    REFUND: 'Reembolso',
+    EXPIRATION: 'Créditos expirados',
+  };
+
+  return labels[reason] ?? 'Transação';
+}
+
+function TransactionHistory({
+  transactions,
+  isLoading,
+  isError,
+  onRetry,
+}: {
+  transactions: { id: string; type: string; amount: number; reason: string; createdAt: string }[];
+  isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
+}) {
+  if (isLoading) {
+    return (
+      <View style={styles.txCard}>
+        <Text style={styles.txTitle}>Histórico de transações</Text>
+        <View style={styles.txState}>
+          <ActivityIndicator color={ACCENT} />
+          <Text style={styles.txStateText}>Carregando histórico...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={styles.txCard}>
+        <Text style={styles.txTitle}>Histórico de transações</Text>
+        <Text style={styles.txEmpty}>Não foi possível carregar seu histórico.</Text>
+        <TouchableOpacity style={styles.txRetryButton} onPress={onRetry}>
+          <Text style={styles.txRetryText}>Tentar novamente</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (transactions.length === 0) {
+    return (
+      <View style={styles.txCard}>
+        <Text style={styles.txTitle}>Histórico de transações</Text>
+        <Text style={styles.txEmpty}>Nenhuma transação ainda.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.txCard}>
+      <Text style={styles.txTitle}>Histórico de transações</Text>
+      {transactions.map((tx) => (
+        <View key={tx.id} style={styles.txRow}>
+          <View style={[styles.txIcon, tx.type === 'EARN' ? styles.txIconEarn : styles.txIconSpend]}>
+            {tx.type === 'EARN' ? (
+              <Plus color="#10B981" size={14} />
+            ) : (
+              <Minus color="#EF4444" size={14} />
+            )}
+          </View>
+          <View style={styles.txCopy}>
+            <Text style={styles.txReason}>{getTransactionLabel(tx.reason)}</Text>
+            <Text style={styles.txDate}>{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('pt-BR') : '—'}</Text>
+          </View>
+          <Text style={[styles.txAmount, tx.type === 'EARN' ? styles.txAmountEarn : styles.txAmountSpend]}>
+            {tx.type === 'EARN' ? '+' : '-'}{tx.amount}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -398,10 +512,10 @@ const styles = StyleSheet.create({
   },
   topBar: {
     height: 64,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(206, 189, 255, 0.12)',
-    backgroundColor: 'rgba(10, 10, 12, 0.96)',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -438,7 +552,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.h1,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     fontSize: 46,
     lineHeight: 48,
     marginBottom: 14,
@@ -448,6 +562,25 @@ const styles = StyleSheet.create({
     color: SOFT_TEXT,
     maxWidth: 320,
   },
+  creditInfo: {
+    flexDirection: 'row', gap: 12, alignItems: 'flex-start',
+    marginHorizontal: 20, marginBottom: 16,
+    padding: 16, borderRadius: 18,
+    backgroundColor: 'rgba(206, 189, 255, 0.06)',
+    borderWidth: 1, borderColor: 'rgba(206, 189, 255, 0.10)',
+  },
+  creditInfoText: { flex: 1 },
+  creditInfoTitle: { ...typography.label, color: ACCENT, fontSize: 12, marginBottom: 4 },
+  creditInfoDesc: { ...typography.bodySmall, color: SOFT_TEXT, lineHeight: 18 },
+  creditInfoBold: { color: '#e5e2e1', fontWeight: '700' },
+  devNotice: {
+    flexDirection: 'row', gap: 12, alignItems: 'flex-start',
+    marginHorizontal: 20, marginBottom: 16,
+    padding: 16, borderRadius: 18,
+    backgroundColor: 'rgba(255, 191, 102, 0.08)',
+    borderWidth: 1, borderColor: 'rgba(255, 191, 102, 0.16)',
+  },
+  devNoticeText: { ...typography.bodySmall, color: '#E8D6B4', lineHeight: 18, flex: 1 },
   card: {
     marginHorizontal: 20,
     marginBottom: 16,
@@ -492,7 +625,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     ...typography.h2,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     marginBottom: 4,
   },
   cardKicker: {
@@ -515,7 +648,7 @@ const styles = StyleSheet.create({
   },
   featureText: {
     ...typography.body,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     flex: 1,
   },
   featureTextMuted: {
@@ -586,7 +719,7 @@ const styles = StyleSheet.create({
   },
   packageCredits: {
     ...typography.h2,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     marginTop: 8,
   },
   packageLabel: {
@@ -599,6 +732,11 @@ const styles = StyleSheet.create({
     color: ACCENT,
     fontSize: 10,
     marginTop: 10,
+  },
+  packagePriceDev: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    fontSize: 9,
   },
   modelSection: {
     marginHorizontal: 20,
@@ -628,7 +766,7 @@ const styles = StyleSheet.create({
   },
   modelLabel: {
     ...typography.bodySmall,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
   },
   modelPill: {
     borderWidth: 1,
@@ -712,7 +850,7 @@ const styles = StyleSheet.create({
   },
   llmTestResultValue: {
     ...typography.label,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     fontSize: 9,
   },
   llmTestResultContent: {
@@ -720,8 +858,90 @@ const styles = StyleSheet.create({
   },
   llmTestResultContentText: {
     ...typography.bodySmall,
-    color: '#F5F1FF',
+    color: '#e5e2e1',
     marginTop: 4,
     lineHeight: 20,
+  },
+  txCard: {
+    backgroundColor: '#1C1A2A',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(206, 189, 255, 0.08)',
+  },
+  txTitle: {
+    ...typography.label,
+    color: ACCENT,
+    fontSize: 12,
+    marginBottom: 16,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  txRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  txIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  txIconEarn: { backgroundColor: 'rgba(16, 185, 129, 0.15)' },
+  txIconSpend: { backgroundColor: 'rgba(239, 68, 68, 0.12)' },
+  txCopy: { flex: 1 },
+  txReason: {
+    ...typography.body,
+    color: '#e5e2e1',
+    fontSize: 14,
+  },
+  txDate: {
+    ...typography.bodySmall,
+    color: SOFT_TEXT,
+    marginTop: 2,
+  },
+  txAmount: {
+    ...typography.body,
+    fontWeight: '700',
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  txAmountEarn: { color: '#10B981' },
+  txAmountSpend: { color: '#EF4444' },
+  txEmpty: {
+    ...typography.body,
+    color: SOFT_TEXT,
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
+  txState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    gap: 10,
+  },
+  txStateText: {
+    ...typography.bodySmall,
+    color: SOFT_TEXT,
+  },
+  txRetryButton: {
+    alignSelf: 'center',
+    minHeight: 42,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(206, 189, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(206, 189, 255, 0.18)',
+  },
+  txRetryText: {
+    ...typography.label,
+    color: ACCENT,
+    fontSize: 11,
   },
 });

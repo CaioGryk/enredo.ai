@@ -1,5 +1,6 @@
 import { getModelById, getDefaultFreeModel, getDefaultPremiumModel, canUserAccessModel, AIModel } from '@modules/ai/model-catalog';
 import { SubscriptionType } from '@prisma/client';
+import { FREE_DAILY_INTERACTION_LIMIT } from './reading.constants';
 
 export type GenerationBudgetInput = {
   userId: string;
@@ -30,6 +31,8 @@ export class GenerationBudgetGuard {
     let model: AIModel | undefined;
     if (input.requestedModelId) {
       model = getModelById(input.requestedModelId);
+    } else if (input.freeLlmOnly) {
+      model = getDefaultFreeModel();
     } else if (input.subscriptionType === SubscriptionType.FREE) {
       model = getDefaultFreeModel();
     } else {
@@ -69,7 +72,7 @@ export class GenerationBudgetGuard {
     // Daily limit of 0 means "no limit"
     if (input.subscriptionType === SubscriptionType.FREE && !input.isFirstScene) {
       const count = input.dailyUsageCount ?? 0;
-      const limit = input.dailyUsageLimit ?? 10;
+      const limit = input.dailyUsageLimit ?? FREE_DAILY_INTERACTION_LIMIT;
       if (limit > 0 && count >= limit) {
         return {
           allowed: false,
@@ -84,21 +87,18 @@ export class GenerationBudgetGuard {
       }
     }
 
-    // 4. Check catalog-based access (PRESERVE current behavior: FREE users DENIED premium models)
-    // For CINEMATIC mode: allow even with insufficient credits (system sponsors the generation)
-    const isCinematicSponsored = input.isCinematicMode && model.tier === 'CREDITS';
-    const creditBalanceForCheck = isCinematicSponsored ? (model.creditCost || 0) : input.creditBalance;
+    // 4. Check catalog-based access using actual user balance.
+    // Cinematic mode is not "sponsored" — credits are always required for CREDITS-tier models.
+    const isCinematic = input.isCinematicMode && model.tier === 'CREDITS';
 
     const { allowed, reason } = canUserAccessModel(
       model,
       input.subscriptionType,
-      creditBalanceForCheck,
+      input.creditBalance ?? 0,
       input.freeLlmOnly ?? false,
     );
 
-    if (!allowed && !isCinematicSponsored) {
-      // Current behavior: FREE users are DENIED (not silently downgraded)
-      // CREDITS model with insufficient credits: DENIED (unless cinematic mode)
+    if (!allowed) {
       return {
         allowed: false,
         finalModel: model,
@@ -111,14 +111,14 @@ export class GenerationBudgetGuard {
       };
     }
 
-    // 5. Allowed (including cinematic mode with sponsored credits)
+    // 5. Allowed — cost is always real, never zero for CREDITS models
     return {
       allowed: true,
       finalModel: model,
       maxOutputTokens: model.maxTokens,
       budgetTier: model.tier,
-      requiresCredits: model.tier === 'CREDITS' && !isCinematicSponsored,
-      estimatedCreditCost: isCinematicSponsored ? 0 : (model.creditCost || 0),
+      requiresCredits: model.tier === 'CREDITS',
+      estimatedCreditCost: isCinematic ? (model.creditCost || 0) : (model.creditCost || 0),
       fallbackApplied: false,
     };
   }

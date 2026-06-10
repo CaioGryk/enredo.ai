@@ -260,6 +260,21 @@ describe('StoryLifecycleService', () => {
         await expect(service.createStory('user-1', createDto))
           .rejects.toThrow('Story creation limit reached for your plan');
       });
+
+      it('should skip creation limit only when explicitly requested by internal caller', async () => {
+        prisma.story.count.mockResolvedValue(999);
+        prisma.story.findUnique.mockResolvedValue(null);
+        prisma.user.findUnique.mockResolvedValue({ name: 'Admin Ops' });
+        prisma.story.create.mockImplementation((args: any) => Promise.resolve({
+          id: 'story-new',
+          ...args.data,
+        }));
+
+        const result = await service.createStory('admin-1', createDto, { skipCreationLimit: true });
+
+        expect(result.origin).toBe(StoryOrigin.USER_GENERATED);
+        expect(prisma.story.count).not.toHaveBeenCalled();
+      });
     });
 
     it('should create private user-generated story', async () => {

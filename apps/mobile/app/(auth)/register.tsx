@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   ImageBackground,
   Platform,
@@ -28,6 +29,7 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [registerError, setRegisterError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const { register } = useAuth();
   const router = useRouter();
 
@@ -60,11 +62,14 @@ export default function RegisterScreen() {
 
     try {
       setRegisterError('');
+      setSubmitting(true);
       await register({ name, email, password });
     } catch (e: any) {
       const message = getRegisterErrorMessage(e);
       setRegisterError(message);
       Alert.alert('Erro ao registrar', message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -120,8 +125,16 @@ export default function RegisterScreen() {
 
           {registerError ? <Text style={styles.errorText}>{registerError}</Text> : null}
 
-          <TouchableOpacity style={styles.primaryButton} onPress={handleRegister}>
-            <Text style={styles.primaryButtonText}>Criar conta</Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]}
+            onPress={handleRegister}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#381385" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Criar conta</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -165,7 +178,7 @@ function Field({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0D0D0F',
+    backgroundColor: '#0a0a0a',
   },
   backgroundImage: {
     resizeMode: 'cover',
@@ -243,14 +256,14 @@ const styles = StyleSheet.create({
     boxShadow: 'none',
   } as any,
   primaryButton: {
-    minHeight: 58,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 22,
+    paddingVertical: 16,
+    borderRadius: 14,
     backgroundColor: accent,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    marginTop: 6,
+    alignItems: 'center',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.55,
   },
   primaryButtonText: {
     ...typography.h3,

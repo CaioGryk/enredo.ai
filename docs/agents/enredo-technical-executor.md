@@ -118,6 +118,18 @@ It must not drift into:
 a generic chatbot
 ```
 
+## Current Operational Snapshot
+
+- Step 98 is still pending full real-user preparation.
+- **Step 98c complete:** Narrative Memory Hardening / Story Codex. `NarrativeMemory.codex` (JSON) provides structured canonical facts, character tracking, important choices, open threads, and `doNotContradict` constraints injected into AI prompts via `NarrativeContextBuilder.serializeCodexForPrompt()`. All 4 generation paths compute and return codex. Existing text memory fields remain backward-compatible. Follow-up fix added the explicit `codex` migration, stores scene 0 in the codex timeline, and keeps continuation prompts tied to the session-selected premise/character. (853 tests / 53 suites.)
+- The local/Supabase beta catalog has been populated with 10 public, approved, visible AI-generated stories.
+- Catalog content is female-audience oriented but intentionally varied: mystery, corporate drama, urban fantasy, sci-fi, food dramedy, supernatural suspense, mystery romance, pop thriller, historical fantasy, and investigative mystery.
+- Each catalog story has 3 AI-generated premises.
+- Each story has AI-generated playable characters for its first premise.
+- First 5 catalog stories have premise covers and first-premise character portraits.
+- Last 5 catalog stories hit Cloudflare image `429`; do not regenerate duplicate stories. Retry/backfill images for existing records only.
+- Latest Codex retry/backfill also hit Cloudflare `429` and Google image `RESOURCE_EXHAUSTED`; image completion is provider-quota blocked, not a text/catalog generation issue.
+
 Core experience:
 
 ```txt
@@ -162,7 +174,7 @@ Billing/access/budget decisions belong in application/service orchestration laye
 ### Free Users
 
 - use free/very cheap models only
-- default model: `openrouter/free`
+- default model: `groq/free`
 - daily interaction limits apply
 - ads may apply
 - max 3 active reading sessions
@@ -190,6 +202,10 @@ Rules:
 - provider/generation failure must not spend credits
 - successful spend metadata must be auditable
 - media is private by default and public feed requires opt-in/moderation
+- Step 85 provider decision: Kling is the selected POC/MVP provider for real scene video generation
+- User photo/appearance may be used for video generation only when the user's profile opt-in is enabled and a profile photo exists
+- Without opt-in, do not send user photo/reference image to the video provider
+- Use "appearance reference" / "likeness reference" terminology, not "face swap"
 
 Current Step 42 media costs:
 
@@ -410,13 +426,20 @@ Do not hide failures.
 
 As of latest audited context:
 
-- Steps 42-55 are complete.
-- Backend tests: 559 tests / 38 suites passing.
-- Backend TypeScript passes.
-- Prisma validate passes.
-- Mobile TypeScript passes.
-- Backend build passes.
-- Next likely step: Step 56 — Saved Scenes Screen/Tab.
+- Steps 42-97 are complete. Character portrait + Cloudflare + free LLM fallback + preview fixes applied.
+- Backend tests: 766 tests / 50 suites passing (latest recorded full suite).
+- QA Pass 1 fixes applied: pt-BR prompts, choice truncation, FAILED backfill skip, provider log sanitization, story fallback visual.
+- Latest Codex audit in the real local shell: `npm run check:prisma-connect` passes, `npm run check:local` reports 14 passed / 1 warning / 0 failed, and `/api/health` returns `{ status: "ok", database: "ok" }`. Sandboxed Codex network checks may still fail to reach the Supabase pooler; use the real local shell result as source of truth.
+- Beta catalog cleanup has been applied historically. Environment-level provider-real QA may proceed after confirming the backend was restarted with the current `.env`, but product QA with real users remains blocked until the already-persisted English premise/character records are regenerated in pt-BR.
+- Beta catalog: isBetaVisible migration added, dry-run script, premise cover contract aligned, FAILED no retry.
+- Provider-Real QA: Groq ✅, character JSON repair applied, currentScene.userAction/userActionType contract added.
+- Provider-Real QA Fix 1 expanded PT-BR validation for future premise/character generations and fixed character start-flow/portrait fallback behavior; existing English beta records still need force regeneration before real-user QA.
+- Step 98 blocked pending final provider-real QA pass and migration/baseline alignment.
+- Next step: Step 98 — Real User Round (QA + Launch block).
+- Character portrait provider decision: implement Cloudflare Workers AI / `@cf/black-forest-labs/flux-1-schnell` as the primary no-cost MVP portrait provider; keep Google image generation optional/fallback only.
+- Image provider chain: Cloudflare primary → Google fallback → Replicate `black-forest-labs/flux-schnell` optional paid fallback when `REPLICATE_API_TOKEN` is configured.
+- Free LLM provider chain: Groq primary (`groq/free`), OpenRouter DeepSeek fallback, Google Gemini fallback. Explicit free model requests are tried before the default fallback chain.
+- Context-specific provider routing is active: admin catalog story generation uses `ADMIN_CATALOG_TEXT_PROVIDER_CHAIN`; user story generation uses `USER_STORY_TEXT_PROVIDER_CHAIN`; reading uses `USER_READING_TEXT_PROVIDER_CHAIN`; utilities use `UTILITY_TEXT_PROVIDER_CHAIN`.
 
 ---
 

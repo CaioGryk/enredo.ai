@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { goBackSafe } from '../src/utils/navigation-helper';
 import {
   ArrowLeft,
   Bookmark,
@@ -42,7 +43,7 @@ const steps: { id: PreviewStep; label: string }[] = [
 const coachCopy: Record<PreviewStep, { title: string; text: string }> = {
   library: {
     title: 'Esta é a biblioteca real do Enredo.ai.',
-    text: 'Na prévia, os livros são mockados. Em uma conta, esta estante vem do backend e mistura histórias grátis, premium e leituras em andamento.',
+    text: 'Na prévia, as histórias são demonstrativas. Em uma conta, esta estante vem do Enredo.ai e mistura histórias grátis, premium e leituras em andamento.',
   },
   detail: {
     title: 'Uma história, três premissas jogáveis.',
@@ -58,7 +59,7 @@ const coachCopy: Record<PreviewStep, { title: string; text: string }> = {
   },
   premium: {
     title: 'O plano pago melhora a qualidade da IA.',
-    text: 'Free usa modelos baratos/gratuitos e anúncios. Premium libera modelos melhores, sem anúncios, e créditos ativam cenas cinematográficas.',
+    text: 'O plano Grátis usa modelos gratuitos e exibe anúncios. Premium libera modelos melhores e remove anúncios. Créditos, adquiridos separadamente, ativam cenas cinematográficas e geração de mídia.',
   },
   end: {
     title: 'A prévia termina antes do banco de dados.',
@@ -98,8 +99,9 @@ export function GuidedPreview({ onExit }: { onExit?: () => void }) {
   const router = useRouter();
   const [step, setStep] = useState<PreviewStep>('library');
   const [customAction, setCustomAction] = useState('');
-  const stepIndex = steps.findIndex((item) => item.id === step);
-  const copy = coachCopy[step];
+  const stepIndex = Math.max(0, steps.findIndex((item) => item.id === step));
+  const currentStep = steps[stepIndex] || steps[0];
+  const copy = coachCopy[step] || coachCopy.library;
 
   function goNext() {
     if (step === 'end') {
@@ -120,7 +122,7 @@ export function GuidedPreview({ onExit }: { onExit?: () => void }) {
       onExit();
       return;
     }
-    router.back();
+    goBackSafe();
   }
 
   return (
@@ -146,7 +148,7 @@ export function GuidedPreview({ onExit }: { onExit?: () => void }) {
             </TouchableOpacity>
           ))}
         </View>
-        <Text style={styles.coachKicker}>Demonstração • {steps[stepIndex].label}</Text>
+        <Text style={styles.coachKicker}>Demonstração • {currentStep.label}</Text>
         <Text style={styles.coachTitle}>{copy.title}</Text>
         <Text style={styles.coachText}>{copy.text}</Text>
         <TouchableOpacity style={styles.coachButton} onPress={goNext}>
@@ -177,7 +179,7 @@ function LibraryMock({ onNext }: { onNext: () => void }) {
         <Text style={styles.libraryTitle}>Biblioteca Editorial</Text>
         <View style={styles.memberBadge}>
           <CheckCircle2 color={colors.background} fill={colors.primary} size={14} />
-          <Text style={styles.memberText}>MEMBRO FREE</Text>
+          <Text style={styles.memberText}>MEMBRO GRÁTIS</Text>
         </View>
 
         <View style={styles.filterRow}>
@@ -378,7 +380,7 @@ function ReaderMock({
           <View style={styles.progressFill} />
         </View>
         <View style={styles.modelTabs}>
-          <ModelPill label="Free" active />
+          <ModelPill label="Grátis" active />
           <ModelPill label="Premium" locked />
           <ModelPill label="Cine" credits />
         </View>
@@ -401,8 +403,8 @@ function PremiumMock({ onNext }: { onNext: () => void }) {
         <View style={[styles.planCard, styles.premiumPlan]}>
           <Text style={styles.recommended}>RECOMENDADO</Text>
           <Text style={styles.planTitle}>Premium</Text>
-          <Text style={styles.planKicker}>Assinatura mensal</Text>
-          {['Modelos de IA avançados', 'Mais histórias ativas', 'Experiência sem anúncios', 'Cenas longas e imersivas'].map((item) => (
+          <Text style={styles.planKicker}>Assinatura mensal (dev)</Text>
+          {['Modelos de IA avançados', 'Histórias ativas ilimitadas', 'Experiência sem anúncios', 'Cenas longas e imersivas'].map((item) => (
             <View key={item} style={styles.featureRow}>
               <Sparkles color={colors.primary} size={16} />
               <Text style={styles.featureText}>{item}</Text>
@@ -410,13 +412,13 @@ function PremiumMock({ onNext }: { onNext: () => void }) {
           ))}
           <Text style={styles.price}>R$ 29,90 <Text style={styles.priceSuffix}>/mês</Text></Text>
           <TouchableOpacity style={styles.startButton} onPress={onNext}>
-            <Text style={styles.startButtonText}>TORNE-SE PREMIUM</Text>
+            <Text style={styles.startButtonText}>VER PREMIUM DEV</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.planCard}>
           <Text style={styles.planTitle}>Créditos Cinemáticos</Text>
-          <Text style={styles.planKicker}>Modelos top-tier por cena especial</Text>
+          <Text style={styles.planKicker}>Modelos cinematográficos por cena especial</Text>
           <View style={styles.creditRow}>
             <Coins color={colors.primary} size={20} />
             <Text style={styles.featureText}>Use créditos para cenas mais complexas e longas.</Text>

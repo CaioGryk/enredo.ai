@@ -57,7 +57,7 @@ export class AdminStoryGenerationUsageService {
         take: safeLimit,
         orderBy: { createdAt: order },
         include: {
-          user: { select: { id: true, email: true } },
+          user: { select: { id: true } },
           story: { select: { id: true, title: true, origin: true, visibility: true, moderationStatus: true } },
         },
       }),
@@ -81,7 +81,7 @@ export class AdminStoryGenerationUsageService {
     const record = await this.prisma.storyGenerationUsage.findUnique({
       where: { id },
       include: {
-        user: { select: { id: true, email: true } },
+        user: { select: { id: true } },
         story: { select: { id: true, title: true, origin: true, visibility: true, moderationStatus: true } },
       },
     });
@@ -129,7 +129,6 @@ export class AdminStoryGenerationUsageService {
     if (record.user) {
       dto.user = {
         id: record.user.id,
-        email: record.user.email,
       };
     }
 

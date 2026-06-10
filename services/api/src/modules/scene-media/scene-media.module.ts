@@ -5,9 +5,10 @@ import { SceneMediaService } from './scene-media.service';
 import { PrismaModule } from '@common/prisma.module';
 import { BillingModule } from '../billing/billing.module';
 import { AiModule } from '../ai/ai.module';
+import { ModerationModule } from '../moderation/moderation.module';
 
 @Module({
-  imports: [PrismaModule, BillingModule, AiModule],
+  imports: [PrismaModule, BillingModule, AiModule, ModerationModule],
   controllers: [SceneMediaFeedController, SceneMediaController],
   providers: [SceneMediaService],
   exports: [SceneMediaService],

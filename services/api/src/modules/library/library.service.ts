@@ -1,8 +1,86 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@common/prisma.service';
-import { GetStoriesDto, StoryResponseDto, StoryWithCharactersDto, StoryListResponseDto } from './dto/library.dto';
+import {
+  CharacterResponseDto,
+  GetStoriesDto,
+  StoryResponseDto,
+  StoryWithCharactersDto,
+  StoryListResponseDto,
+} from './dto/library.dto';
 import { paginate } from '@common/utils/pagination';
+import { safeImageUrl } from '@common/safe-image-url';
 import { Prisma, StoryVisibility, StoryModerationStatus } from '@prisma/client';
+
+const SAFE_STORY_SELECT = {
+  id: true,
+  slug: true,
+  title: true,
+  synopsis: true,
+  coverUrl: true,
+  genres: true,
+  authorName: true,
+  isPremium: true,
+  totalChapters: true,
+  publishedAt: true,
+  language: true,
+  maturityRating: true,
+} as const;
+
+const SAFE_CHARACTER_SELECT = {
+  id: true,
+  name: true,
+  description: true,
+  imageUrl: true,
+  role: true,
+} as const;
+
+interface SafeStoryRow {
+  id: string;
+  slug: string;
+  title: string;
+  synopsis: string;
+  coverUrl: string | null;
+  genres: string[];
+  authorName: string | null;
+  isPremium: boolean;
+  totalChapters: number;
+  publishedAt: Date | null;
+  language: string | null;
+  maturityRating: string | null;
+}
+
+function mapToStoryDto(row: SafeStoryRow, premiseCoverUrl?: string | null): StoryResponseDto {
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    synopsis: row.synopsis,
+    coverUrl: safeImageUrl(row.coverUrl) ?? safeImageUrl(premiseCoverUrl) ?? undefined,
+    genres: row.genres,
+    authorName: row.authorName ?? undefined,
+    isPremium: row.isPremium,
+    totalChapters: row.totalChapters,
+    publishedAt: row.publishedAt ?? undefined,
+    language: row.language ?? undefined,
+    maturityRating: row.maturityRating ?? undefined,
+  };
+}
+
+function mapToCharacterDto(character: {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  role: string;
+}): CharacterResponseDto {
+  return {
+    id: character.id,
+    name: character.name,
+    role: character.role,
+    description: character.description ?? undefined,
+    imageUrl: safeImageUrl(character.imageUrl) ?? undefined,
+  };
+}
 
 @Injectable()
 export class LibraryService {
@@ -12,6 +90,7 @@ export class LibraryService {
     const { page = 1, limit = 20, genre, author, search, isPremium } = query;
 
     const where: Prisma.StoryWhereInput = {
+      isBetaVisible: true,
       visibility: StoryVisibility.PUBLIC,
       moderationStatus: StoryModerationStatus.APPROVED,
     };
@@ -48,15 +127,23 @@ export class LibraryService {
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { publishedAt: 'desc' },
+        select: {
+          ...SAFE_STORY_SELECT,
+          premises: {
+            orderBy: { sortOrder: 'asc' },
+            take: 1,
+            select: { coverUrl: true },
+          },
+        },
       }),
       this.prisma.story.count({ where }),
     ]);
 
-    const result = paginate(
-      stories as StoryResponseDto[],
-      total,
-      { page, limit },
+    const safeStories = stories.map((row: any) =>
+      mapToStoryDto(row, row.premises?.[0]?.coverUrl),
     );
+
+    const result = paginate(safeStories, total, { page, limit });
 
     return {
       stories: result.data,
@@ -70,8 +157,14 @@ export class LibraryService {
   async getStoryById(id: string, userId?: string): Promise<StoryWithCharactersDto> {
     const story = await this.prisma.story.findUnique({
       where: { id },
-      include: {
-        characters: true,
+      select: {
+        ...SAFE_STORY_SELECT,
+        visibility: true,
+        moderationStatus: true,
+        creatorUserId: true,
+        characters: {
+          select: SAFE_CHARACTER_SELECT,
+        },
       },
     });
 
@@ -79,9 +172,8 @@ export class LibraryService {
       throw new NotFoundException('Story', id);
     }
 
-    // Access check: only PUBLIC+APPROVED stories are accessible to all users
-    // Private or non-approved stories require creator access
-    const isPublicAndApproved = story.visibility === StoryVisibility.PUBLIC &&
+    const isPublicAndApproved =
+      story.visibility === StoryVisibility.PUBLIC &&
       story.moderationStatus === StoryModerationStatus.APPROVED;
 
     if (!isPublicAndApproved) {
@@ -90,7 +182,10 @@ export class LibraryService {
       }
     }
 
-    return story as StoryWithCharactersDto;
+    return {
+      ...mapToStoryDto(story),
+      characters: story.characters.map(mapToCharacterDto),
+    };
   }
 
   async getStoryCharacters(storyId: string, userId?: string) {
@@ -103,8 +198,8 @@ export class LibraryService {
       throw new NotFoundException('Story', storyId);
     }
 
-    // Access check: only PUBLIC+APPROVED stories are accessible to all users
-    const isPublicAndApproved = story.visibility === StoryVisibility.PUBLIC &&
+    const isPublicAndApproved =
+      story.visibility === StoryVisibility.PUBLIC &&
       story.moderationStatus === StoryModerationStatus.APPROVED;
 
     if (!isPublicAndApproved) {
@@ -116,17 +211,23 @@ export class LibraryService {
     const characters = await this.prisma.storyCharacter.findMany({
       where: { storyId },
       orderBy: { role: 'asc' },
+      select: SAFE_CHARACTER_SELECT,
     });
 
     return {
       storyId: story.id,
       storyTitle: story.title,
-      characters,
+      characters: characters.map(mapToCharacterDto),
     };
   }
 
   async getGenres(): Promise<string[]> {
     const stories = await this.prisma.story.findMany({
+      where: {
+        isBetaVisible: true,
+        visibility: StoryVisibility.PUBLIC,
+        moderationStatus: StoryModerationStatus.APPROVED,
+      },
       select: { genres: true },
       distinct: ['genres'],
     });

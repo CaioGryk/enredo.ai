@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -25,9 +25,10 @@ import { api } from '../../src/api/client';
 import { typography } from '../../src/theme/typography';
 import { colors } from '../../src/theme/colors';
 import { StateBlock } from '../../src/components/state-block';
+import { showApiError } from '../../src/utils/api-error-helper';
 
 const ACCENT = '#CEBDFF';
-const TEXT = '#F5F1FF';
+const TEXT = '#e5e2e1';
 const SOFT_TEXT = '#B7AFC8';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -92,9 +93,7 @@ export default function ScenesScreen() {
         return next;
       });
     },
-    onError: () => {
-      Alert.alert('Erro', 'Não foi possível curtir. Tente novamente.');
-    },
+    onError: (e) => showApiError('Erro', e, 'Não foi possível curtir.'),
     onSettled: (_data, _error, id) => {
       setMutatingIds((prev) => {
         const next = new Set(prev);
@@ -122,9 +121,7 @@ export default function ScenesScreen() {
         return next;
       });
     },
-    onError: () => {
-      Alert.alert('Erro', 'Não foi possível salvar. Tente novamente.');
-    },
+    onError: (e) => showApiError('Erro', e, 'Não foi possível salvar.'),
     onSettled: (_data, _error, id) => {
       setMutatingIds((prev) => {
         const next = new Set(prev);
@@ -154,9 +151,7 @@ export default function ScenesScreen() {
       });
       queryClient.invalidateQueries({ queryKey: ['feed-scenes'] });
     },
-    onError: () => {
-      Alert.alert('Erro', 'Não foi possível compartilhar. Tente novamente.');
-    },
+    onError: (e) => showApiError('Erro', e, 'Não foi possível compartilhar.'),
   });
 
   const [commentingSceneId, setCommentingSceneId] = useState<string | null>(null);
@@ -183,8 +178,8 @@ export default function ScenesScreen() {
       queryClient.invalidateQueries({ queryKey: ['comments', commentingSceneId] });
       queryClient.invalidateQueries({ queryKey: ['feed-scenes'] });
     },
-    onError: () => {
-      Alert.alert('Erro', 'Não foi possível enviar o comentário. Tente novamente.');
+    onError: (e) => {
+      showApiError('Erro', e, 'Não foi possível enviar o comentário.');
     },
   });
 
@@ -208,10 +203,65 @@ export default function ScenesScreen() {
       Alert.alert('Denúncia enviada', 'Obrigado. Nossa equipe irá analisar.');
     },
     onError: (e: any) => {
-      const msg = e?.response?.data?.message || 'Não foi possível enviar a denúncia.';
-      Alert.alert('Erro', msg);
+      showApiError('Erro', e, 'Não foi possível enviar a denúncia.');
     },
   });
+
+  const onSavedPress = useCallback(() => router.push('/saved-scenes' as any), [router]);
+
+  const handleEnterStory = useCallback((storyId?: string | null) => {
+    if (storyId) router.push(`/story/${storyId}` as any);
+  }, [router]);
+
+  const handleLike = useCallback((sceneMediaId: string) => {
+    likeMutation.mutate(sceneMediaId);
+  }, [likeMutation.mutate]);
+
+  const handleSave = useCallback((sceneMediaId: string) => {
+    saveMutation.mutate(sceneMediaId);
+  }, [saveMutation.mutate]);
+
+  const handleShare = useCallback((sceneMediaId: string) => {
+    shareMutation.mutate(sceneMediaId);
+  }, [shareMutation.mutate]);
+
+  const handleComment = useCallback((sceneMediaId: string) => {
+    setCommentingSceneId(sceneMediaId);
+    setCommentText('');
+  }, []);
+
+  const handleReportScene = useCallback((sceneMediaId: string) => {
+    setReportTarget({ sceneMediaId, label: 'Denunciar cena' });
+    setReportReason('');
+  }, []);
+
+  const renderSceneItem = useCallback(({ item, index }: { item: FeedItem; index: number }) => (
+    <SceneCard
+      item={item}
+      index={index}
+      total={scenes.length}
+      isMutating={mutatingIds.has(item.id)}
+      isLiked={likedIds.has(item.id)}
+      isSaved={savedIds.has(item.id)}
+      onEnterStory={handleEnterStory}
+      onLike={handleLike}
+      onSave={handleSave}
+      onShare={handleShare}
+      onComment={handleComment}
+      onReportScene={handleReportScene}
+    />
+  ), [
+    handleComment,
+    handleEnterStory,
+    handleLike,
+    handleReportScene,
+    handleSave,
+    handleShare,
+    likedIds,
+    mutatingIds,
+    savedIds,
+    scenes.length,
+  ]);
 
   if (isLoading) {
     return (
@@ -246,7 +296,7 @@ export default function ScenesScreen() {
         <StateBlock
           fullScreen
           title="Nenhuma cena ainda"
-          description="Cenas aprovadas pela comunidade aparecerão aqui. Gere imagens das suas leituras e envie para análise."
+          description="Cenas aprovadas pela comunidade aparecerão aqui. Gere imagens ou vídeos das suas leituras e envie para análise."
           actionLabel="Ir para a galeria"
           onAction={() => router.push('/scene-media' as any)}
         />
@@ -257,39 +307,23 @@ export default function ScenesScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
+
+      <TouchableOpacity style={styles.savedFloatingButton} onPress={onSavedPress}>
+        <Bookmark color={ACCENT} size={22} />
+      </TouchableOpacity>
+
       <FlatList
         data={scenes}
         keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
-          <SceneCard
-            item={item}
-            index={index}
-            total={scenes.length}
-            isMutating={mutatingIds.has(item.id)}
-            isLiked={likedIds.has(item.id)}
-            isSaved={savedIds.has(item.id)}
-            onEnter={() => {
-              if (item.storyId) {
-                router.push(`/story/${item.storyId}` as any);
-              }
-            }}
-            onLike={() => likeMutation.mutate(item.id)}
-            onSave={() => saveMutation.mutate(item.id)}
-            onShare={() => shareMutation.mutate(item.id)}
-            onComment={() => {
-              setCommentingSceneId(item.id);
-              setCommentText('');
-            }}
-            onReportScene={() => {
-              setReportTarget({ sceneMediaId: item.id, label: 'Denunciar cena' });
-              setReportReason('');
-            }}
-          />
-        )}
+        renderItem={renderSceneItem}
         pagingEnabled
         decelerationRate="fast"
         snapToInterval={SCREEN_HEIGHT}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews
+        initialNumToRender={2}
+        maxToRenderPerBatch={2}
+        windowSize={3}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={ACCENT} />}
       />
 
@@ -384,14 +418,14 @@ export default function ScenesScreen() {
   );
 }
 
-function SceneCard({
+const SceneCard = React.memo(function SceneCard({
   item,
   index,
   total,
   isMutating,
   isLiked,
   isSaved,
-  onEnter,
+  onEnterStory,
   onLike,
   onSave,
   onShare,
@@ -404,12 +438,12 @@ function SceneCard({
   isMutating: boolean;
   isLiked: boolean;
   isSaved: boolean;
-  onEnter: () => void;
-  onLike: () => void;
-  onSave: () => void;
-  onShare: () => void;
-  onComment: () => void;
-  onReportScene: () => void;
+  onEnterStory: (storyId?: string | null) => void;
+  onLike: (sceneMediaId: string) => void;
+  onSave: (sceneMediaId: string) => void;
+  onShare: (sceneMediaId: string) => void;
+  onComment: (sceneMediaId: string) => void;
+  onReportScene: (sceneMediaId: string) => void;
 }) {
   const [imageError, setImageError] = useState(false);
   const imageSource = imageError
@@ -436,18 +470,18 @@ function SceneCard({
           imageStyle={styles.videoImage}
           onError={() => setImageError(true)}
         >
-          <BackgroundOverlay item={item} displayTitle={displayTitle} displayCaption={displayCaption} genres={genres} userName={userName} index={index} total={total} isMutating={isMutating} isLiked={isLiked} isSaved={isSaved} onEnter={onEnter} onLike={onLike} onSave={onSave} onShare={onShare} onComment={onComment} onReportScene={onReportScene} />
+          <BackgroundOverlay item={item} displayTitle={displayTitle} displayCaption={displayCaption} genres={genres} userName={userName} index={index} total={total} isMutating={isMutating} isLiked={isLiked} isSaved={isSaved} onEnterStory={onEnterStory} onLike={onLike} onSave={onSave} onShare={onShare} onComment={onComment} onReportScene={onReportScene} />
         </ImageBackground>
       ) : (
         <View style={[styles.video, styles.videoPlaceholder]}>
-          <BackgroundOverlay item={item} displayTitle={displayTitle} displayCaption={displayCaption} genres={genres} userName={userName} index={index} total={total} isMutating={isMutating} isLiked={isLiked} isSaved={isSaved} onEnter={onEnter} onLike={onLike} onSave={onSave} onShare={onShare} onComment={onComment} onReportScene={onReportScene} />
+          <BackgroundOverlay item={item} displayTitle={displayTitle} displayCaption={displayCaption} genres={genres} userName={userName} index={index} total={total} isMutating={isMutating} isLiked={isLiked} isSaved={isSaved} onEnterStory={onEnterStory} onLike={onLike} onSave={onSave} onShare={onShare} onComment={onComment} onReportScene={onReportScene} />
         </View>
       )}
     </View>
   );
-}
+});
 
-function BackgroundOverlay({
+const BackgroundOverlay = React.memo(function BackgroundOverlay({
   item,
   displayTitle,
   displayCaption,
@@ -458,7 +492,7 @@ function BackgroundOverlay({
   isMutating,
   isLiked,
   isSaved,
-  onEnter,
+  onEnterStory,
   onLike,
   onSave,
   onShare,
@@ -475,12 +509,12 @@ function BackgroundOverlay({
   isMutating: boolean;
   isLiked: boolean;
   isSaved: boolean;
-  onEnter: () => void;
-  onLike: () => void;
-  onSave: () => void;
-  onShare: () => void;
-  onComment: () => void;
-  onReportScene: () => void;
+  onEnterStory: (storyId?: string | null) => void;
+  onLike: (sceneMediaId: string) => void;
+  onSave: (sceneMediaId: string) => void;
+  onShare: (sceneMediaId: string) => void;
+  onComment: (sceneMediaId: string) => void;
+  onReportScene: (sceneMediaId: string) => void;
 }) {
   return (
     <>
@@ -503,17 +537,17 @@ function BackgroundOverlay({
             <Text style={styles.sceneCounterText}>{index + 1}/{total}</Text>
           </View>
           <Search color={TEXT} size={18} />
-          <TouchableOpacity onPress={onReportScene}>
+          <TouchableOpacity onPress={() => onReportScene(item.id)}>
             <Flag color={colors.textMuted} size={16} />
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.rightRail}>
-        <RailButton icon={<Heart color={isLiked ? ACCENT : TEXT} size={16} fill={isLiked ? ACCENT : 'none'} />} label={item.likeCount != null ? formatCount(item.likeCount) : undefined} disabled={isMutating} onPress={onLike} />
-        <RailButton icon={<MessageCircle color={TEXT} size={16} />} label={item.commentCount != null ? formatCount(item.commentCount) : undefined} onPress={onComment} />
-        <RailButton icon={<Bookmark color={isSaved ? ACCENT : TEXT} size={16} fill={isSaved ? ACCENT : 'none'} />} label={item.saveCount != null ? formatCount(item.saveCount) : undefined} disabled={isMutating} onPress={onSave} />
-        <RailButton icon={<Share2 color={TEXT} size={16} />} label={item.shareCount != null ? formatCount(item.shareCount) : undefined} disabled={isMutating} onPress={onShare} />
+        <RailButton icon={<Heart color={isLiked ? ACCENT : TEXT} size={16} fill={isLiked ? ACCENT : 'none'} />} label={item.likeCount != null ? formatCount(item.likeCount) : undefined} disabled={isMutating} onPress={() => onLike(item.id)} />
+        <RailButton icon={<MessageCircle color={TEXT} size={16} />} label={item.commentCount != null ? formatCount(item.commentCount) : undefined} onPress={() => onComment(item.id)} />
+        <RailButton icon={<Bookmark color={isSaved ? ACCENT : TEXT} size={16} fill={isSaved ? ACCENT : 'none'} />} label={item.saveCount != null ? formatCount(item.saveCount) : undefined} disabled={isMutating} onPress={() => onSave(item.id)} />
+        <RailButton icon={<Share2 color={TEXT} size={16} />} label={item.shareCount != null ? formatCount(item.shareCount) : undefined} disabled={isMutating} onPress={() => onShare(item.id)} />
       </View>
 
       <View style={styles.bottomOverlay}>
@@ -540,14 +574,14 @@ function BackgroundOverlay({
         ) : null}
 
         {item.storyId ? (
-          <TouchableOpacity style={styles.enterButton} onPress={onEnter}>
+          <TouchableOpacity style={styles.enterButton} onPress={() => onEnterStory(item.storyId)}>
             <Text style={styles.enterButtonText}>Entrar nesta história</Text>
           </TouchableOpacity>
         ) : null}
       </View>
     </>
   );
-}
+});
 
 function RailButton({ icon, label, disabled, onPress }: { icon: React.ReactNode; label?: string; disabled?: boolean; onPress?: () => void }) {
   return (
@@ -559,6 +593,7 @@ function RailButton({ icon, label, disabled, onPress }: { icon: React.ReactNode;
 }
 
 function formatCount(n: number): string {
+  if (n == null || isNaN(n)) return '0';
   if (n >= 1000) return `${Math.floor(n / 100) / 10}k`;
   return String(n);
 }
@@ -566,7 +601,21 @@ function formatCount(n: number): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#0a0a0a',
+  },
+  savedFloatingButton: {
+    position: 'absolute',
+    top: 64,
+    right: 16,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(21, 19, 27, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(206, 189, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   page: {
     height: SCREEN_HEIGHT,
@@ -580,7 +629,7 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   videoPlaceholder: {
-    backgroundColor: '#15131B',
+    backgroundColor: '#131313',
   },
   videoTint: {
     ...StyleSheet.absoluteFillObject,
@@ -659,24 +708,30 @@ const styles = StyleSheet.create({
   },
   railButton: {
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
   },
   railIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(9,10,14,0.24)',
-    borderWidth: 1,
-    borderColor: 'rgba(245,241,255,0.10)',
   },
   railLabel: {
-    ...typography.bodySmall,
-    color: TEXT,
-    fontSize: 10,
+    ...typography.label,
+    color: '#FFFFFF',
+    fontSize: 9,
     fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
+
   bottomOverlay: {
     paddingHorizontal: 18,
     paddingBottom: 34,

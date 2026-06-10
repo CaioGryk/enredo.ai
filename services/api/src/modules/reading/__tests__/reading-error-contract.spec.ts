@@ -256,8 +256,24 @@ describe('ReadingOrchestratorService - Error Contract', () => {
     });
   });
 
-  describe('no persistence on budget denial', () => {
-    it('should NOT create session or narrative event when budget guard denies', async () => {
+  describe('FREE_LLM_ONLY premium fallback', () => {
+    it('should create the first scene with the free model instead of denying premium users', async () => {
+      const mockScene = {
+        sceneText: 'The free-only story begins.',
+        suggestedActions: ['Continue'],
+        modelUsed: 'openrouter/free',
+        tokenUsage: { inputTokens: 10, outputTokens: 20 },
+        sceneMetadata: {},
+        memoryPatch: {
+          summary: 'A start.',
+          worldState: '',
+          characterState: '',
+          importantChoices: [],
+          openThreads: [],
+          constraints: '',
+        },
+      };
+
       mockConfigService.get.mockImplementation((key: string) => {
         if (key === 'FREE_LLM_ONLY') return true;
         return false;
@@ -269,12 +285,36 @@ describe('ReadingOrchestratorService - Error Contract', () => {
         creditWallet: { balance: 0 },
       });
 
-      await expect(
-        service.startReading('user-1', { storyId: 'story-1' }),
-      ).rejects.toThrow(HttpException);
+      mockPrisma.readingSession.create.mockResolvedValue({
+        id: 'session-1',
+        userId: 'user-1',
+        storyId: 'story-1',
+        currentChapter: 1,
+        currentSceneIndex: 0,
+      });
+      mockNarrativeEngine.generateScene.mockResolvedValue(mockScene);
+      mockPrisma.narrativeEvent.create.mockResolvedValue({
+        id: 'event-1',
+        sceneText: mockScene.sceneText,
+        choices: mockScene.suggestedActions,
+      });
 
-      expect(mockPrisma.readingSession.create).not.toHaveBeenCalled();
-      expect(mockNarrativeEngine.generateScene).not.toHaveBeenCalled();
+      await service.startReading('user-1', { storyId: 'story-1' });
+
+      expect(mockPrisma.readingSession.create).toHaveBeenCalled();
+      expect(mockPrisma.narrativeEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userAction: expect.any(String),
+            userActionType: 'FREE_TEXT',
+          }),
+        }),
+      );
+      const eventCreateData = mockPrisma.narrativeEvent.create.mock.calls[0][0].data;
+      expect(eventCreateData).not.toHaveProperty('action');
+      expect(mockNarrativeEngine.generateScene).toHaveBeenCalledWith(expect.objectContaining({
+        selectedModelId: 'groq/free',
+      }));
     });
   });
 
