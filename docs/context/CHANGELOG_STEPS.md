@@ -8142,3 +8142,54 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
   - Git commit: `eac9fc3018a98c944fa0e53557475abda84bc73f`
   - Android build version: `3`
 - Install the third APK on the owner's Android device and retry registration.
+
+---
+
+## Step 98r — Android Network Diagnostic APK
+
+**Date:** June 10, 2026
+
+**Objective:** Investigate continued register connectivity errors after the third APK still showed the same generic no-response message.
+
+### What was found
+
+- The third APK artifact was downloaded and inspected locally.
+- The bundled Android JS contains `https://enredoai-production.up.railway.app/api`.
+- The bundled Android JS does not contain `10.0.2.2` or `localhost:3001`.
+- This confirms the third APK is not pointing to the local emulator backend.
+
+### What was changed
+
+1. **Android network permission**
+   - Added explicit Android `INTERNET` permission in `apps/mobile/app.json`.
+   - Bumped Android `versionCode` from `3` to `4`.
+
+2. **Diagnostic auth errors**
+   - Register and login network errors now show:
+     - API URL used by the app.
+     - Axios/React Native technical error message.
+   - Validation errors that return arrays are now displayed line by line.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `apps/mobile/app.json` | Added `INTERNET` permission and bumped Android `versionCode` to `4` |
+| `apps/mobile/app/(auth)/register.tsx` | Added diagnostic API URL and technical network error output |
+| `apps/mobile/app/(auth)/login.tsx` | Added diagnostic API URL and technical network error output |
+| `docs/context/CHANGELOG_STEPS.md` | Added this step |
+| `docs/context/MOBILE_CONTEXT.md` | Updated Android networking troubleshooting notes |
+
+### Validation
+
+| Check | Result |
+|-------|--------|
+| Third APK bundle URL inspection | ✅ Railway API present; local emulator URLs absent |
+| `apps/mobile npx tsc --noEmit` | ✅ Passed |
+| `apps/mobile npx expo-doctor` | ✅ 18/18 checks passed |
+
+### Next steps
+
+- Commit and push the diagnostic APK changes.
+- Generate a fourth Android preview APK with Android build version `4`.
+- Install on the owner's phone and capture the full diagnostic message if registration still fails.

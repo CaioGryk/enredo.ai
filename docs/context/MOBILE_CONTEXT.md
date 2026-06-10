@@ -108,6 +108,20 @@ https://expo.dev/artifacts/eas/KUneo0tL_IjPY68sGtJeRduXdA2CtQ6hupNXSLu3NIc.apk
 
 Status: `FINISHED`. Artifact expires on June 24, 2026. This build uses Git commit `eac9fc3018a98c944fa0e53557475abda84bc73f` and Android build version `3`.
 
+Third device install result: registration still showed the generic no-response message.
+
+APK inspection after that result:
+
+- Downloaded and inspected the third APK artifact.
+- Confirmed the Android JS bundle contains `https://enredoai-production.up.railway.app/api`.
+- Confirmed the Android JS bundle does not contain `10.0.2.2` or `localhost:3001`.
+
+Diagnostic cleanup for the next APK:
+
+- Explicit Android `INTERNET` permission added.
+- Android `versionCode` bumped to `4`.
+- Login/register errors now display the API URL and technical network error message instead of only the generic user-facing text.
+
 **Web Preview:**
 ```sh
 npx expo export --platform web --output-dir dist-preview-vX

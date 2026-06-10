@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Eye, EyeOff, Mail, User, UserRound } from 'lucide-react-native';
+import { API_URL } from '../../src/api/client';
 import { useAuth } from '../../src/context/AuthContext';
 import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
@@ -35,14 +36,17 @@ export default function RegisterScreen() {
 
   const getRegisterErrorMessage = (error: any) => {
     if (error?.code === 'ECONNABORTED') {
-      return 'A API demorou para responder. Tente novamente em instantes.';
+      return `A API demorou para responder. URL: ${API_URL}`;
     }
 
     if (error?.request && !error?.response) {
-      return 'Não foi possível conectar ao servidor do Enredo.ai.';
+      return `Não foi possível conectar ao servidor do Enredo.ai.\n\nURL: ${API_URL}\nErro técnico: ${error?.message || error?.code || 'sem resposta'}`;
     }
 
-    return error?.response?.data?.message || 'Verifique os dados informados.';
+    const responseMessage = error?.response?.data?.message;
+    return Array.isArray(responseMessage)
+      ? responseMessage.join('\n')
+      : responseMessage || 'Verifique os dados informados.';
   };
 
   const handleRegister = async () => {
