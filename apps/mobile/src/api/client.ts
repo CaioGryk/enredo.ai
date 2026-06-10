@@ -3,8 +3,9 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 import { tokenStorage } from '../storage/tokenStorage';
 
-// For Android emulator, use 10.0.2.2. For physical device, EXPO_PUBLIC_API_URL must be the LAN IP.
-const DEFAULT_API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3001/api' : 'http://localhost:3001/api';
+const LOCAL_API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3001/api' : 'http://localhost:3001/api';
+const PRODUCTION_API_URL = 'https://enredoai-production.up.railway.app/api';
+const DEFAULT_API_URL = __DEV__ ? LOCAL_API_URL : PRODUCTION_API_URL;
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
 
 export const api = axios.create({

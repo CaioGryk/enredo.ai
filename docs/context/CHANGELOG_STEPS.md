@@ -8082,3 +8082,55 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
   - Git commit: `4f30971ca9b73071c42bd47fd5f4e410e002fea1`
   - Android build version: `2`
 - Install the second APK on the owner's Android device and verify that it opens before sharing with beta testers.
+
+---
+
+## Step 98q — Mobile API Fallback Fix After Register Connectivity Error
+
+**Date:** June 10, 2026
+
+**Objective:** Fix the Android APK register flow showing "Não foi possível conectar ao servidor do Enredo.ai" even though the production backend was online.
+
+### What was found
+
+- Owner installed the second APK and the app opened, but registration showed a network/no-response error.
+- Production backend health check passed:
+  - `GET https://enredoai-production.up.railway.app/api/health`
+  - Returned `status: "ok"` and `database: "ok"`.
+- Direct production register smoke test passed:
+  - `POST https://enredoai-production.up.railway.app/api/auth/register`
+  - Returned `201` with access/refresh tokens.
+- Likely mobile cause: if `EXPO_PUBLIC_API_URL` is not embedded for any reason, the app fallback was `http://10.0.2.2:3001/api` on Android, which only works in the Android emulator and fails on a physical phone.
+
+### What was changed
+
+1. **Mobile API fallback**
+   - `apps/mobile/src/api/client.ts` now uses local emulator URLs only in `__DEV__`.
+   - Production/native fallback now points to `https://enredoai-production.up.railway.app/api`.
+
+2. **Android install upgrade path**
+   - Bumped Android `versionCode` from `2` to `3` for the next APK.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `apps/mobile/src/api/client.ts` | Production fallback URL now points to Railway API instead of emulator |
+| `apps/mobile/app.json` | Bumped Android `versionCode` to `3` |
+| `docs/context/CHANGELOG_STEPS.md` | Added this step |
+| `docs/context/MOBILE_CONTEXT.md` | Updated API fallback troubleshooting notes |
+
+### Validation
+
+| Check | Result |
+|-------|--------|
+| Public backend health check | ✅ `database: "ok"` |
+| Direct production register smoke test | ✅ `201 Created` |
+| `apps/mobile npx tsc --noEmit` | ✅ Passed |
+| `apps/mobile npx expo-doctor` | ✅ 18/18 checks passed |
+
+### Next steps
+
+- Commit and push the fallback fix.
+- Generate a third Android preview APK with Android build version `3`.
+- Install the third APK on the owner's Android device and retry registration.

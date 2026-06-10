@@ -81,6 +81,21 @@ https://expo.dev/artifacts/eas/lYAhcVqXq-hrcZFg-L4yRYa_t2YD8Gqxe9b-W3Yu8Qc.apk
 
 Status: `FINISHED`. Artifact expires on June 24, 2026. This build uses Git commit `4f30971ca9b73071c42bd47fd5f4e410e002fea1` and Android build version `2`.
 
+Second device install result: the app opened, but registration showed "Não foi possível conectar ao servidor do Enredo.ai".
+
+Backend checks after that error:
+
+- Production health check returned `status: "ok"` and `database: "ok"`.
+- Direct production register smoke test returned `201 Created`.
+
+Corrective API fallback cleanup:
+
+- `apps/mobile/src/api/client.ts` now uses emulator/local API URLs only in `__DEV__`.
+- Production fallback now points to `https://enredoai-production.up.railway.app/api` if `EXPO_PUBLIC_API_URL` is missing from the native bundle for any reason.
+- Android `versionCode` bumped to `3`.
+
+Generate and distribute a third APK before continuing beta registration tests.
+
 **Web Preview:**
 ```sh
 npx expo export --platform web --output-dir dist-preview-vX
