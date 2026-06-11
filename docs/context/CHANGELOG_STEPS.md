@@ -8539,6 +8539,9 @@ became oversized and the action buttons were pushed below the viewport.
 - Android APK version `11` EAS build was created:
   - Build ID: `efb54c0e-37cd-4e2a-976e-17a7e03e68d8`
   - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/efb54c0e-37cd-4e2a-976e-17a7e03e68d8`
-  - Initial status: `IN_QUEUE`
+  - Final status: `FINISHED`
+  - APK artifact: `https://expo.dev/artifacts/eas/B4d0VIaM4mbK9Ei4fpEt0wTj4IS6pwmfvQVZpk4CQzE.apk`
+  - Completed at: June 11, 2026 22:46:54 UTC
+  - Artifact expiration: June 25, 2026 22:32:02 UTC
   - Source commit: `adaef4f`
   - Android build version: `11`
