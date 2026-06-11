@@ -8283,7 +8283,9 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 - Android APK version `6` EAS build was created:
   - Build ID: `dfb84953-2e91-43ff-af50-01e44d7e0177`
   - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/dfb84953-2e91-43ff-af50-01e44d7e0177`
-  - Current status at creation check: `IN_QUEUE`
+  - Final status: `FINISHED`
+  - APK artifact: `https://expo.dev/artifacts/eas/swqst7FiniJwIRNOWwHbNiSxFqDxYVFPWa1604Z2dAk.apk`
+  - Completed at: June 11, 2026 14:09:21 UTC
   - Git commit: `e476c317233065041b8b88fd406cc75daa4f0758`
   - Android build version: `6`
-- When the build finishes, install APK version `6` and retest the Library screen on device.
+- Install APK version `6` and retest the Library screen on device.
