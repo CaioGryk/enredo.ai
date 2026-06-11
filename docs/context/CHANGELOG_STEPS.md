@@ -8278,5 +8278,12 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 
 ### Deployment note
 
-- Backend must be redeployed on Railway first so `/api/library/stories/:id/cover` exists in production.
-- After Railway is updated, generate Android APK version `6` and retest the Library screen on device.
+- Backend redeployed on Railway and `/api/library/stories/:id/cover` returned `200 image/jpeg` in production.
+- `/api/library/stories` now returns API-relative cover paths for the first beta catalog stories in production.
+- Android APK version `6` EAS build was created:
+  - Build ID: `dfb84953-2e91-43ff-af50-01e44d7e0177`
+  - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/dfb84953-2e91-43ff-af50-01e44d7e0177`
+  - Current status at creation check: `IN_QUEUE`
+  - Git commit: `e476c317233065041b8b88fd406cc75daa4f0758`
+  - Android build version: `6`
+- When the build finishes, install APK version `6` and retest the Library screen on device.
