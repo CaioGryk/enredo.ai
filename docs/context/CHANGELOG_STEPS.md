@@ -8319,4 +8319,10 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 
 ### Next step
 
-- Generate Android APK version `7` and retest the top spacing on the owner's device.
+- Android APK version `7` EAS build was created:
+  - Build ID: `d552e42d-fbd1-49f8-8e42-9763530c84c3`
+  - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/d552e42d-fbd1-49f8-8e42-9763530c84c3`
+  - Current status at creation check: `IN_QUEUE`
+  - Git commit: `6aa83a3b7a025b6c773a8da922d595fb209a35ca`
+  - Android build version: `7`
+- When the build finishes, install APK version `7` and retest the top spacing on the owner's device.
