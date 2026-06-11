@@ -8493,3 +8493,43 @@ After Railway logged a `401` response from Groq, the production
 
 The previous Groq authentication error is resolved. No API key, access
 token, QA password, or other secret was written to the repository.
+
+---
+
+## Step 121 — Remove Welcome-Screen Flash and Fix Small-Screen Layout
+
+**Date:** June 11, 2026
+
+### Problem
+
+When the Android app was opened with a saved authenticated session, the
+public welcome page appeared while `AuthContext` restored the user profile.
+That page also used a fixed, non-scrollable vertical composition. On devices
+with smaller usable heights or increased Android font scaling, the content
+became oversized and the action buttons were pushed below the viewport.
+
+### Mobile changes
+
+- `apps/mobile/app/index.tsx`
+  - Authenticated users and users whose session is still loading now see a
+    neutral loading surface instead of the public welcome content.
+  - Converted the public page to a vertical `ScrollView`.
+  - Reduced hero typography and spacing.
+  - Added `maxFontSizeMultiplier` limits to prevent extreme Android text
+    scaling from breaking the composition.
+  - Reworked feature cards into compact horizontal rows.
+  - Kept both primary actions visible on a 360x800 viewport.
+  - Updated the footer copyright year to 2026.
+- `apps/mobile/app.json`
+  - Bumped Android `versionCode` from `10` to `11`.
+
+### Validation
+
+- `apps/mobile npx tsc --noEmit`: passed.
+- `apps/mobile npx expo-doctor`: 18/18 checks passed.
+- Expo Web rendered successfully.
+- Visual inspection at 360x800 confirmed:
+  - no overlapping text;
+  - all three feature rows fit coherently;
+  - `Começar agora` and `Entrar` remain visible;
+  - remaining footer content is reachable by scrolling.

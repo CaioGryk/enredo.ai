@@ -1,4 +1,14 @@
-import { Alert, ImageBackground, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  ImageBackground,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { BookOpen, Clapperboard, Palette, Sparkles } from 'lucide-react-native';
 import { typography } from '../src/theme/typography';
@@ -12,7 +22,15 @@ const ACCENT_TEXT = '#381385';
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { isLoading } = useAuth();
+  const { isLoading, user } = useAuth();
+
+  if (isLoading || user) {
+    return (
+      <View style={styles.loading}>
+        {isLoading ? <ActivityIndicator color={ACCENT} size="small" /> : null}
+      </View>
+    );
+  }
 
   return (
     <ImageBackground source={{ uri: welcomeImage }} style={styles.root} imageStyle={styles.bgImage}>
@@ -21,81 +39,85 @@ export default function WelcomeScreen() {
       <View style={styles.overlayTop} />
       <View style={styles.topGlow} />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.brandRow}>
-          <BookOpen color={ACCENT} size={22} />
-          <Text style={styles.brand}>Enredo.ai</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.brandRow}>
+            <BookOpen color={ACCENT} size={22} />
+            <Text maxFontSizeMultiplier={1.15} style={styles.brand}>Enredo.ai</Text>
+          </View>
+          <View style={styles.pill}>
+            <Text maxFontSizeMultiplier={1.15} style={styles.pillText}>IA Narrativa</Text>
+          </View>
         </View>
-        <View style={styles.pill}>
-          <Text style={styles.pillText}>IA Narrativa</Text>
+
+        {/* Hero Copy */}
+        <View style={styles.heroCopy}>
+          <Text maxFontSizeMultiplier={1.1} style={styles.heroTitle}>Sua história, sua voz, seu destino.</Text>
+          <Text maxFontSizeMultiplier={1.15} style={styles.heroSubtitle}>
+            Mergulhe em universos infinitos onde cada escolha molda a realidade.
+          </Text>
         </View>
-      </View>
 
-      {/* Hero Copy */}
-      <View style={styles.heroCopy}>
-        <Text style={styles.heroTitle}>Sua história, sua voz, seu destino.</Text>
-        <Text style={styles.heroSubtitle}>
-          Mergulhe em universos infinitos onde cada escolha molda a realidade.
-        </Text>
-      </View>
+        {/* Feature Cards */}
+        <View style={styles.featureCards}>
+          <FeatureCard
+            icon={<Sparkles color={ACCENT} size={22} />}
+            title="IA Criativa"
+            description="Narrativas geradas em tempo real com base nas suas decisões."
+          />
+          <FeatureCard
+            icon={<Clapperboard color={ACCENT} size={22} />}
+            title="Multiverso"
+            description="Explore fantasia, mistério, romance e novos mundos."
+          />
+          <FeatureCard
+            icon={<Palette color={ACCENT} size={22} />}
+            title="Visual Imersivo"
+            description="Artes cinematográficas acompanham cada jornada."
+          />
+        </View>
 
-      {/* Feature Cards (glass, 3-column on desktop, stacked on mobile) */}
-      <View style={styles.featureCards}>
-        <FeatureCard
-          icon={<Sparkles color={ACCENT} size={24} />}
-          title="IA Criativa"
-          description="Narrativas geradas em tempo real com base nas suas decisões mais íntimas."
-        />
-        <FeatureCard
-          icon={<Clapperboard color={ACCENT} size={24} />}
-          title="Multiverso"
-          description="De épicos de fantasia a mistérios cyberpunk, explore gêneros sem limites."
-        />
-        <FeatureCard
-          icon={<Palette color={ACCENT} size={24} />}
-          title="Visual Imersivo"
-          description="Artes cinematográficas exclusivas acompanham cada capítulo da sua jornada."
-        />
-      </View>
-
-      {/* CTAs */}
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.primaryButton, isLoading && styles.disabled]}
-          onPress={() => router.push('/(auth)/register')}
-          disabled={isLoading}
-          activeOpacity={0.9}
-        >
-          <Text style={styles.primaryButtonText}>Começar agora</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.secondaryButton, isLoading && styles.disabled]}
-          onPress={() => router.push('/(auth)/login')}
-          disabled={isLoading}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.secondaryButtonText}>Entrar</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <View style={styles.footerDivider} />
-        <View style={styles.footerLinks}>
-          <TouchableOpacity onPress={() => router.push('/legal')}>
-            <Text style={styles.footerLink}>Termos</Text>
+        {/* CTAs */}
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => router.push('/(auth)/register')}
+            activeOpacity={0.9}
+          >
+            <Text maxFontSizeMultiplier={1.15} style={styles.primaryButtonText}>Começar agora</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/legal')}>
-            <Text style={styles.footerLink}>Privacidade</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => Linking.openURL('mailto:support@enredo.ai').catch(() => Alert.alert('Contato', 'Envie um e-mail para support@enredo.ai'))}>
-            <Text style={styles.footerLink}>Contato</Text>
+
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => router.push('/(auth)/login')}
+            activeOpacity={0.8}
+          >
+            <Text maxFontSizeMultiplier={1.15} style={styles.secondaryButtonText}>Entrar</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.copyright}>2024 ENREDO.AI — TODOS OS DIREITOS RESERVADOS</Text>
-      </View>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <View style={styles.footerDivider} />
+          <View style={styles.footerLinks}>
+            <TouchableOpacity onPress={() => router.push('/legal')}>
+              <Text maxFontSizeMultiplier={1.15} style={styles.footerLink}>Termos</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/legal')}>
+              <Text maxFontSizeMultiplier={1.15} style={styles.footerLink}>Privacidade</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => Linking.openURL('mailto:support@enredo.ai').catch(() => Alert.alert('Contato', 'Envie um e-mail para support@enredo.ai'))}>
+              <Text maxFontSizeMultiplier={1.15} style={styles.footerLink}>Contato</Text>
+            </TouchableOpacity>
+          </View>
+          <Text maxFontSizeMultiplier={1.1} style={styles.copyright}>2026 ENREDO.AI — TODOS OS DIREITOS RESERVADOS</Text>
+        </View>
+      </ScrollView>
     </ImageBackground>
   );
 }
@@ -112,20 +134,31 @@ function FeatureCard({
   return (
     <View style={styles.featureCard}>
       <View style={styles.featureIconWrap}>{icon}</View>
-      <Text style={styles.featureCardTitle}>{title}</Text>
-      <Text style={styles.featureCardDesc}>{description}</Text>
+      <View style={styles.featureText}>
+        <Text maxFontSizeMultiplier={1.15} style={styles.featureCardTitle}>{title}</Text>
+        <Text maxFontSizeMultiplier={1.15} style={styles.featureCardDesc}>{description}</Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0A0A0A',
+  },
   root: {
     flex: 1,
     backgroundColor: '#0A0A0A',
-    justifyContent: 'space-between',
+  },
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 64,
-    paddingBottom: 34,
+    paddingTop: 28,
+    paddingBottom: 24,
+    gap: 24,
   },
   bgImage: {
     resizeMode: 'cover',
@@ -143,15 +176,15 @@ const styles = StyleSheet.create({
   },
   topGlow: {
     position: 'absolute',
-    top: 80,
+    top: 48,
     left: 20,
     right: 20,
-    height: 320,
+    height: 280,
     backgroundColor: 'rgba(206,189,255,0.08)',
     borderRadius: 280,
   },
   header: {
-    gap: 14,
+    gap: 10,
   },
   brandRow: {
     flexDirection: 'row',
@@ -162,7 +195,7 @@ const styles = StyleSheet.create({
     ...typography.h3,
     color: ACCENT,
     fontStyle: 'italic',
-    fontSize: 28,
+    fontSize: 26,
     textShadowColor: 'rgba(206,189,255,0.3)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 20,
@@ -183,28 +216,33 @@ const styles = StyleSheet.create({
     letterSpacing: 2.4,
   },
   heroCopy: {
-    gap: 12,
+    gap: 10,
   },
   heroTitle: {
     ...typography.h1,
     color: '#e5e2e1',
-    fontSize: 42,
-    lineHeight: 46,
+    fontSize: 36,
+    lineHeight: 42,
     textAlign: 'left',
   },
   heroSubtitle: {
     ...typography.narrative,
     color: '#cac4d4',
-    fontSize: 18,
-    lineHeight: 28,
+    fontSize: 17,
+    lineHeight: 25,
     maxWidth: 320,
   },
   featureCards: {
     gap: 10,
   },
   featureCard: {
-    padding: 18,
-    borderRadius: 20,
+    minHeight: 88,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
     backgroundColor: 'rgba(18,18,18,0.7)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
@@ -212,19 +250,23 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255,255,255,0.1)',
   },
   featureIconWrap: {
-    marginBottom: 14,
+    width: 34,
+    alignItems: 'center',
+  },
+  featureText: {
+    flex: 1,
   },
   featureCardTitle: {
     ...typography.h2,
     color: '#e5e2e1',
-    fontSize: 18,
-    marginBottom: 6,
+    fontSize: 17,
+    marginBottom: 4,
   },
   featureCardDesc: {
     ...typography.bodySmall,
     color: '#71717a',
-    lineHeight: 20,
-    fontSize: 13,
+    lineHeight: 19,
+    fontSize: 12,
   },
   actions: {
     gap: 12,
@@ -257,9 +299,6 @@ const styles = StyleSheet.create({
     ...typography.h3,
     color: '#e5e2e1',
     fontSize: 17,
-  },
-  disabled: {
-    opacity: 0.55,
   },
   footer: {
     alignItems: 'center',
