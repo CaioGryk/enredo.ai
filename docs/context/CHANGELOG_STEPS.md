@@ -8447,3 +8447,11 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 - `apps/mobile npx tsc --noEmit`: passed.
 - Story setup suites: 2 passed, 40 tests passed.
 - `apps/mobile npx expo-doctor`: 18/18 checks passed.
+
+### Production verification
+
+- Railway redeployed Git commit `7dbdf67`.
+- Premise cover route returned `200 image/jpeg` with a valid 1024x1024 JPEG.
+- Kaelara character route returned `200 image/jpeg` with a valid 1024x1024 JPEG.
+- Production premise DTOs now return `/api/story-setup/premises/:premiseId/cover`.
+- Production character DTOs now return `/api/story-setup/characters/:characterId/image`.
