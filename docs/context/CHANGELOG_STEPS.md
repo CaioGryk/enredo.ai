@@ -8591,6 +8591,10 @@ generic `500`.
 - Real local API flow against the configured Supabase database: `201 Created`.
 - The exact story, premise, and character produced both a reading session and
   first narrative scene.
+- Railway redeployed backend commit `a997209`.
+- Production health check returned `200 OK` with `database: "ok"`.
+- The exact production start-reading request returned `201 Created` and
+  persisted both a reading session and its first narrative scene.
 
 This is a backend-only fix. Android APK version `11` remains valid and does
 not require a rebuild.
