@@ -8226,6 +8226,11 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 
 ### Next steps
 
-- Run TypeScript and Expo Doctor checks.
-- Push the fix to GitHub.
-- Generate a fifth Android preview APK and test login/register again on the owner's phone.
+- TypeScript and Expo Doctor checks passed.
+- GitHub push completed with commit `a018efb0e53113898ee13a074f7b82f7c34a94c6`.
+- Fifth Android preview build was created and is waiting in the EAS queue:
+  - Build ID: `dbce28c9-8f3f-48cc-857e-4a196e355c59`
+  - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/dbce28c9-8f3f-48cc-857e-4a196e355c59`
+  - Current status at creation check: `IN_QUEUE`
+  - Android build version: `5`
+- When the build finishes, install the APK and test register/login again on the owner's phone.
