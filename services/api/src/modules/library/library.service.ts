@@ -8,7 +8,7 @@ import {
   StoryListResponseDto,
 } from './dto/library.dto';
 import { paginate } from '@common/utils/pagination';
-import { safeImageUrl } from '@common/safe-image-url';
+import { isInlineImageDataUrl, parseInlineImageDataUrl, safeImageUrl } from '@common/safe-image-url';
 import { Prisma, StoryVisibility, StoryModerationStatus } from '@prisma/client';
 
 const SAFE_STORY_SELECT = {
@@ -49,13 +49,24 @@ interface SafeStoryRow {
   maturityRating: string | null;
 }
 
+function getStoryCoverUrl(row: SafeStoryRow, premiseCoverUrl?: string | null): string | undefined {
+  const externalCoverUrl = safeImageUrl(row.coverUrl) ?? safeImageUrl(premiseCoverUrl);
+  if (externalCoverUrl) return externalCoverUrl;
+
+  if (isInlineImageDataUrl(row.coverUrl) || isInlineImageDataUrl(premiseCoverUrl)) {
+    return `/api/library/stories/${row.id}/cover`;
+  }
+
+  return undefined;
+}
+
 function mapToStoryDto(row: SafeStoryRow, premiseCoverUrl?: string | null): StoryResponseDto {
   return {
     id: row.id,
     slug: row.slug,
     title: row.title,
     synopsis: row.synopsis,
-    coverUrl: safeImageUrl(row.coverUrl) ?? safeImageUrl(premiseCoverUrl) ?? undefined,
+    coverUrl: getStoryCoverUrl(row, premiseCoverUrl),
     genres: row.genres,
     authorName: row.authorName ?? undefined,
     isPremium: row.isPremium,
@@ -186,6 +197,52 @@ export class LibraryService {
       ...mapToStoryDto(story),
       characters: story.characters.map(mapToCharacterDto),
     };
+  }
+
+  async getStoryCoverImage(id: string): Promise<{ contentType: string; buffer: Buffer }> {
+    const story = await this.prisma.story.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        coverUrl: true,
+        visibility: true,
+        moderationStatus: true,
+        isBetaVisible: true,
+        premises: {
+          orderBy: { sortOrder: 'asc' },
+          take: 1,
+          select: { coverUrl: true },
+        },
+      },
+    });
+
+    if (!story) {
+      throw new NotFoundException('Story', id);
+    }
+
+    const isPublicAndApproved =
+      story.isBetaVisible &&
+      story.visibility === StoryVisibility.PUBLIC &&
+      story.moderationStatus === StoryModerationStatus.APPROVED;
+
+    if (!isPublicAndApproved) {
+      throw new ForbiddenException('You do not have access to this story');
+    }
+
+    const coverUrl = isInlineImageDataUrl(story.coverUrl)
+      ? story.coverUrl
+      : story.premises?.find((premise) => isInlineImageDataUrl(premise.coverUrl))?.coverUrl;
+
+    if (!coverUrl) {
+      throw new NotFoundException('Story cover', id);
+    }
+
+    const parsed = parseInlineImageDataUrl(coverUrl);
+    if (!parsed) {
+      throw new NotFoundException('Story cover', id);
+    }
+
+    return parsed;
   }
 
   async getStoryCharacters(storyId: string, userId?: string) {

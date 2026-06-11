@@ -8,6 +8,18 @@ const PRODUCTION_API_URL = 'https://enredoai-production.up.railway.app/api';
 const DEFAULT_API_URL = __DEV__ ? LOCAL_API_URL : PRODUCTION_API_URL;
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
 
+export function resolveApiAssetUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  if (/^https?:\/\//i.test(url)) return url;
+
+  const apiRoot = API_URL.replace(/\/+$/, '');
+  const apiOrigin = apiRoot.replace(/\/api\/?$/i, '');
+
+  if (url.startsWith('/api/')) return `${apiOrigin}${url}`;
+  if (url.startsWith('/')) return `${apiRoot}${url}`;
+  return `${apiRoot}/${url}`;
+}
+
 export const api = axios.create({
   baseURL: API_URL,
   timeout: 30000,

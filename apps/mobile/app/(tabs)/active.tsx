@@ -12,7 +12,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { BookCheck, BookOpen, CheckCircle, CheckCircle2, Info, Menu, Play, PlusCircle, Sparkles, User } from 'lucide-react-native';
-import { api } from '../../src/api/client';
+import { api, resolveApiAssetUrl } from '../../src/api/client';
 import { ReadingSessionSummary, SessionListResponse, SubscriptionResponse } from '../../src/api/types';
 import { useAuth } from '../../src/context/AuthContext';
 import { StateBlock } from '../../src/components/state-block';
@@ -209,7 +209,7 @@ function ChronicleCard({
 }) {
   const progress = Math.min(90, Math.max(12, ((session.currentSceneIndex + 1) / 10) * 100));
   const palette = cardPalette(index);
-  const coverUrl = session.storyCoverUrl || session.selectedPremiseCoverUrl || session.selectedCharacterImageUrl || null;
+  const coverUrl = resolveApiAssetUrl(session.storyCoverUrl || session.selectedPremiseCoverUrl || session.selectedCharacterImageUrl);
   const coverSource = coverUrl ? { uri: coverUrl } : null;
 
   return (

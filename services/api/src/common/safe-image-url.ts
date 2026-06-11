@@ -18,3 +18,18 @@ export function safeImageUrl(url: string | null | undefined): string | null {
   }
   return null;
 }
+
+export function isInlineImageDataUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(url.trim());
+}
+
+export function parseInlineImageDataUrl(url: string): { contentType: string; buffer: Buffer } | null {
+  const match = url.trim().match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
+  if (!match) return null;
+
+  return {
+    contentType: match[1],
+    buffer: Buffer.from(match[2], 'base64'),
+  };
+}

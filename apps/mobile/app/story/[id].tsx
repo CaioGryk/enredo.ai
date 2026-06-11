@@ -11,7 +11,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Play, Sparkles } from 'lucide-react-native';
-import { api } from '../../src/api/client';
+import { api, resolveApiAssetUrl } from '../../src/api/client';
 import { Character, Story, StoryCharactersResponse, StoryPremise } from '../../src/api/types';
 import { StateBlock } from '../../src/components/state-block';
 import { colors } from '../../src/theme/colors';
@@ -73,7 +73,7 @@ export default function StoryDetailScreen() {
     enabled: Boolean(id),
   });
 
-  const heroImage = useMemo(() => story?.coverUrl || story?.coverImageUrl, [story]);
+  const heroImage = useMemo(() => resolveApiAssetUrl(story?.coverUrl || story?.coverImageUrl), [story]);
   const baseCharacters = charactersResponse?.characters ?? [];
 
   if (storyLoading || charsLoading || premisesLoading) {

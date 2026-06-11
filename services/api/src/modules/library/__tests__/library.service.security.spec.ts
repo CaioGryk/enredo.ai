@@ -403,7 +403,7 @@ describe('LibraryService - Inline/Base64 Image Sanitization (Step 98k)', () => {
       totalChapters: 1, publishedAt: null, language: 'pt-BR', maturityRating: '12+',
     };
 
-    it('strips inline base64 coverUrl from list response', async () => {
+    it('exposes inline story cover through a lightweight cover endpoint in list response', async () => {
       prisma.story.findMany.mockResolvedValue([{
         ...baseRow,
         coverUrl: 'data:image/png;base64,iVBORw0KGgoAAAANS...',
@@ -412,7 +412,7 @@ describe('LibraryService - Inline/Base64 Image Sanitization (Step 98k)', () => {
       prisma.story.count.mockResolvedValue(1);
 
       const result = await service.getStories({});
-      expect(result.stories[0].coverUrl).toBeUndefined();
+      expect(result.stories[0].coverUrl).toBe('/api/library/stories/s1/cover');
     });
 
     it('preserves external http(s) coverUrl in list response', async () => {
@@ -439,7 +439,7 @@ describe('LibraryService - Inline/Base64 Image Sanitization (Step 98k)', () => {
       expect(result.stories[0].coverUrl).toBe('https://cdn.example.com/premise-cover.jpg');
     });
 
-    it('returns undefined coverUrl when both story and premise are inline', async () => {
+    it('exposes inline premise cover through a lightweight cover endpoint when both story and premise are inline', async () => {
       prisma.story.findMany.mockResolvedValue([{
         ...baseRow,
         coverUrl: 'data:image/png;base64,iVBORw0KGgo=',
@@ -448,7 +448,67 @@ describe('LibraryService - Inline/Base64 Image Sanitization (Step 98k)', () => {
       prisma.story.count.mockResolvedValue(1);
 
       const result = await service.getStories({});
-      expect(result.stories[0].coverUrl).toBeUndefined();
+      expect(result.stories[0].coverUrl).toBe('/api/library/stories/s1/cover');
+    });
+  });
+
+  describe('getStoryCoverImage', () => {
+    it('returns decoded inline story cover image data', async () => {
+      prisma.story.findUnique.mockResolvedValue({
+        id: 's1',
+        coverUrl: 'data:image/png;base64,aGVsbG8=',
+        isBetaVisible: true,
+        visibility: StoryVisibility.PUBLIC,
+        moderationStatus: StoryModerationStatus.APPROVED,
+        premises: [],
+      });
+
+      const result = await service.getStoryCoverImage('s1');
+
+      expect(result.contentType).toBe('image/png');
+      expect(result.buffer.toString()).toBe('hello');
+    });
+
+    it('falls back to first inline premise cover image data', async () => {
+      prisma.story.findUnique.mockResolvedValue({
+        id: 's1',
+        coverUrl: null,
+        isBetaVisible: true,
+        visibility: StoryVisibility.PUBLIC,
+        moderationStatus: StoryModerationStatus.APPROVED,
+        premises: [{ coverUrl: 'data:image/jpeg;base64,aGVsbG8=' }],
+      });
+
+      const result = await service.getStoryCoverImage('s1');
+
+      expect(result.contentType).toBe('image/jpeg');
+      expect(result.buffer.toString()).toBe('hello');
+    });
+
+    it('does not expose covers for non-public stories', async () => {
+      prisma.story.findUnique.mockResolvedValue({
+        id: 's1',
+        coverUrl: 'data:image/png;base64,aGVsbG8=',
+        isBetaVisible: true,
+        visibility: StoryVisibility.PRIVATE,
+        moderationStatus: StoryModerationStatus.NOT_SUBMITTED,
+        premises: [],
+      });
+
+      await expect(service.getStoryCoverImage('s1')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('does not expose covers for stories hidden from the beta catalog', async () => {
+      prisma.story.findUnique.mockResolvedValue({
+        id: 's1',
+        coverUrl: 'data:image/png;base64,aGVsbG8=',
+        isBetaVisible: false,
+        visibility: StoryVisibility.PUBLIC,
+        moderationStatus: StoryModerationStatus.APPROVED,
+        premises: [],
+      });
+
+      await expect(service.getStoryCoverImage('s1')).rejects.toThrow(ForbiddenException);
     });
   });
 

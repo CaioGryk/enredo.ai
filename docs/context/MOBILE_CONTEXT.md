@@ -712,6 +712,14 @@ Rail buttons (like, save, share) are now functional:
 - Login now validates missing e-mail/password before submitting and trims e-mail before sending credentials.
 - Android `versionCode` is now `5` for the next APK.
 
+### Android Catalog Covers (Step 98t)
+
+- Catalog covers can now be delivered without putting base64 images inside the JSON list payload.
+- When the backend has an inline generated cover, `/library/stories` returns an API-relative path such as `/api/library/stories/:id/cover`.
+- Mobile uses `resolveApiAssetUrl()` to convert API-relative image paths into absolute Railway/local URLs before passing them to React Native `Image`/`ImageBackground`.
+- Library, Story Detail, Active Stories, Scene Feed, and Saved Scenes now resolve API-relative image paths consistently.
+- Android `versionCode` is now `6` for the next APK.
+
 ---
 
-**Last Updated:** After Step 98s (Android Auth Success Navigation) — June 11, 2026
+**Last Updated:** After Step 98t (Android Catalog Covers) — June 11, 2026

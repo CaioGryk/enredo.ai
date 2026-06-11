@@ -8237,3 +8237,46 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
   - Artifact expiration: June 25, 2026
   - Android build version: `5`
 - When the build finishes, install the APK and test register/login again on the owner's phone.
+
+---
+
+## Step 98t — Catalog Cover Image Delivery for Android Beta
+
+**Date:** June 11, 2026
+
+**Objective:** Fix the Android beta library showing fallback cards instead of the generated catalog covers.
+
+### What was found
+
+- The mobile app was rendering the placeholder card because `story.coverUrl` and `story.coverImageUrl` were missing from the API response.
+- This was caused by the Step 98k safety fix: inline/base64 images were intentionally stripped from JSON responses to avoid multi-megabyte catalog payloads.
+- The database can still contain generated inline `data:image/...` covers; they were preserved, but no lightweight delivery path existed for mobile.
+
+### What was changed
+
+| File | Change |
+|------|--------|
+| `services/api/src/common/safe-image-url.ts` | Added helpers to detect and parse inline `data:image/...;base64` URLs |
+| `services/api/src/modules/library/library.service.ts` | Library DTO now returns `/api/library/stories/:id/cover` when the story or first premise has an inline generated cover |
+| `services/api/src/modules/library/library.controller.ts` | Added `GET /api/library/stories/:id/cover`, serving the decoded image bytes with cache headers |
+| `services/api/src/modules/library/__tests__/library.service.security.spec.ts` | Updated inline-cover expectations and added image endpoint service coverage |
+| `apps/mobile/src/api/client.ts` | Added `resolveApiAssetUrl()` to convert API-relative asset paths into absolute URLs |
+| `apps/mobile/app/(tabs)/library.tsx` | Library cards now resolve API-relative cover paths |
+| `apps/mobile/app/story/[id].tsx` | Story detail hero image now resolves API-relative cover paths |
+| `apps/mobile/app/(tabs)/active.tsx` | Active story cards now resolve API-relative image paths |
+| `apps/mobile/app/(tabs)/scenes.tsx` | Feed media fallback images now resolve API-relative paths |
+| `apps/mobile/app/saved-scenes.tsx` | Saved scene fallback images now resolve API-relative paths |
+| `apps/mobile/app.json` | Bumped Android `versionCode` from `5` to `6` |
+
+### Validation
+
+| Check | Result |
+|-------|--------|
+| `services/api npx tsc --noEmit` | ✅ Passed |
+| `services/api npx jest src/modules/library/__tests__/library.service.security.spec.ts --runInBand` | ✅ 35 tests passed |
+| `apps/mobile npx tsc --noEmit` | ✅ Passed |
+
+### Deployment note
+
+- Backend must be redeployed on Railway first so `/api/library/stories/:id/cover` exists in production.
+- After Railway is updated, generate Android APK version `6` and retest the Library screen on device.

@@ -15,7 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { goBackSafe } from '../src/utils/navigation-helper';
 import { ArrowLeft, Bookmark, Image as ImageIcon } from 'lucide-react-native';
-import { api } from '../src/api/client';
+import { api, resolveApiAssetUrl } from '../src/api/client';
 import { typography } from '../src/theme/typography';
 import { colors } from '../src/theme/colors';
 import { StateBlock } from '../src/components/state-block';
@@ -112,8 +112,8 @@ export default function SavedScenesScreen() {
             }}
           >
             <View style={styles.cardImageWrapper}>
-              {item.imageUrl || item.thumbnailUrl || item.story?.coverUrl ? (
-                <Image source={{ uri: (item.imageUrl || item.thumbnailUrl || item.story?.coverUrl)! }} style={styles.cardImage} resizeMode="cover" />
+              {resolveApiAssetUrl(item.imageUrl || item.thumbnailUrl || item.story?.coverUrl) ? (
+                <Image source={{ uri: resolveApiAssetUrl(item.imageUrl || item.thumbnailUrl || item.story?.coverUrl)! }} style={styles.cardImage} resizeMode="cover" />
               ) : (
                 <View style={styles.cardPlaceholder}>
                   <ImageIcon color={colors.textMuted} size={24} />

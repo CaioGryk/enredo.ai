@@ -1,9 +1,10 @@
-import { Controller, Get, Param, Query, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Header, Param, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { LibraryService } from './library.service';
 import { GetStoriesDto, StoryResponseDto, StoryWithCharactersDto, StoryListResponseDto, CharacterResponseDto } from './dto/library.dto';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { Request } from 'express';
+import { Response } from 'express';
 import { User } from '@prisma/client';
 
 @ApiTags('library')
@@ -32,6 +33,21 @@ export class LibraryController {
   ): Promise<StoryWithCharactersDto> {
     const userId = req.user?.id;
     return this.libraryService.getStoryById(id, userId);
+  }
+
+  @Get('stories/:id/cover')
+  @Header('Cache-Control', 'public, max-age=86400')
+  @ApiOperation({ summary: 'Get story cover image' })
+  @ApiParam({ name: 'id', description: 'Story ID' })
+  @ApiResponse({ status: 200, description: 'Story cover image' })
+  @ApiResponse({ status: 404, description: 'Story cover not found' })
+  async getStoryCover(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const image = await this.libraryService.getStoryCoverImage(id);
+    res.type(image.contentType);
+    res.send(image.buffer);
   }
 
   @Get('stories/:id/characters')

@@ -21,7 +21,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Bookmark, Flag, Heart, MessageCircle, Search, Send, Share2, X } from 'lucide-react-native';
-import { api } from '../../src/api/client';
+import { api, resolveApiAssetUrl } from '../../src/api/client';
 import { typography } from '../../src/theme/typography';
 import { colors } from '../../src/theme/colors';
 import { StateBlock } from '../../src/components/state-block';
@@ -446,15 +446,12 @@ const SceneCard = React.memo(function SceneCard({
   onReportScene: (sceneMediaId: string) => void;
 }) {
   const [imageError, setImageError] = useState(false);
+  const resolvedImageUrl = resolveApiAssetUrl(item.imageUrl || item.thumbnailUrl || item.story?.coverUrl);
   const imageSource = imageError
     ? null
-    : item.imageUrl
-      ? { uri: item.imageUrl }
-    : item.thumbnailUrl
-      ? { uri: item.thumbnailUrl }
-      : item.story?.coverUrl
-        ? { uri: item.story.coverUrl }
-        : null;
+    : resolvedImageUrl
+      ? { uri: resolvedImageUrl }
+      : null;
 
   const displayTitle = item.title || item.story?.title || 'Cena sem título';
   const displayCaption = item.caption || item.textExcerpt || '';

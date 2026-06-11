@@ -11,7 +11,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { BookOpen, ChevronRight, Play, Search, Sparkles, Zap } from 'lucide-react-native';
-import { api } from '../../src/api/client';
+import { api, resolveApiAssetUrl } from '../../src/api/client';
 import { ReadingSessionSummary, SessionListResponse, Story, StoryListResponse } from '../../src/api/types';
 import { StateBlock } from '../../src/components/state-block';
 import { colors } from '../../src/theme/colors';
@@ -408,7 +408,7 @@ export default function LibraryScreen() {
 }
 
 function getStoryImage(story: Story): string | undefined {
-  return story.coverUrl || story.coverImageUrl;
+  return resolveApiAssetUrl(story.coverUrl || story.coverImageUrl);
 }
 
 const GENRE_COLORS: Record<string, string[]> = {
