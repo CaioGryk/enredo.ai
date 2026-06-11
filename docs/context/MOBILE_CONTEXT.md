@@ -733,6 +733,13 @@ Rail buttons (like, save, share) are now functional:
 - Android edge-to-edge rendering is disabled to keep the application content below system status icons.
 - Android `versionCode` is now `8` for the next APK.
 
+### Android Status Bar Spacing Calibration (Step 98w)
+
+- APK version `8` confirmed that disabling edge-to-edge makes Android reserve the status-bar area correctly.
+- The additional 32 dp application fallback was therefore a duplicate inset and left the header too far below the status bar.
+- Android now relies exclusively on the native non-edge-to-edge content area; the explicit root inset remains enabled only for iOS.
+- Android `versionCode` is now `9` for the next APK.
+
 ---
 
-**Last Updated:** After Step 98v (Android Status Bar Fallback) — June 11, 2026
+**Last Updated:** After Step 98w (Android Status Bar Spacing Calibration) — June 11, 2026

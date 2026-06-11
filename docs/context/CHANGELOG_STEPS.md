@@ -8367,3 +8367,34 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
   - Artifact expiration: June 25, 2026
   - Git commit: `dd6e0f8`
   - Android build version: `8`
+
+---
+
+## Step 98w — Android Status Bar Spacing Calibration
+
+**Date:** June 11, 2026
+
+**Objective:** Remove the excessive top gap introduced after the status-bar overlap was eliminated.
+
+### What was found
+
+- APK version `8` no longer overlapped the Android status bar.
+- With `edgeToEdgeEnabled: false`, Android already reserved the system status-bar area.
+- The additional root fallback of at least 32 dp created a second top inset, placing the application header too low.
+
+### What was changed
+
+| File | Change |
+|------|--------|
+| `apps/mobile/app/_layout.tsx` | Removed manual Android top padding; the explicit safe-area inset is now applied only on iOS |
+| `apps/mobile/app.json` | Kept edge-to-edge disabled and bumped Android `versionCode` from `8` to `9` |
+
+### Expected result
+
+- The header remains below the Android status icons without the large empty space seen in APK version `8`.
+
+### Validation
+
+- `apps/mobile npx tsc --noEmit`: passed.
+- `apps/mobile npx expo-doctor`: 18/18 checks passed.
+- Android APK version `9` will be generated after validation.

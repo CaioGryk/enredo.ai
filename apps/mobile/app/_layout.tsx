@@ -4,7 +4,7 @@ import { Stack } from 'expo-router';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { Platform, StatusBar as NativeStatusBar, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -65,9 +65,7 @@ const queryClient = new QueryClient();
 
 function RootLayoutContent() {
   const insets = useSafeAreaInsets();
-  const topInset = Platform.OS === 'android'
-    ? Math.max(insets.top, NativeStatusBar.currentHeight ?? 0, 32)
-    : insets.top;
+  const topInset = Platform.OS === 'ios' ? insets.top : 0;
 
   return (
     <View style={[styles.root, { paddingTop: topInset }]}>
