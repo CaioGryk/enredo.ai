@@ -8397,4 +8397,9 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 
 - `apps/mobile npx tsc --noEmit`: passed.
 - `apps/mobile npx expo-doctor`: 18/18 checks passed.
-- Android APK version `9` will be generated after validation.
+- Android APK version `9` EAS build was created:
+  - Build ID: `fc2b75b2-7ef2-4075-baed-2da85d6b7451`
+  - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/fc2b75b2-7ef2-4075-baed-2da85d6b7451`
+  - Initial status: queued/in progress
+  - Git commit: `7c0db42`
+  - Android build version: `9`
