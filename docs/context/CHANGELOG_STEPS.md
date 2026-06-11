@@ -8455,3 +8455,12 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 - Kaelara character route returned `200 image/jpeg` with a valid 1024x1024 JPEG.
 - Production premise DTOs now return `/api/story-setup/premises/:premiseId/cover`.
 - Production character DTOs now return `/api/story-setup/characters/:characterId/image`.
+
+### Android build
+
+- Android APK version `10` EAS build was created:
+  - Build ID: `e5349155-b35b-47f3-be8e-3b9157641b8e`
+  - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/e5349155-b35b-47f3-be8e-3b9157641b8e`
+  - Initial status: queued/in progress
+  - Code commit: `7dbdf67`
+  - Android build version: `10`
