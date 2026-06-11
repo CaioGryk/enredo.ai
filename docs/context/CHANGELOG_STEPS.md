@@ -8231,6 +8231,9 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 - Fifth Android preview build was created and is waiting in the EAS queue:
   - Build ID: `dbce28c9-8f3f-48cc-857e-4a196e355c59`
   - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/dbce28c9-8f3f-48cc-857e-4a196e355c59`
-  - Current status at creation check: `IN_QUEUE`
+  - Final status: `FINISHED`
+  - APK artifact: `https://expo.dev/artifacts/eas/HXE8v34HY_EkbuOkACNCRqV6ie4hCN27Ez8m7SX-KJs.apk`
+  - Completed at: June 11, 2026 12:48:59 UTC
+  - Artifact expiration: June 25, 2026
   - Android build version: `5`
 - When the build finishes, install the APK and test register/login again on the owner's phone.
