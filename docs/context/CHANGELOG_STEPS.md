@@ -8328,3 +8328,34 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
   - Git commit: `6aa83a3b7a025b6c773a8da922d595fb209a35ca`
   - Android build version: `7`
 - Install APK version `7` and retest the top spacing on the owner's device.
+
+---
+
+## Step 98v — Android Status Bar Explicit Fallback
+
+**Date:** June 11, 2026
+
+**Objective:** Correct the remaining status-bar overlap on Android devices that report a zero or insufficient top safe-area inset.
+
+### What was found
+
+- APK version `7` still rendered the Library header beneath the Android status icons on the owner's physical device.
+- The root `SafeAreaView` was present, but the native inset supplied on that device was not sufficient to move the application content below the status bar.
+
+### What was changed
+
+| File | Change |
+|------|--------|
+| `apps/mobile/app/_layout.tsx` | Replaced the passive top `SafeAreaView` with an explicit root `paddingTop`, using the greatest value among the reported safe-area inset, `StatusBar.currentHeight`, and a 32 dp Android fallback |
+| `apps/mobile/app.json` | Disabled Android edge-to-edge rendering and bumped `versionCode` from `7` to `8` |
+
+### Expected result
+
+- The application navigation tree starts below the Android status bar even when the device reports an invalid safe-area inset.
+- The dark status-bar background remains visually continuous with the application header.
+
+### Validation
+
+- `apps/mobile npx tsc --noEmit`: passed.
+- `apps/mobile npx expo-doctor`: 18/18 checks passed.
+- Android APK version `8` will be generated after validation.

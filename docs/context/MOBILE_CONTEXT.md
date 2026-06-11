@@ -726,6 +726,13 @@ Rail buttons (like, save, share) are now functional:
 - The app sets a dark, non-translucent status bar so Android status icons do not overlap the app header.
 - Android `versionCode` is now `7` for the next APK.
 
+### Android Status Bar Fallback (Step 98v)
+
+- Physical-device testing showed that the passive `SafeAreaView` could still receive a zero or insufficient top inset.
+- The root layout now calculates the top spacing explicitly using the greatest value among `useSafeAreaInsets().top`, `StatusBar.currentHeight`, and a 32 dp Android fallback.
+- Android edge-to-edge rendering is disabled to keep the application content below system status icons.
+- Android `versionCode` is now `8` for the next APK.
+
 ---
 
-**Last Updated:** After Step 98u (Android Safe Area) — June 11, 2026
+**Last Updated:** After Step 98v (Android Status Bar Fallback) — June 11, 2026

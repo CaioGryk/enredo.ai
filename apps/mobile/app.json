@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "ai.enredo.app",
-      "versionCode": 7,
+      "versionCode": 8,
       "permissions": [
         "INTERNET"
       ],
@@ -27,7 +27,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0D0D0B"
       },
-      "edgeToEdgeEnabled": true,
+      "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false
     },
     "web": {
