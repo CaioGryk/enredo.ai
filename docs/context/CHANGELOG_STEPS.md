@@ -8468,3 +8468,28 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
   - Fix commit: `7dbdf67`
   - EAS source commit: `b89960e`
   - Android build version: `10`
+
+---
+
+## Step 120 — Groq Production Credential Revalidation
+
+**Date:** June 11, 2026
+
+After Railway logged a `401` response from Groq, the production
+`GROQ_API_KEY` was replaced and the backend was redeployed.
+
+### Production validation
+
+- `GET /api/health`: `200 OK`, with `database: "ok"`.
+- A technical QA user was registered through the public authentication flow.
+- `POST /api/ai/test-model` was called with `modelId: "groq/free"`.
+- The real provider request returned `201` with:
+  - `ok: true`
+  - Provider: `groq`
+  - Concrete model: `openai/gpt-oss-120b`
+  - Prompt tokens: `97`
+  - Output tokens: `44`
+  - Provider response time: approximately `4 seconds`
+
+The previous Groq authentication error is resolved. No API key, access
+token, QA password, or other secret was written to the repository.
