@@ -525,6 +525,15 @@ Admin scene media moderation responses now expose review-safe metadata for bette
 
 Sensitive fields remain excluded: story prompts/rules/style guide, user email/password/hash, wallet/credits, provider/model internals.
 
+### Story Setup Generated Images (Step 98x)
+
+- Premise covers and playable-character portraits can remain stored as inline `data:image/...;base64` values without bloating setup JSON responses.
+- Setup DTOs return lightweight API-relative image paths for inline generated media.
+- Binary delivery routes:
+  - `GET /api/story-setup/premises/:premiseId/cover`
+  - `GET /api/story-setup/characters/:characterId/image`
+- Both routes validate access to the parent story before decoding and returning the image bytes.
+
 **Tests:** 4 new DTO safety/metadata tests in `admin-scene-media-moderation.service.spec.ts`
 
 ### Admin Moderation Filters/Search (Step 51)

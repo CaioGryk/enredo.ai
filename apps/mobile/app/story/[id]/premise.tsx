@@ -11,7 +11,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, BookOpen, Compass, Crown, Eye, Flame, KeyRound, Landmark, Moon, Play, Sparkles } from 'lucide-react-native';
-import { api } from '../../../src/api/client';
+import { api, resolveApiAssetUrl } from '../../../src/api/client';
 import { Story, StoryPremise } from '../../../src/api/types';
 import { StateBlock } from '../../../src/components/state-block';
 import { colors } from '../../../src/theme/colors';
@@ -131,8 +131,8 @@ export default function StoryPremiseScreen() {
                   style={[styles.card, isSelected && styles.cardSelected]}
                   onPress={() => setSelectedPremiseId(premise.id)}
                 >
-                  {premise.coverUrl ? (
-                    <ImageBackground source={{ uri: premise.coverUrl }} style={styles.cardImage} imageStyle={styles.cardImageRadius} />
+                  {resolveApiAssetUrl(premise.coverUrl) ? (
+                    <ImageBackground source={{ uri: resolveApiAssetUrl(premise.coverUrl)! }} style={styles.cardImage} imageStyle={styles.cardImageRadius} />
                   ) : premise.coverGenerationStatus === 'PENDING' ? (
                     <View style={styles.cardImageFallback}>
                       <ActivityIndicator color={ACCENT} size="small" />

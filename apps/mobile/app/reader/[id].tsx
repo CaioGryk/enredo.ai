@@ -35,7 +35,7 @@ import {
   Video,
   Zap,
 } from 'lucide-react-native';
-import { api } from '../../src/api/client';
+import { api, NARRATIVE_GENERATION_TIMEOUT_MS } from '../../src/api/client';
 import { AIModel, AIModelsResponse, ReadingStatusResponse, SceneMedia } from '../../src/api/types';
 import { StateBlock } from '../../src/components/state-block';
 import { useAuth } from '../../src/context/AuthContext';
@@ -95,7 +95,9 @@ export default function ReaderScreen() {
       const payload: { action: string; actionType: string; modelId?: string; mode?: string } = { action, actionType };
       if (selectedModelId) payload.modelId = selectedModelId;
       if (isCinematic) payload.mode = 'cinematic';
-      const { data } = await api.post(`/reading/sessions/${id}/action`, payload);
+      const { data } = await api.post(`/reading/sessions/${id}/action`, payload, {
+        timeout: NARRATIVE_GENERATION_TIMEOUT_MS,
+      });
       return data;
     },
     onSuccess: (data) => {

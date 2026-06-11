@@ -10,15 +10,19 @@ import {
   UseGuards,
   ForbiddenException,
   Req,
+  Res,
+  Header,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '@modules/auth/guards/optional-jwt-auth.guard';
 import { StorySetupService } from './story-setup.service';
 import { GenerateDto } from './dto/story-setup.dto';
 import { Request } from 'express';
 import { User } from '@prisma/client';
+import { Response } from 'express';
 
 @ApiTags('story-setup')
 @Controller('story-setup')
@@ -29,6 +33,8 @@ export class StorySetupController {
   ) {}
 
   @Get('stories/:storyId/premises')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get premises for a story (cached only)' })
   @ApiResponse({ status: 200, description: 'Returns cached premises only' })
   @ApiResponse({ status: 403, description: 'Access denied' })
@@ -45,6 +51,8 @@ export class StorySetupController {
   }
 
   @Get('premises/:premiseId/characters')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get playable characters for a premise (cached only)' })
   @ApiResponse({ status: 200, description: 'Returns cached characters only' })
   @ApiResponse({ status: 403, description: 'Access denied' })
@@ -58,6 +66,40 @@ export class StorySetupController {
       throw new NotFoundException('No characters found. Use POST to generate.');
     }
     return characters;
+  }
+
+  @Get('premises/:premiseId/cover')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth()
+  @Header('Cache-Control', 'private, max-age=86400')
+  @ApiOperation({ summary: 'Get a generated premise cover image' })
+  @ApiResponse({ status: 200, description: 'Premise cover image' })
+  @ApiResponse({ status: 404, description: 'Premise cover not found' })
+  async getPremiseCover(
+    @Param('premiseId') premiseId: string,
+    @Req() req: Request & { user?: User },
+    @Res() res: Response,
+  ) {
+    const image = await this.storySetupService.getPremiseCoverImage(premiseId, req.user?.id);
+    res.type(image.contentType);
+    res.send(image.buffer);
+  }
+
+  @Get('characters/:characterId/image')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth()
+  @Header('Cache-Control', 'private, max-age=86400')
+  @ApiOperation({ summary: 'Get a generated playable character image' })
+  @ApiResponse({ status: 200, description: 'Playable character image' })
+  @ApiResponse({ status: 404, description: 'Playable character image not found' })
+  async getCharacterImage(
+    @Param('characterId') characterId: string,
+    @Req() req: Request & { user?: User },
+    @Res() res: Response,
+  ) {
+    const image = await this.storySetupService.getCharacterImage(characterId, req.user?.id);
+    res.type(image.contentType);
+    res.send(image.buffer);
   }
 
   @UseGuards(JwtAuthGuard)

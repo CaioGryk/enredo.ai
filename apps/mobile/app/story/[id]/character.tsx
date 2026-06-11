@@ -12,7 +12,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Bell, CheckCircle2, Compass, Hand, Lamp, Moon, Shield, Sparkles, Swords, UserRound, VenetianMask, X } from 'lucide-react-native';
-import { api } from '../../../src/api/client';
+import { api, NARRATIVE_GENERATION_TIMEOUT_MS, resolveApiAssetUrl } from '../../../src/api/client';
 import { StartReadingResponse, StoryPlayableCharacter, StoryPremise } from '../../../src/api/types';
 import { StateBlock } from '../../../src/components/state-block';
 import { colors } from '../../../src/theme/colors';
@@ -89,6 +89,8 @@ export default function StoryCharacterScreen() {
         storyId: id,
         premiseId: selectedPremiseId,
         characterId: selectedCharacterId,
+      }, {
+        timeout: NARRATIVE_GENERATION_TIMEOUT_MS,
       });
       return data;
     },
@@ -211,9 +213,9 @@ export default function StoryCharacterScreen() {
                   onPress={() => setSelectedCharacterId(character.id)}
                 >
                   <View style={styles.imageWrap}>
-                    {character.imageUrl ? (
+                    {resolveApiAssetUrl(character.imageUrl) ? (
                       <>
-                        <Image source={{ uri: character.imageUrl }} style={[styles.image, !selected && styles.unselectedImage]} />
+                        <Image source={{ uri: resolveApiAssetUrl(character.imageUrl)! }} style={[styles.image, !selected && styles.unselectedImage]} />
                         {!selected ? (
                           <View pointerEvents="none" style={styles.unselectedImageOverlay} />
                         ) : null}

@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "ai.enredo.app",
-      "versionCode": 9,
+      "versionCode": 10,
       "permissions": [
         "INTERNET"
       ],

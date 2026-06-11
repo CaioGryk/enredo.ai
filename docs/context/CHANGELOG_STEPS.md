@@ -8406,3 +8406,44 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
   - Artifact expiration: June 25, 2026
   - Git commit: `7c0db42`
   - Android build version: `9`
+
+---
+
+## Step 98x — Setup Images and Reading Generation Timeout
+
+**Date:** June 11, 2026
+
+**Objective:** Restore generated premise/character images and prevent the mobile app from aborting the first interactive scene while the backend is still generating it.
+
+### Production diagnosis
+
+- Railway health returned `200`, with both service and database marked `ok`.
+- The tested premise and characters returned `coverGenerationStatus/imageGenerationStatus: SUCCESS`, but their public DTO image fields were `null`.
+- Their generated images were stored as inline `data:image/...;base64` values and intentionally removed by `safeImageUrl()` to keep JSON payloads small.
+- A controlled production `POST /api/reading/start` using the demo account succeeded with `201`, created a scene, and took `27.39 seconds`.
+- The mobile Axios timeout was `30 seconds`, leaving almost no margin for mobile latency and causing the operation to surface as a connection failure.
+
+### What was changed
+
+| File | Change |
+|------|--------|
+| `services/api/src/modules/story-setup/story-setup.controller.ts` | Added binary premise-cover and playable-character-image endpoints with optional authentication and cache headers |
+| `services/api/src/modules/story-setup/story-setup.service.ts` | Inline images now map to lightweight API-relative paths; binary endpoints validate story access and decode image bytes |
+| `services/api/src/modules/story-setup/__tests__/story-setup.security.spec.ts` | Added regression coverage for DTO paths, access validation, MIME type, and base64 decoding |
+| `apps/mobile/src/api/client.ts` | Added a dedicated 120-second timeout for narrative generation requests |
+| `apps/mobile/app/story/[id]/premise.tsx` | Resolves API-relative premise cover paths before rendering |
+| `apps/mobile/app/story/[id]/character.tsx` | Resolves character image paths and uses the narrative-generation timeout when starting a reading |
+| `apps/mobile/app/reader/[id].tsx` | Uses the narrative-generation timeout for subsequent interactive actions |
+| `apps/mobile/app.json` | Bumped Android `versionCode` from `9` to `10` |
+
+### New API routes
+
+- `GET /api/story-setup/premises/:premiseId/cover`
+- `GET /api/story-setup/characters/:characterId/image`
+
+### Validation
+
+- `services/api npx tsc --noEmit`: passed.
+- `apps/mobile npx tsc --noEmit`: passed.
+- Story setup suites: 2 passed, 40 tests passed.
+- `apps/mobile npx expo-doctor`: 18/18 checks passed.

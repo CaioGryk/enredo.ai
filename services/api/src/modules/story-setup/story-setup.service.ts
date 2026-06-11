@@ -3,7 +3,7 @@ import { PrismaService } from '@common/prisma.service';
 import { AiService } from '@modules/ai/ai.service';
 import { ImageGenerationService } from '@modules/ai/image-generation.service';
 import { StoryQualityService } from '@modules/story-quality/story-quality.service';
-import { safeImageUrl } from '@common/safe-image-url';
+import { isInlineImageDataUrl, parseInlineImageDataUrl, safeImageUrl } from '@common/safe-image-url';
 import { SubscriptionType, NarrativeFunction, ReadingSessionStatus, StoryVisibility, StoryModerationStatus } from '@prisma/client';
 import {
   PremiseResponseDto,
@@ -197,6 +197,60 @@ export class StorySetupService {
 
   async getCharacters(premiseId: string, userId?: string) {
     return this.getCachedCharacters(premiseId, userId);
+  }
+
+  async getPremiseCoverImage(
+    premiseId: string,
+    userId?: string,
+  ): Promise<{ contentType: string; buffer: Buffer }> {
+    const premise = await this.prisma.storyPremise.findUnique({
+      where: { id: premiseId },
+      select: { id: true, storyId: true, coverUrl: true },
+    });
+
+    if (!premise) {
+      throw new NotFoundException('StoryPremise', premiseId);
+    }
+
+    await this.assertCanAccessStory(premise.storyId, userId);
+
+    const image = premise.coverUrl ? parseInlineImageDataUrl(premise.coverUrl) : null;
+    if (!image) {
+      throw new NotFoundException('StoryPremise cover', premiseId);
+    }
+
+    return image;
+  }
+
+  async getCharacterImage(
+    characterId: string,
+    userId?: string,
+  ): Promise<{ contentType: string; buffer: Buffer }> {
+    const character = await this.prisma.storyPlayableCharacter.findUnique({
+      where: { id: characterId },
+      select: {
+        id: true,
+        imageUrl: true,
+        premise: { select: { storyId: true } },
+      },
+    });
+
+    if (!character) {
+      throw new NotFoundException('StoryPlayableCharacter', characterId);
+    }
+
+    if (!character.premise?.storyId) {
+      throw new NotFoundException('StoryPlayableCharacter premise', characterId);
+    }
+
+    await this.assertCanAccessStory(character.premise.storyId, userId);
+
+    const image = character.imageUrl ? parseInlineImageDataUrl(character.imageUrl) : null;
+    if (!image) {
+      throw new NotFoundException('StoryPlayableCharacter image', characterId);
+    }
+
+    return image;
   }
 
   async generateCharacters(premiseId: string, userId?: string, force: boolean = false): Promise<CharacterResponseDto[]> {
@@ -476,7 +530,10 @@ export class StorySetupService {
       styleGuide: premise.styleGuide,
       worldRules: premise.worldRules,
       coverPrompt: premise.coverPrompt,
-      coverUrl: safeImageUrl(premise.coverUrl),
+      coverUrl: safeImageUrl(premise.coverUrl) ??
+        (isInlineImageDataUrl(premise.coverUrl)
+          ? `/api/story-setup/premises/${premise.id}/cover`
+          : null),
       coverGenerationStatus: premise.coverGenerationStatus || 'NOT_REQUESTED',
       coverError: premise.coverError ?? null,
       coverFallback: this.buildPremiseFallback(premise),
@@ -506,7 +563,10 @@ export class StorySetupService {
       startingSituation: character.startingSituation ?? null,
       conflictPotential: character.conflictPotential,
       visualPrompt: character.visualPrompt,
-      imageUrl: safeImageUrl(character.imageUrl),
+      imageUrl: safeImageUrl(character.imageUrl) ??
+        (isInlineImageDataUrl(character.imageUrl)
+          ? `/api/story-setup/characters/${character.id}/image`
+          : null),
       imageGenerationStatus: character.imageGenerationStatus || 'NOT_REQUESTED',
       imageError: character.imageError ?? null,
       imageFallback: this.buildCharacterFallback(character),

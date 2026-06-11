@@ -740,6 +740,13 @@ Rail buttons (like, save, share) are now functional:
 - Android now relies exclusively on the native non-edge-to-edge content area; the explicit root inset remains enabled only for iOS.
 - Android `versionCode` is now `9` for the next APK.
 
+### Setup Images and Reading Generation Timeout (Step 98x)
+
+- Premise and playable-character screens now resolve API-relative image paths before passing them to React Native image components.
+- Narrative generation calls use a dedicated 120-second timeout; ordinary API requests retain the 30-second timeout.
+- This applies both when starting the first scene and when sending later interactive reader actions.
+- Android `versionCode` is now `10` for the next APK.
+
 ---
 
-**Last Updated:** After Step 98w (Android Status Bar Spacing Calibration) — June 11, 2026
+**Last Updated:** After Step 98x (Setup Images and Reading Generation Timeout) — June 11, 2026

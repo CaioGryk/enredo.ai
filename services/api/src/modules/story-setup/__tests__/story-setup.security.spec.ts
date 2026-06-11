@@ -123,6 +123,75 @@ describe('StorySetupService - Security (Private Story Access)', () => {
     });
   });
 
+  describe('generated setup image delivery', () => {
+    const publicApprovedStory = {
+      id: 'story-1',
+      visibility: StoryVisibility.PUBLIC,
+      moderationStatus: StoryModerationStatus.APPROVED,
+      creatorUserId: null,
+    };
+
+    it('maps inline premise covers to the binary API route', () => {
+      const dto = service['mapPremiseToDto']({
+        id: 'premise-1',
+        storyId: 'story-1',
+        title: 'Premise',
+        synopsis: 'Synopsis',
+        coverUrl: 'data:image/png;base64,aGVsbG8=',
+        sortOrder: 0,
+        isPremium: false,
+        isAiGenerated: true,
+      });
+
+      expect(dto.coverUrl).toBe('/api/story-setup/premises/premise-1/cover');
+    });
+
+    it('maps inline character portraits to the binary API route', () => {
+      const dto = service['mapCharacterToDto']({
+        id: 'character-1',
+        premiseId: 'premise-1',
+        premise: { story: publicApprovedStory },
+        name: 'Hero',
+        roleLabel: 'Hero',
+        narrativeFunction: 'HERO',
+        imageUrl: 'data:image/jpeg;base64,aGVsbG8=',
+        sortOrder: 0,
+        isPremium: false,
+        isAiGenerated: true,
+      });
+
+      expect(dto.imageUrl).toBe('/api/story-setup/characters/character-1/image');
+    });
+
+    it('decodes an inline premise cover after validating story access', async () => {
+      prisma.storyPremise.findUnique.mockResolvedValue({
+        id: 'premise-1',
+        storyId: 'story-1',
+        coverUrl: 'data:image/png;base64,aGVsbG8=',
+      });
+      prisma.story.findUnique.mockResolvedValue(publicApprovedStory);
+
+      const image = await service.getPremiseCoverImage('premise-1');
+
+      expect(image.contentType).toBe('image/png');
+      expect(image.buffer.toString()).toBe('hello');
+    });
+
+    it('decodes an inline character image after validating story access', async () => {
+      prisma.storyPlayableCharacter.findUnique.mockResolvedValue({
+        id: 'character-1',
+        imageUrl: 'data:image/jpeg;base64,aGVsbG8=',
+        premise: { storyId: 'story-1' },
+      });
+      prisma.story.findUnique.mockResolvedValue(publicApprovedStory);
+
+      const image = await service.getCharacterImage('character-1');
+
+      expect(image.contentType).toBe('image/jpeg');
+      expect(image.buffer.toString()).toBe('hello');
+    });
+  });
+
   describe('validatePremiseAccess', () => {
     const publicApprovedStory = {
       id: 'story-1',

@@ -7,6 +7,7 @@ const LOCAL_API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3001/api' : '
 const PRODUCTION_API_URL = 'https://enredoai-production.up.railway.app/api';
 const DEFAULT_API_URL = __DEV__ ? LOCAL_API_URL : PRODUCTION_API_URL;
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
+export const NARRATIVE_GENERATION_TIMEOUT_MS = 120_000;
 
 export function resolveApiAssetUrl(url?: string | null): string | undefined {
   if (!url) return undefined;
