@@ -1,7 +1,7 @@
 import { ReadingOrchestratorService } from '../reading-orchestrator.service';
 import { NarrativeEngine } from '../narrative/narrative-engine.service';
 import { StoryQualityService } from '@modules/story-quality/story-quality.service';
-import { SubscriptionType } from '@prisma/client';
+import { Prisma, SubscriptionType } from '@prisma/client';
 
 describe('ReadingOrchestratorService - Transaction Failure Regression', () => {
   let service: ReadingOrchestratorService;
@@ -151,6 +151,38 @@ describe('ReadingOrchestratorService - Transaction Failure Regression', () => {
           tier: 'FREE',
         }),
       ).rejects.toThrow('Database connection failed');
+    });
+  });
+
+  describe('createFreeSessionWithLimitTransaction', () => {
+    it('uses a short batch transaction compatible with pooled production connections', async () => {
+      const createdSession = { ...mockSession, id: 'session-new' };
+      const sessionCreate = Promise.resolve(createdSession);
+      const usageUpdate = Promise.resolve({ freeInteractionsUsed: 1 });
+      const mockPrisma = {
+        readingSession: {
+          count: jest.fn().mockResolvedValue(0),
+          create: jest.fn().mockReturnValue(sessionCreate),
+        },
+        dailyUsageLimit: {
+          update: jest.fn().mockReturnValue(usageUpdate),
+        },
+        $transaction: jest.fn().mockResolvedValue([createdSession, { freeInteractionsUsed: 1 }]),
+      };
+
+      (service as any).prisma = mockPrisma;
+
+      const result = await service.createFreeSessionWithLimitTransaction(
+        'user-1',
+        'story-1',
+        { selectedPremiseId: 'premise-1' },
+      );
+
+      expect(result).toBe(createdSession);
+      expect(mockPrisma.$transaction).toHaveBeenCalledWith(
+        [sessionCreate, usageUpdate],
+        { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+      );
     });
   });
 });

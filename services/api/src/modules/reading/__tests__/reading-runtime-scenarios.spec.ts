@@ -84,8 +84,11 @@ describe('Reading Runtime Scenarios', () => {
 
     mockPrisma = {
       $transaction: jest.fn((...args: any[]) => {
-        const cb = typeof args[0] === 'function' ? args[0] : args[1];
-        return Promise.resolve(cb(mockPrisma));
+        const operation = args[0];
+        if (Array.isArray(operation)) {
+          return Promise.all(operation);
+        }
+        return Promise.resolve(operation(mockPrisma));
       }),
       story: { findUnique: jest.fn(), findFirst: jest.fn() },
       storyPremise: { findUnique: jest.fn(), findFirst: jest.fn() },

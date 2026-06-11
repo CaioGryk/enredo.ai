@@ -8545,3 +8545,52 @@ became oversized and the action buttons were pushed below the viewport.
   - Artifact expiration: June 25, 2026 22:32:02 UTC
   - Source commit: `adaef4f`
   - Android build version: `11`
+
+---
+
+## Step 122 — Fix Production Reading Start Transaction Timeout
+
+**Date:** June 11, 2026
+
+### Problem
+
+Starting a story from the Android app returned `500 Internal server error`.
+The failure was reproduced against production with the exact catalog path:
+
+- Story: `O Legado de Fogo e Sangue`
+- Premise: `Sangue de Estrela`
+- Character: `Kaelen`
+
+A read-only database inspection confirmed that the failed request created the
+daily usage row but no reading session. The failure therefore happened before
+LLM generation, inside the free-session reservation transaction.
+
+### Root cause
+
+The free-session flow used a Prisma interactive transaction with
+`Serializable` isolation. Production uses the Supabase PgBouncer transaction
+pooler with `connection_limit=1`. Under Railway runtime contention, the
+interactive transaction waited for a connection, timed out, rolled back the
+session creation, and surfaced through the global exception filter as a
+generic `500`.
+
+### Backend changes
+
+- Moved the active-session count outside the write transaction.
+- Replaced the interactive callback transaction with a short Prisma batch
+  transaction.
+- Kept reading-session creation and daily-usage increment atomic.
+- Changed the write transaction isolation level to `ReadCommitted`, which is
+  appropriate for the pooled runtime connection.
+- Added regression coverage for the PgBouncer-compatible batch transaction.
+
+### Validation
+
+- Reading transaction and runtime suites: 2 suites passed, 55 tests passed.
+- Backend TypeScript compilation: passed.
+- Real local API flow against the configured Supabase database: `201 Created`.
+- The exact story, premise, and character produced both a reading session and
+  first narrative scene.
+
+This is a backend-only fix. Android APK version `11` remains valid and does
+not require a rebuild.

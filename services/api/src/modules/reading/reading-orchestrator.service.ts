@@ -627,19 +627,24 @@ export class ReadingOrchestratorService {
   }
 
   async createFreeSessionWithLimitTransaction(userId: string, storyId: string, setupData: any): Promise<any> {
-    return this.prisma.$transaction(async (tx: any) => {
-      const activeSessionCount = await tx.readingSession.count({
-        where: {
-          userId,
-          status: ReadingSessionStatus.ACTIVE,
-        },
-      });
+    const activeSessionCount = await this.prisma.readingSession.count({
+      where: {
+        userId,
+        status: ReadingSessionStatus.ACTIVE,
+      },
+    });
 
-      if (activeSessionCount >= FREE_ACTIVE_SESSION_LIMIT) {
-        throwReadingError('Free users can have up to 3 active stories. Abandon one story or upgrade to Premium.', ReadingErrorCode.DAILY_LIMIT_REACHED, 402);
-      }
+    if (activeSessionCount >= FREE_ACTIVE_SESSION_LIMIT) {
+      throwReadingError('Free users can have up to 3 active stories. Abandon one story or upgrade to Premium.', ReadingErrorCode.DAILY_LIMIT_REACHED, 402);
+    }
 
-      const newSession = await tx.readingSession.create({
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Keep the write transaction short so it remains compatible with PgBouncer
+    // transaction pooling and a single Prisma connection in production.
+    const [newSession] = await this.prisma.$transaction([
+      this.prisma.readingSession.create({
         data: {
           userId,
           storyId,
@@ -647,11 +652,8 @@ export class ReadingOrchestratorService {
           currentSceneIndex: 0,
           ...setupData,
         },
-      });
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      await tx.dailyUsageLimit.update({
+      }),
+      this.prisma.dailyUsageLimit.update({
         where: {
           userId_date: {
             userId,
@@ -661,12 +663,12 @@ export class ReadingOrchestratorService {
         data: {
           freeInteractionsUsed: { increment: 1 },
         },
-      });
-
-      return newSession;
-    }, {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      }),
+    ], {
+      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
     });
+
+    return newSession;
   }
 
   async findDailyUsageLimit(userId: string, date: Date): Promise<any> {
