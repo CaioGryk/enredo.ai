@@ -8187,9 +8187,17 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
 | Third APK bundle URL inspection | ✅ Railway API present; local emulator URLs absent |
 | `apps/mobile npx tsc --noEmit` | ✅ Passed |
 | `apps/mobile npx expo-doctor` | ✅ 18/18 checks passed |
+| GitHub push to `origin/main` | ✅ `6e4ab0a` pushed |
+| Fourth EAS Android preview build | ✅ `FINISHED`; APK artifact generated |
 
 ### Next steps
 
-- Commit and push the diagnostic APK changes.
-- Generate a fourth Android preview APK with Android build version `4`.
+- Fourth Android diagnostic APK:
+  - Build ID: `82f1f9af-b0cf-46b2-b779-cb3a9e7ce4d6`
+  - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/82f1f9af-b0cf-46b2-b779-cb3a9e7ce4d6`
+  - APK artifact: `https://expo.dev/artifacts/eas/KsVJRXcLT4m5oZXUI2UNiEvhRSLvXkpFdvuBk8zDxzs.apk`
+  - Final status: `FINISHED`
+  - Artifact expiration: June 24, 2026
+  - Git commit: `6e4ab0a4b9da9b26828dd2bd014150b7ec6ff2c5`
+  - Android build version: `4`
 - Install on the owner's phone and capture the full diagnostic message if registration still fails.

@@ -122,6 +122,16 @@ Diagnostic cleanup for the next APK:
 - Android `versionCode` bumped to `4`.
 - Login/register errors now display the API URL and technical network error message instead of only the generic user-facing text.
 
+Fourth preview diagnostic APK:
+
+```txt
+https://expo.dev/artifacts/eas/KsVJRXcLT4m5oZXUI2UNiEvhRSLvXkpFdvuBk8zDxzs.apk
+```
+
+Status: `FINISHED`. Artifact expires on June 24, 2026. This build uses Git commit `6e4ab0a4b9da9b26828dd2bd014150b7ec6ff2c5` and Android build version `4`.
+
+If registration still fails on this APK, capture the full alert text. It should include the API URL and the technical network error message.
+
 **Web Preview:**
 ```sh
 npx expo export --platform web --output-dir dist-preview-vX
