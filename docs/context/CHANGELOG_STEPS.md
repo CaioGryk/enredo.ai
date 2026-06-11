@@ -8533,3 +8533,12 @@ became oversized and the action buttons were pushed below the viewport.
   - all three feature rows fit coherently;
   - `Começar agora` and `Entrar` remain visible;
   - remaining footer content is reachable by scrolling.
+
+### Android build
+
+- Android APK version `11` EAS build was created:
+  - Build ID: `efb54c0e-37cd-4e2a-976e-17a7e03e68d8`
+  - Build URL: `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/efb54c0e-37cd-4e2a-976e-17a7e03e68d8`
+  - Initial status: `IN_QUEUE`
+  - Source commit: `adaef4f`
+  - Android build version: `11`
