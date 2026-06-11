@@ -90,6 +90,7 @@ export default function LoginScreen() {
       setAuthError('');
       setGoogleSubmitting(true);
       await socialLogin('GOOGLE', idToken);
+      router.replace('/onboarding' as any);
     } catch (e: any) {
       const message = getAuthErrorMessage(e, 'Não foi possível entrar com o Google.');
       setAuthError(message);
@@ -100,10 +101,18 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
+      const message = 'Preencha e-mail e senha antes de continuar.';
+      setAuthError(message);
+      Alert.alert('Campos obrigatórios', message);
+      return;
+    }
+
     try {
       setAuthError('');
       setSubmitting(true);
-      await login({ email, password });
+      await login({ email: email.trim(), password });
+      router.replace('/onboarding' as any);
     } catch (e: any) {
       const message = getAuthErrorMessage(e, 'Verifique suas credenciais.');
       setAuthError(message);
@@ -118,6 +127,7 @@ export default function LoginScreen() {
       setAuthError('');
       setSubmitting(true);
       await login({ email: 'demo@enredo.ai', password: 'Demo1234!' });
+      router.replace('/onboarding' as any);
     } catch (e: any) {
       const message = getAuthErrorMessage(e, 'Não foi possível entrar com o usuário demo.');
       setAuthError(message);

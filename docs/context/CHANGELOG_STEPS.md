@@ -8201,3 +8201,31 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
   - Git commit: `6e4ab0a4b9da9b26828dd2bd014150b7ec6ff2c5`
   - Android build version: `4`
 - Install on the owner's phone and capture the full diagnostic message if registration still fails.
+
+---
+
+## Step 98s — Mobile Auth Success Navigation
+
+**Date:** June 11, 2026
+
+**Objective:** Fix the Android beta behavior where registration could succeed on the backend but the app stayed on the auth screen without a success state, and login appeared to do nothing.
+
+### What was found
+
+- Railway health and the direct production register smoke test confirmed that the backend and database are reachable.
+- The owner's report that a second registration returned "e-mail already registered" indicates the first registration reached the backend successfully.
+- The remaining issue is mobile auth UX/navigation after successful register/login, not the Supabase table mode or `sslmode=require`.
+
+### What was changed
+
+| File | Change |
+|------|--------|
+| `apps/mobile/app/(auth)/register.tsx` | Trimmed name/e-mail before submit, shows `Cadastro criado` after successful registration, and routes to onboarding from the alert action |
+| `apps/mobile/app/(auth)/login.tsx` | Added required-field validation, trims e-mail before login, and explicitly routes successful login, Google login, and demo login to onboarding |
+| `apps/mobile/app.json` | Bumped Android `versionCode` from `4` to `5` for the next APK |
+
+### Next steps
+
+- Run TypeScript and Expo Doctor checks.
+- Push the fix to GitHub.
+- Generate a fifth Android preview APK and test login/register again on the owner's phone.

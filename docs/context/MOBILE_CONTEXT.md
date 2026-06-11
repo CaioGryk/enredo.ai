@@ -704,4 +704,14 @@ Rail buttons (like, save, share) are now functional:
 
 ---
 
-**Last Updated:** After Step 98l (QA Provider Failure Harness cleanup) — June 4, 2026
+### Android Auth Success Navigation (Step 98s)
+
+- The fourth diagnostic APK proved the app can reach production when registration creates a user and a second attempt returns "e-mail already registered".
+- Auth success handling now gives the beta tester visible feedback after registration: `Cadastro criado`.
+- Register, login, Google login, and demo login explicitly route to `/onboarding` after successful auth instead of relying only on the global `AuthContext` redirect effect.
+- Login now validates missing e-mail/password before submitting and trims e-mail before sending credentials.
+- Android `versionCode` is now `5` for the next APK.
+
+---
+
+**Last Updated:** After Step 98s (Android Auth Success Navigation) — June 11, 2026
