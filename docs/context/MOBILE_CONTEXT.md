@@ -720,6 +720,12 @@ Rail buttons (like, save, share) are now functional:
 - Library, Story Detail, Active Stories, Scene Feed, and Saved Scenes now resolve API-relative image paths consistently.
 - Android `versionCode` is now `6` for the next APK.
 
+### Android Safe Area (Step 98u)
+
+- The root mobile layout now wraps navigation in `SafeAreaProvider` and a top-edge `SafeAreaView`.
+- The app sets a dark, non-translucent status bar so Android status icons do not overlap the app header.
+- Android `versionCode` is now `7` for the next APK.
+
 ---
 
-**Last Updated:** After Step 98t (Android Catalog Covers) — June 11, 2026
+**Last Updated:** After Step 98u (Android Safe Area) — June 11, 2026

@@ -8289,3 +8289,34 @@ unset QA_FORCE_READING_PROVIDER_FAILURE         # Back to normal
   - Git commit: `e476c317233065041b8b88fd406cc75daa4f0758`
   - Android build version: `6`
 - Install APK version `6` and retest the Library screen on device.
+
+---
+
+## Step 98u — Android Safe Area Top Inset
+
+**Date:** June 11, 2026
+
+**Objective:** Fix Android beta screens rendering underneath the device status bar after catalog images started loading correctly.
+
+### What was found
+
+- On the physical Android device, the Library header and top controls were partially hidden behind the Android status bar.
+- `react-native-safe-area-context` was already installed, but the app root was not applying a top safe-area inset globally.
+
+### What was changed
+
+| File | Change |
+|------|--------|
+| `apps/mobile/app/_layout.tsx` | Wrapped the app navigation in `SafeAreaProvider` and top-edge `SafeAreaView`; configured a dark non-translucent `StatusBar` |
+| `apps/mobile/app.json` | Bumped Android `versionCode` from `6` to `7` |
+
+### Validation
+
+| Check | Result |
+|-------|--------|
+| `apps/mobile npx tsc --noEmit` | ✅ Passed |
+| `apps/mobile npx expo-doctor` | ✅ 18/18 checks passed |
+
+### Next step
+
+- Generate Android APK version `7` and retest the top spacing on the owner's device.

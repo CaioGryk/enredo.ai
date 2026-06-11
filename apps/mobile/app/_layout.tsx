@@ -1,9 +1,11 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { NotoSerif_400Regular, NotoSerif_400Regular_Italic, NotoSerif_600SemiBold, NotoSerif_700Bold, NotoSerif_900Black } from '@expo-google-fonts/noto-serif';
 import { Inter_300Light, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
@@ -62,23 +64,28 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="preview" />
-          <Stack.Screen name="story/[id]" />
-          <Stack.Screen name="reader/[id]" />
-          <Stack.Screen name="scene-media" options={{ title: 'Galeria de Cenas', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
-          <Stack.Screen name="saved-scenes" options={{ title: 'Cenas Salvas', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
-          <Stack.Screen name="onboarding" options={{ title: 'Boas-vindas', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
-          <Stack.Screen name="legal" options={{ title: 'Termos e Privacidade', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
-          <Stack.Screen name="profile/narrative-preferences" options={{ title: 'Preferências de Narrativa', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-        </Stack>
-      </AuthProvider>
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#0a0a0a' }} edges={['top']}>
+        <StatusBar style="light" backgroundColor="#0a0a0a" translucent={false} />
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="preview" />
+              <Stack.Screen name="story/[id]" />
+              <Stack.Screen name="reader/[id]" />
+              <Stack.Screen name="scene-media" options={{ title: 'Galeria de Cenas', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
+              <Stack.Screen name="saved-scenes" options={{ title: 'Cenas Salvas', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
+              <Stack.Screen name="onboarding" options={{ title: 'Boas-vindas', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
+              <Stack.Screen name="legal" options={{ title: 'Termos e Privacidade', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
+              <Stack.Screen name="profile/narrative-preferences" options={{ title: 'Preferências de Narrativa', headerShown: false, contentStyle: { backgroundColor: '#0a0a0a' } }} />
+              <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+            </Stack>
+          </AuthProvider>
+        </QueryClientProvider>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
