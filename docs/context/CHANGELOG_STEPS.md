@@ -8701,6 +8701,13 @@ Brazil, so network distance also contributes to every uncached request.
 - Production catalog cold request: about 7.07 seconds.
 - Production catalog cached requests: about 0.70 and 0.62 seconds, reducing
   repeat-request latency by roughly 90%.
+- Android preview build `9223f6d9-a5a4-4b1e-aecf-caf74be1f448`: finished.
+- Android build version: `12`.
+- Expo installation page:
+  `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/9223f6d9-a5a4-4b1e-aecf-caf74be1f448`
+- APK artifact:
+  `https://expo.dev/artifacts/eas/296C-BYWPMXmr-W0tkdva4wdMaPKj0VMsV5nCS5mP8o.apk`
+- APK artifact expiration: June 26, 2026.
 
 ### Follow-up performance work
 
