@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
-  ImageBackground,
   Platform,
   StyleSheet,
   Text,
@@ -15,6 +14,7 @@ import { BookCheck, BookOpen, CheckCircle, CheckCircle2, Info, Menu, Play, PlusC
 import { api, resolveApiAssetUrl } from '../../src/api/client';
 import { queryKeys } from '../../src/api/queryKeys';
 import { ReadingSessionSummary, SessionListResponse, SubscriptionResponse } from '../../src/api/types';
+import { CachedImageBackground } from '../../src/components/cached-image';
 import { useAuth } from '../../src/context/AuthContext';
 import { StateBlock } from '../../src/components/state-block';
 import { typography } from '../../src/theme/typography';
@@ -209,20 +209,18 @@ function ChronicleCard({
   const progress = Math.min(90, Math.max(12, ((session.currentSceneIndex + 1) / 10) * 100));
   const palette = cardPalette(index);
   const coverUrl = resolveApiAssetUrl(session.storyCoverUrl || session.selectedPremiseCoverUrl || session.selectedCharacterImageUrl);
-  const coverSource = coverUrl ? { uri: coverUrl } : null;
 
   return (
     <View style={styles.card}>
       <View style={[styles.cover, { backgroundColor: palette[0] }]}>
-        {coverSource ? (
-          <ImageBackground
-            source={coverSource}
-            resizeMode="cover"
+        {coverUrl ? (
+          <CachedImageBackground
+            uri={coverUrl}
             style={styles.coverImage}
             imageStyle={styles.coverImageRadius}
           >
             <View style={styles.coverScrim} />
-          </ImageBackground>
+          </CachedImageBackground>
         ) : (
           <View style={styles.coverFallback}>
             <View style={[styles.fallbackGlow, { backgroundColor: palette[2] }]} />

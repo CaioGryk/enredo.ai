@@ -189,6 +189,41 @@ describe('Reading Runtime Scenarios', () => {
       expect(mockNarrativeEngine.generateScene).toHaveBeenCalled();
       expect(mockPrisma.modelUsage.create).toHaveBeenCalled();
     });
+
+    it('should return the prepared session before generating the first scene', async () => {
+      const result = await service.startReading('user-1', {
+        ...startDto,
+        deferFirstScene: true,
+      });
+
+      expect(result.session.id).toBe('session-new');
+      expect(result.session.currentScene).toBeNull();
+      expect(result.session.isPreparing).toBe(true);
+      expect(mockPrisma.readingSession.create).toHaveBeenCalled();
+      expect(mockNarrativeEngine.generateScene).not.toHaveBeenCalled();
+      expect(mockPrisma.narrativeEvent.create).not.toHaveBeenCalled();
+    });
+
+    it('should deduplicate concurrent first-scene generation for the same session', async () => {
+      mockNarrativeEngine.generateScene.mockResolvedValue(mockScene);
+
+      const first = (service as any).generateFirstSceneOnce(
+        mockSession,
+        'user-1',
+        SubscriptionType.FREE,
+      );
+      const second = (service as any).generateFirstSceneOnce(
+        mockSession,
+        'user-1',
+        SubscriptionType.FREE,
+      );
+
+      expect(first).toBe(second);
+      await Promise.all([first, second]);
+
+      expect(mockNarrativeEngine.generateScene).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.narrativeEvent.create).toHaveBeenCalledTimes(1);
+    });
   });
 
   // ─────────────────────────────────────────────

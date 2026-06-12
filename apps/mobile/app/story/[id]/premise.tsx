@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  ImageBackground,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import { ArrowLeft, BookOpen, Compass, Crown, Eye, Flame, KeyRound, Landmark, Mo
 import { api, resolveApiAssetUrl } from '../../../src/api/client';
 import { queryKeys } from '../../../src/api/queryKeys';
 import { Story, StoryPremise } from '../../../src/api/types';
+import { CachedImageBackground } from '../../../src/components/cached-image';
 import { StateBlock } from '../../../src/components/state-block';
 import { colors } from '../../../src/theme/colors';
 import { typography } from '../../../src/theme/typography';
@@ -145,7 +145,7 @@ export default function StoryPremiseScreen() {
                   onPress={() => selectPremise(premise.id)}
                 >
                   {resolveApiAssetUrl(premise.coverUrl) ? (
-                    <ImageBackground source={{ uri: resolveApiAssetUrl(premise.coverUrl)! }} style={styles.cardImage} imageStyle={styles.cardImageRadius} />
+                    <CachedImageBackground uri={resolveApiAssetUrl(premise.coverUrl)!} style={styles.cardImage} imageStyle={styles.cardImageRadius} />
                   ) : premise.coverGenerationStatus === 'PENDING' ? (
                     <View style={styles.cardImageFallback}>
                       <ActivityIndicator color={ACCENT} size="small" />

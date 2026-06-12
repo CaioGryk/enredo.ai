@@ -117,8 +117,9 @@ export interface ReadingSessionDetails {
   status: string;
   startedAt: string;
   lastSceneAt: string;
-  currentScene: SceneResponse;
+  currentScene?: SceneResponse | null;
   history: NarrativeEvent[];
+  isPreparing?: boolean;
 }
 
 export interface UsageInfo {

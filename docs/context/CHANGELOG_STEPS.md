@@ -9334,6 +9334,78 @@ This decision avoids interrupting the beta while preserving the São Paulo
 hosting migration as an explicit V1 usability requirement rather than losing
 it as an informal future idea.
 
+---
+
+## Step 130 — Make Story Start Responsive and Cache Mobile Images
+
+**Date:** June 12, 2026
+
+### Problem
+
+Starting a story kept the character-selection screen blocked until the AI
+finished generating the first scene. Network retries could also overlap while
+the same first scene was still being generated.
+
+Story, premise, and character artwork used the React Native image component.
+Although HTTP headers allowed caching, the app did not explicitly request a
+persistent memory-and-disk cache or provide a consistent image transition.
+
+### Responsive story start
+
+- Added the optional `deferFirstScene` start-reading contract.
+- The backend validates access, quality, subscription, limits, premise, and
+  character, then creates or reuses the reading session.
+- When deferred, the backend returns the session ID before calling the AI.
+- The mobile app navigates directly to the reader after session preparation.
+- The reader displays a dedicated first-scene preparation state while the
+  existing session endpoint generates or recovers the opening scene.
+- The reader request uses the full 120-second narrative-generation timeout
+  instead of the generic 30-second API timeout.
+- Existing clients that do not send `deferFirstScene` retain the original
+  synchronous behavior.
+
+### Generation safety
+
+- Added an in-process first-scene promise registry keyed by session ID.
+- Concurrent requests for the same uninitialized session share one generation
+  promise.
+- The registry entry is removed after success or failure, allowing a later
+  retry to recover the session.
+- Added regression coverage proving that concurrent requests create only one
+  narrative event.
+
+### Mobile image cache
+
+- Installed the Expo SDK-compatible `expo-image` module.
+- Added shared `CachedImage` and `CachedImageBackground` components.
+- Enabled `memory-disk` cache policy and a short fade transition.
+- Migrated high-impact artwork in:
+  - Library highlights, trends, catalog, premium cards, and preview.
+  - My Stories covers.
+  - Story detail hero and character artwork.
+  - Premise covers.
+  - Playable character portraits.
+- Preserved existing fallbacks when artwork is unavailable.
+
+### Validation
+
+- Mobile TypeScript compilation: passed.
+- Backend TypeScript compilation: passed.
+- Expo Doctor: 18 of 18 checks passed.
+- Reading suites: 3 suites passed, 74 tests passed.
+- Git whitespace validation: passed.
+
+### Build
+
+- Android build version increased from `12` to `13`.
+
+### Remaining work
+
+- Images are still served at their original dimensions. The next media phase
+  should generate thumbnails and move generated assets to object storage/CDN.
+- Subsequent reader actions still wait synchronously for AI generation. Their
+  loading experience can be improved after the first-scene flow is validated.
+
 ### Follow-up performance work
 
 - Story start still waits for the first AI scene before navigation. A future

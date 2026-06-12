@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ImageBackground,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import { BookOpen, ChevronRight, Play, Search, Sparkles, Zap } from 'lucide-reac
 import { api, resolveApiAssetUrl } from '../../src/api/client';
 import { queryKeys } from '../../src/api/queryKeys';
 import { ReadingSessionSummary, SessionListResponse, Story, StoryListResponse } from '../../src/api/types';
+import { CachedImageBackground } from '../../src/components/cached-image';
 import { StateBlock } from '../../src/components/state-block';
 import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
@@ -217,7 +217,7 @@ export default function LibraryScreen() {
                   onPress={() => openStoryPreview(story)}
                 >
                   {getStoryImage(story) ? (
-                    <ImageBackground source={{ uri: getStoryImage(story)! }} style={styles.originalCardImage} imageStyle={styles.originalCardRadius}>
+                    <CachedImageBackground uri={getStoryImage(story)!} style={styles.originalCardImage} imageStyle={styles.originalCardRadius}>
                       <View style={styles.originalOverlay}>
                         <View style={styles.originalBadge}>
                           <Text style={styles.originalBadgeText}>DESTAQUE</Text>
@@ -227,7 +227,7 @@ export default function LibraryScreen() {
                           <Text style={styles.originalCardTitle} numberOfLines={2}>{story.title}</Text>
                         </View>
                       </View>
-                    </ImageBackground>
+                    </CachedImageBackground>
                   ) : (
                     <FallbackCard story={story} style={styles.originalCardImage}>
                       <View style={styles.originalOverlay}>
@@ -261,11 +261,11 @@ export default function LibraryScreen() {
                 >
                   <View style={styles.trendingImageWrap}>
                     {getStoryImage(story) ? (
-                      <ImageBackground source={{ uri: getStoryImage(story)! }} style={styles.trendingImage} imageStyle={styles.trendingCardRadius}>
+                      <CachedImageBackground uri={getStoryImage(story)!} style={styles.trendingImage} imageStyle={styles.trendingCardRadius}>
                         <View style={styles.trendingHover}>
                           <Text style={styles.trendingHoverText}>Ler agora</Text>
                         </View>
-                      </ImageBackground>
+                      </CachedImageBackground>
                     ) : (
                       <FallbackCard story={story} style={styles.trendingImage}>
                         <View style={styles.trendingHover}>
@@ -302,8 +302,8 @@ export default function LibraryScreen() {
                 >
                   <View style={styles.allStoryImageWrap}>
                     {getStoryImage(story) ? (
-                      <ImageBackground
-                        source={{ uri: getStoryImage(story)! }}
+                      <CachedImageBackground
+                        uri={getStoryImage(story)!}
                         style={styles.allStoryImage}
                         imageStyle={styles.allStoryImageRadius}
                       />
@@ -347,7 +347,7 @@ export default function LibraryScreen() {
               >
                 <View style={styles.premiumImageWrap}>
                   {getStoryImage(story) ? (
-                    <ImageBackground source={{ uri: getStoryImage(story)! }} style={styles.premiumImage} imageStyle={styles.premiumCardRadius} />
+                    <CachedImageBackground uri={getStoryImage(story)!} style={styles.premiumImage} imageStyle={styles.premiumCardRadius} />
                   ) : (
                     <FallbackCard story={story} style={styles.premiumImage} />
                   )}
@@ -376,12 +376,12 @@ export default function LibraryScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHero}>
               {getStoryImage(previewStory) ? (
-                <ImageBackground source={{ uri: getStoryImage(previewStory)! }} style={styles.sheetHeroImage} imageStyle={styles.premiumCardRadius}>
+                <CachedImageBackground uri={getStoryImage(previewStory)!} style={styles.sheetHeroImage} imageStyle={styles.premiumCardRadius}>
                   <View style={styles.sheetHeroOverlay} />
                   <TouchableOpacity style={styles.sheetCloseBtn} onPress={() => setPreviewStory(null)}>
                     <Text style={styles.sheetCloseText}>✕</Text>
                   </TouchableOpacity>
-                </ImageBackground>
+                </CachedImageBackground>
               ) : (
                 <FallbackCard story={previewStory} style={styles.sheetHeroImage}>
                   <TouchableOpacity style={styles.sheetCloseBtn} onPress={() => setPreviewStory(null)}>

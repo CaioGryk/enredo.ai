@@ -19,6 +19,14 @@ const READER_RECENT_EVENT_LIMIT = 8;
 export class ReadingOrchestratorService {
   private budgetGuard: GenerationBudgetGuard;
   private storyQualityService: StoryQualityService;
+  private readonly pendingFirstScenes = new Map<string, Promise<{
+    id: string;
+    chapterNumber: number;
+    sceneIndex: number;
+    sceneText: string;
+    choices: string[];
+    sceneMetadata?: { emotion?: string; pacing?: string };
+  }>>();
 
   constructor(
     @Inject(StoryQualityService) storyQualityService: StoryQualityService,
@@ -789,6 +797,40 @@ export class ReadingOrchestratorService {
     };
   }
 
+  private generateFirstSceneOnce(
+    session: any,
+    userId: string,
+    plan?: SubscriptionType,
+    walletBalance?: number,
+    premise?: any,
+    character?: any,
+    selectedModelId?: string,
+    isCinematic?: boolean,
+    narrativePolicy?: any,
+  ) {
+    const pending = this.pendingFirstScenes.get(session.id);
+    if (pending) return pending;
+
+    const generation = this.generateFirstScene(
+      session,
+      userId,
+      plan,
+      walletBalance,
+      premise,
+      character,
+      selectedModelId,
+      isCinematic,
+      narrativePolicy,
+    ).finally(() => {
+      if (this.pendingFirstScenes.get(session.id) === generation) {
+        this.pendingFirstScenes.delete(session.id);
+      }
+    });
+
+    this.pendingFirstScenes.set(session.id, generation);
+    return generation;
+  }
+
   private assertCanAccessStory(story: any, userId: string): void {
     const isPublicAndApproved = story.visibility === StoryVisibility.PUBLIC &&
       story.moderationStatus === StoryModerationStatus.APPROVED;
@@ -960,7 +1002,19 @@ export class ReadingOrchestratorService {
           throwBudgetDenied(decision.blockReason || 'Model access denied.');
         }
 
-        const firstScene = await this.generateFirstScene(
+        if (dto.deferFirstScene) {
+          return {
+            session: {
+              ...this.formatSession(existingSession),
+              currentScene: null,
+              history: [],
+              isPreparing: true,
+            },
+            usage: this.formatUsage(usage, user?.creditWallet?.balance),
+          };
+        }
+
+        const firstScene = await this.generateFirstSceneOnce(
           existingSession,
           userId,
           user?.subscription?.type,
@@ -1018,7 +1072,19 @@ export class ReadingOrchestratorService {
       session = await this.createSession(userId, dto.storyId, sessionSetupData);
     }
 
-    const firstScene = await this.generateFirstScene(
+    if (dto.deferFirstScene) {
+      return {
+        session: {
+          ...this.formatSession(session),
+          currentScene: null,
+          history: [],
+          isPreparing: true,
+        },
+        usage: this.formatUsage(usage, user?.creditWallet?.balance),
+      };
+    }
+
+    const firstScene = await this.generateFirstSceneOnce(
       session,
       userId,
       user?.subscription?.type,
@@ -1108,7 +1174,7 @@ export class ReadingOrchestratorService {
         throwBudgetDenied(decision.blockReason || 'Model access denied.');
       }
 
-      const firstScene = await this.generateFirstScene(
+      const firstScene = await this.generateFirstSceneOnce(
         sessionWithStory,
         userId,
         user?.subscription?.type,

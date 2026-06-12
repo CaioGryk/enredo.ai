@@ -54,7 +54,7 @@ type Message = {
 };
 
 export default function ReaderScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, preparing } = useLocalSearchParams<{ id: string; preparing?: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user, isLoading: authLoading } = useAuth();
@@ -71,7 +71,9 @@ export default function ReaderScreen() {
   const { data: readingStatus, isLoading: sessionLoading, isError: sessionError, error: sessionQueryError, refetch: sessionRefetch } = useQuery<ReadingStatusResponse>({
     queryKey: queryKeys.session(id),
     queryFn: async () => {
-      const { data } = await api.get(`/reading/sessions/${id}`);
+      const { data } = await api.get(`/reading/sessions/${id}`, {
+        timeout: NARRATIVE_GENERATION_TIMEOUT_MS,
+      });
       return data;
     },
     enabled: Boolean(id && user),
@@ -423,8 +425,14 @@ export default function ReaderScreen() {
         <StateBlock
           fullScreen
           loading
-          title={authLoading ? 'Validando sua sessão' : 'Carregando sua leitura'}
-          description={authLoading ? 'Estamos confirmando seu acesso antes de abrir a leitura.' : 'Estamos recuperando cena atual, histórico recente e configuração do modelo.'}
+          title={authLoading ? 'Validando sua sessão' : preparing === '1' ? 'Criando sua primeira cena' : 'Carregando sua leitura'}
+          description={
+            authLoading
+              ? 'Estamos confirmando seu acesso antes de abrir a leitura.'
+              : preparing === '1'
+                ? 'O narrador está preparando a abertura da sua jornada. Você já pode acompanhar o processo por aqui.'
+                : 'Estamos recuperando cena atual, histórico recente e configuração do modelo.'
+          }
         />
       </View>
     );

@@ -2,7 +2,6 @@ import React from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,9 +11,10 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Bell, CheckCircle2, Compass, Hand, Lamp, Moon, Shield, Sparkles, Swords, UserRound, VenetianMask, X } from 'lucide-react-native';
-import { api, NARRATIVE_GENERATION_TIMEOUT_MS, resolveApiAssetUrl } from '../../../src/api/client';
+import { api, resolveApiAssetUrl } from '../../../src/api/client';
 import { queryKeys } from '../../../src/api/queryKeys';
 import { StartReadingResponse, StoryPlayableCharacter, StoryPremise } from '../../../src/api/types';
+import { CachedImage } from '../../../src/components/cached-image';
 import { StateBlock } from '../../../src/components/state-block';
 import { colors } from '../../../src/theme/colors';
 import { typography } from '../../../src/theme/typography';
@@ -90,16 +90,19 @@ export default function StoryCharacterScreen() {
         storyId: id,
         premiseId: selectedPremiseId,
         characterId: selectedCharacterId,
+        deferFirstScene: true,
       }, {
-        timeout: NARRATIVE_GENERATION_TIMEOUT_MS,
+        timeout: 30_000,
       });
       return data;
     },
     onSuccess: (data) => {
       if (data.session?.id) {
-        queryClient.setQueryData(queryKeys.session(data.session.id), data);
         queryClient.invalidateQueries({ queryKey: ['sessions'] });
-        router.push(`/reader/${data.session.id}` as any);
+        router.push({
+          pathname: '/reader/[id]',
+          params: { id: data.session.id, preparing: '1' },
+        } as any);
       } else {
         Alert.alert('Erro', 'Sessão de leitura não foi criada. Tente novamente.');
       }
@@ -218,7 +221,7 @@ export default function StoryCharacterScreen() {
                   <View style={styles.imageWrap}>
                     {resolveApiAssetUrl(character.imageUrl) ? (
                       <>
-                        <Image source={{ uri: resolveApiAssetUrl(character.imageUrl)! }} style={[styles.image, !selected && styles.unselectedImage]} />
+                        <CachedImage uri={resolveApiAssetUrl(character.imageUrl)!} style={[styles.image, !selected && styles.unselectedImage]} />
                         {!selected ? (
                           <View pointerEvents="none" style={styles.unselectedImageOverlay} />
                         ) : null}

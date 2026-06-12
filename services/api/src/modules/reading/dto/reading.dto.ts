@@ -1,4 +1,4 @@
-import { IsString, IsArray, IsOptional, IsEnum, ValidateNested, Min, Max } from 'class-validator';
+import { IsString, IsArray, IsOptional, IsEnum, IsBoolean, ValidateNested, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDTO } from '../../../common/dto/pagination.dto';
@@ -18,6 +18,14 @@ export class StartReadingDto {
   @IsOptional()
   @IsString()
   characterId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Create or reuse the session without waiting for the first AI scene',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  deferFirstScene?: boolean;
 }
 
 export class SendActionDto {
@@ -83,6 +91,7 @@ export class ReadingSessionDto {
   lastSceneAt: Date;
   currentScene: SceneResponseDto;
   history: NarrativeEventDto[];
+  isPreparing?: boolean;
 }
 
 export class UsageInfoDto {

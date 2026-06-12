@@ -1,7 +1,5 @@
 import React, { useMemo } from 'react';
 import {
-  Image,
-  ImageBackground,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +12,7 @@ import { ArrowLeft, Play, Sparkles } from 'lucide-react-native';
 import { api, resolveApiAssetUrl } from '../../src/api/client';
 import { queryKeys } from '../../src/api/queryKeys';
 import { Character, Story, StoryCharactersResponse, StoryPremise } from '../../src/api/types';
+import { CachedImage, CachedImageBackground } from '../../src/components/cached-image';
 import { StateBlock } from '../../src/components/state-block';
 import { colors } from '../../src/theme/colors';
 import { typography } from '../../src/theme/typography';
@@ -151,14 +150,14 @@ export default function StoryDetailScreen() {
         {/* Hero Cover */}
         <View style={styles.hero}>
           {heroImage ? (
-            <ImageBackground source={{ uri: heroImage }} style={styles.heroImage} imageStyle={styles.heroImageRadius}>
+            <CachedImageBackground uri={heroImage} style={styles.heroImage}>
               <View style={styles.heroGradient}>
                 <View style={styles.heroBadge}>
                   <Sparkles color={ACCENT} size={13} fill={ACCENT} />
                   <Text style={styles.heroBadgeText}>Enredo.ai Original</Text>
                 </View>
               </View>
-            </ImageBackground>
+            </CachedImageBackground>
           ) : (
             <View style={styles.heroFallback}>
               <View style={styles.heroFallbackGlow} />
@@ -234,7 +233,7 @@ export default function StoryDetailScreen() {
                   <View key={character.id} style={styles.characterCard}>
                     <View style={styles.characterPortrait}>
                       {character.imageUrl ? (
-                        <Image source={{ uri: character.imageUrl }} style={styles.characterImage} />
+                        <CachedImage uri={resolveApiAssetUrl(character.imageUrl)!} style={styles.characterImage} />
                       ) : (
                         <Text style={styles.characterInitial}>{character.name.slice(0, 1)}</Text>
                       )}
@@ -304,9 +303,6 @@ const styles = StyleSheet.create({
   },
   heroImage: {
     flex: 1,
-  },
-  heroImageRadius: {
-    resizeMode: 'cover',
   },
   heroGradient: {
     flex: 1,
