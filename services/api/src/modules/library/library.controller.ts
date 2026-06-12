@@ -13,6 +13,7 @@ export class LibraryController {
   constructor(private readonly libraryService: LibraryService) {}
 
   @Get('stories')
+  @Header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600')
   @ApiOperation({ summary: 'List all stories with pagination and filters' })
   @ApiResponse({ status: 200, description: 'List of stories', type: StoryListResponseDto })
   async getStories(@Query() query: GetStoriesDto): Promise<StoryListResponseDto> {

@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { BookCheck, BookOpen, CheckCircle, CheckCircle2, Info, Menu, Play, PlusCircle, Sparkles, User } from 'lucide-react-native';
 import { api, resolveApiAssetUrl } from '../../src/api/client';
+import { queryKeys } from '../../src/api/queryKeys';
 import { ReadingSessionSummary, SessionListResponse, SubscriptionResponse } from '../../src/api/types';
 import { useAuth } from '../../src/context/AuthContext';
 import { StateBlock } from '../../src/components/state-block';
@@ -40,7 +41,7 @@ export default function ActiveStoriesScreen() {
   const [filter, setFilter] = useState<Filter>('ACTIVE');
 
   const { data: sessions = [], isLoading, isError, error, refetch } = useQuery<ReadingSessionSummary[]>({
-    queryKey: ['sessions', filter],
+    queryKey: queryKeys.sessions(filter),
     queryFn: async () => {
       const params = filter === 'ALL' ? undefined : { status: filter };
       const { data } = await api.get<SessionListResponse>('/reading/sessions', { params });
@@ -49,7 +50,7 @@ export default function ActiveStoriesScreen() {
   });
 
   const { data: activeSessions = [] } = useQuery<ReadingSessionSummary[]>({
-    queryKey: ['active-sessions-count'],
+    queryKey: queryKeys.sessions('ACTIVE'),
     queryFn: async () => {
       const { data } = await api.get<SessionListResponse>('/reading/sessions', {
         params: { status: 'ACTIVE' },
@@ -59,7 +60,7 @@ export default function ActiveStoriesScreen() {
   });
 
   const { data: subscription } = useQuery<SubscriptionResponse>({
-    queryKey: ['subscription'],
+    queryKey: queryKeys.subscription,
     queryFn: async () => {
       const { data } = await api.get<SubscriptionResponse>('/billing/subscription');
       return data;
@@ -72,8 +73,6 @@ export default function ActiveStoriesScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
-      queryClient.invalidateQueries({ queryKey: ['active-sessions-count'] });
-      queryClient.invalidateQueries({ queryKey: ['active-sessions-preview'] });
     },
     onError: () => {
       Alert.alert('Erro', 'Não foi possível abandonar esta história.');
@@ -81,7 +80,7 @@ export default function ActiveStoriesScreen() {
   });
 
   const isFreeUser = (subscription?.type || user?.plan || 'FREE') === 'FREE';
-  const activeCount = activeSessions.length;
+  const activeCount = (filter === 'ACTIVE' ? sessions : activeSessions).length;
   const slots = useMemo(() => Math.max(0, 3 - activeCount), [activeCount]);
 
   function confirmAbandon(sessionId: string) {

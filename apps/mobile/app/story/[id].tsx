@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Play, Sparkles } from 'lucide-react-native';
 import { api, resolveApiAssetUrl } from '../../src/api/client';
+import { queryKeys } from '../../src/api/queryKeys';
 import { Character, Story, StoryCharactersResponse, StoryPremise } from '../../src/api/types';
 import { StateBlock } from '../../src/components/state-block';
 import { colors } from '../../src/theme/colors';
@@ -32,7 +33,7 @@ export default function StoryDetailScreen() {
     isError: storyError,
     refetch: refetchStory,
   } = useQuery<Story>({
-    queryKey: ['story', id],
+    queryKey: queryKeys.story(id),
     queryFn: async () => {
       const { data } = await api.get(`/library/stories/${id}`);
       return data;
@@ -46,7 +47,7 @@ export default function StoryDetailScreen() {
     isError: charactersError,
     refetch: refetchCharacters,
   } = useQuery<StoryCharactersResponse>({
-    queryKey: ['story-characters', id],
+    queryKey: queryKeys.storyCharacters(id),
     queryFn: async () => {
       const { data } = await api.get(`/library/stories/${id}/characters`);
       return data;
@@ -60,7 +61,7 @@ export default function StoryDetailScreen() {
     isError: premisesError,
     refetch: refetchPremises,
   } = useQuery<StoryPremise[]>({
-    queryKey: ['story-premises-preview', id],
+    queryKey: queryKeys.storyPremises(id),
     queryFn: async () => {
       try {
         const { data } = await api.get(`/story-setup/stories/${id}/premises`);

@@ -36,6 +36,7 @@ import {
   Zap,
 } from 'lucide-react-native';
 import { api, NARRATIVE_GENERATION_TIMEOUT_MS } from '../../src/api/client';
+import { queryKeys } from '../../src/api/queryKeys';
 import { AIModel, AIModelsResponse, ReadingStatusResponse, SceneMedia } from '../../src/api/types';
 import { StateBlock } from '../../src/components/state-block';
 import { useAuth } from '../../src/context/AuthContext';
@@ -68,7 +69,7 @@ export default function ReaderScreen() {
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
 
   const { data: readingStatus, isLoading: sessionLoading, isError: sessionError, error: sessionQueryError, refetch: sessionRefetch } = useQuery<ReadingStatusResponse>({
-    queryKey: ['session', id],
+    queryKey: queryKeys.session(id),
     queryFn: async () => {
       const { data } = await api.get(`/reading/sessions/${id}`);
       return data;

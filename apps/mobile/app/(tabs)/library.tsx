@@ -8,10 +8,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { BookOpen, ChevronRight, Play, Search, Sparkles, Zap } from 'lucide-react-native';
 import { api, resolveApiAssetUrl } from '../../src/api/client';
+import { queryKeys } from '../../src/api/queryKeys';
 import { ReadingSessionSummary, SessionListResponse, Story, StoryListResponse } from '../../src/api/types';
 import { StateBlock } from '../../src/components/state-block';
 import { colors } from '../../src/theme/colors';
@@ -22,9 +23,10 @@ const SOFT_TEXT = '#B7AFC8';
 
 export default function LibraryScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const { data: stories = [], isLoading, error, refetch } = useQuery<Story[]>({
-    queryKey: ['stories'],
+    queryKey: queryKeys.stories,
     queryFn: async () => {
       const { data } = await api.get<StoryListResponse>('/library/stories');
       return data.stories;
@@ -32,10 +34,10 @@ export default function LibraryScreen() {
   });
 
   const { data: activeSessions } = useQuery<ReadingSessionSummary[]>({
-    queryKey: ['active-sessions-preview'],
+    queryKey: queryKeys.sessions('ACTIVE'),
     queryFn: async () => {
       const { data } = await api.get<SessionListResponse>('/reading/sessions', {
-        params: { status: 'ACTIVE', limit: 2 },
+        params: { status: 'ACTIVE' },
       });
       return data.sessions;
     },
@@ -43,6 +45,35 @@ export default function LibraryScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [previewStory, setPreviewStory] = useState<Story | null>(null);
+
+  const prefetchStoryFlow = (story: Story) => {
+    void queryClient.prefetchQuery({
+      queryKey: queryKeys.story(story.id),
+      queryFn: async () => {
+        const { data } = await api.get(`/library/stories/${story.id}`);
+        return data;
+      },
+    });
+    void queryClient.prefetchQuery({
+      queryKey: queryKeys.storyCharacters(story.id),
+      queryFn: async () => {
+        const { data } = await api.get(`/library/stories/${story.id}/characters`);
+        return data;
+      },
+    });
+    void queryClient.prefetchQuery({
+      queryKey: queryKeys.storyPremises(story.id),
+      queryFn: async () => {
+        const { data } = await api.get(`/story-setup/stories/${story.id}/premises`);
+        return data;
+      },
+    });
+  };
+
+  const openStoryPreview = (story: Story) => {
+    setPreviewStory(story);
+    prefetchStoryFlow(story);
+  };
 
   const filteredStories = useMemo(() => {
     if (!searchQuery.trim()) return stories;
@@ -183,7 +214,7 @@ export default function LibraryScreen() {
                   key={story.id}
                   activeOpacity={0.92}
                   style={styles.originalCard}
-                  onPress={() => setPreviewStory(story)}
+                  onPress={() => openStoryPreview(story)}
                 >
                   {getStoryImage(story) ? (
                     <ImageBackground source={{ uri: getStoryImage(story)! }} style={styles.originalCardImage} imageStyle={styles.originalCardRadius}>
@@ -226,7 +257,7 @@ export default function LibraryScreen() {
                   key={story.id}
                   activeOpacity={0.9}
                   style={styles.trendingCard}
-                  onPress={() => setPreviewStory(story)}
+                  onPress={() => openStoryPreview(story)}
                 >
                   <View style={styles.trendingImageWrap}>
                     {getStoryImage(story) ? (
@@ -267,7 +298,7 @@ export default function LibraryScreen() {
                   key={story.id}
                   activeOpacity={0.9}
                   style={styles.allStoryCard}
-                  onPress={() => setPreviewStory(story)}
+                  onPress={() => openStoryPreview(story)}
                 >
                   <View style={styles.allStoryImageWrap}>
                     {getStoryImage(story) ? (
@@ -312,7 +343,7 @@ export default function LibraryScreen() {
                 key={story.id}
                 activeOpacity={0.9}
                 style={styles.premiumCard}
-                onPress={() => setPreviewStory(story)}
+                onPress={() => openStoryPreview(story)}
               >
                 <View style={styles.premiumImageWrap}>
                   {getStoryImage(story) ? (

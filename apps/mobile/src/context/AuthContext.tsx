@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { api } from '../api/client';
 import { useRouter, useSegments } from 'expo-router';
 import { tokenStorage } from '../storage/tokenStorage';
+import { useQueryClient } from '@tanstack/react-query';
 
 type User = {
   id: string;
@@ -38,6 +39,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const segments = useSegments();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     loadUser();
@@ -74,6 +76,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (shouldDevLogout) {
         await tokenStorage.deleteItem('accessToken');
         await tokenStorage.deleteItem('refreshToken');
+        queryClient.clear();
         setUser(null);
         return;
       }
@@ -94,6 +97,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
       await tokenStorage.deleteItem('accessToken');
       await tokenStorage.deleteItem('refreshToken');
+      queryClient.clear();
     } finally {
       setIsLoading(false);
     }
@@ -101,6 +105,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = async (credentials: any) => {
     const { data } = await api.post('/auth/login', credentials);
+    queryClient.clear();
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
     setUser(data.user);
@@ -108,6 +113,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const register = async (credentials: any) => {
     const { data } = await api.post('/auth/register', credentials);
+    queryClient.clear();
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
     setUser(data.user);
@@ -115,6 +121,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const socialLogin = async (provider: 'GOOGLE', idToken: string, name?: string) => {
     const { data } = await api.post('/auth/sso', { provider, idToken, name });
+    queryClient.clear();
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
     setUser(data.user);
@@ -123,6 +130,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = async () => {
     await tokenStorage.deleteItem('accessToken');
     await tokenStorage.deleteItem('refreshToken');
+    queryClient.clear();
     setUser(null);
     router.replace('/(auth)/login');
   };

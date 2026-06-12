@@ -9,9 +9,10 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, BookOpen, Compass, Crown, Eye, Flame, KeyRound, Landmark, Moon, Play, Sparkles } from 'lucide-react-native';
 import { api, resolveApiAssetUrl } from '../../../src/api/client';
+import { queryKeys } from '../../../src/api/queryKeys';
 import { Story, StoryPremise } from '../../../src/api/types';
 import { StateBlock } from '../../../src/components/state-block';
 import { colors } from '../../../src/theme/colors';
@@ -24,6 +25,7 @@ const SOFT_TEXT = '#B7AFC8';
 export default function StoryPremiseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [selectedPremiseId, setSelectedPremiseId] = useState<string | null>(null);
 
   const {
@@ -32,7 +34,7 @@ export default function StoryPremiseScreen() {
     isError: storyError,
     refetch: refetchStory,
   } = useQuery<Story>({
-    queryKey: ['story', id],
+    queryKey: queryKeys.story(id),
     queryFn: async () => {
       const { data } = await api.get(`/library/stories/${id}`);
       return data;
@@ -46,7 +48,7 @@ export default function StoryPremiseScreen() {
     isError: premisesError,
     refetch: refetchPremises,
   } = useQuery<StoryPremise[]>({
-    queryKey: ['story-premises', id],
+    queryKey: queryKeys.storyPremises(id),
     queryFn: async () => {
       try {
         const { data } = await api.get(`/story-setup/stories/${id}/premises`);
@@ -62,6 +64,17 @@ export default function StoryPremiseScreen() {
   const playablePremises = useMemo(() => {
     return premises.filter(p => (p.playableCharacterCount ?? 0) >= 3);
   }, [premises]);
+
+  const selectPremise = (premiseId: string) => {
+    setSelectedPremiseId(premiseId);
+    void queryClient.prefetchQuery({
+      queryKey: queryKeys.premiseCharacters(premiseId),
+      queryFn: async () => {
+        const { data } = await api.get(`/story-setup/premises/${premiseId}/characters`);
+        return data;
+      },
+    });
+  };
 
   if (storyLoading || premisesLoading) {
     return (
@@ -129,7 +142,7 @@ export default function StoryPremiseScreen() {
                   key={premise.id}
                   activeOpacity={0.92}
                   style={[styles.card, isSelected && styles.cardSelected]}
-                  onPress={() => setSelectedPremiseId(premise.id)}
+                  onPress={() => selectPremise(premise.id)}
                 >
                   {resolveApiAssetUrl(premise.coverUrl) ? (
                     <ImageBackground source={{ uri: resolveApiAssetUrl(premise.coverUrl)! }} style={styles.cardImage} imageStyle={styles.cardImageRadius} />

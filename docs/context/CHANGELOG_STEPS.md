@@ -8640,3 +8640,69 @@ binary image endpoints.
 
 This is a backend-only fix. Android APK version `11` remains valid and does
 not require a rebuild.
+
+---
+
+## Step 124 — Reduce Mobile Loading and Navigation Latency
+
+**Date:** June 12, 2026
+
+### Problem
+
+Screen transitions that depended on API data felt slow, and the same resources
+were frequently downloaded again while moving through the library, story setup,
+and reading flows.
+
+Production measurements before the change showed:
+
+- Health endpoint: about 2.19 seconds.
+- Library endpoint first request: about 7.04 seconds for an 11 KB response.
+- Repeated library requests: about 6.43 to 8.44 seconds.
+- Story cover endpoint: about 3.33 seconds to first byte and 4.91 seconds total.
+
+The Railway service currently runs in US West while the beta audience is in
+Brazil, so network distance also contributes to every uncached request.
+
+### Mobile changes
+
+- Added shared React Query keys for stories, premises, characters, sessions,
+  and subscriptions.
+- Configured a two-minute freshness window and a 30-minute cache lifetime.
+- Disabled unnecessary focus refetches while retaining reconnect refreshes.
+- Reused the active-session response instead of requesting the same list twice.
+- Reused story-premise data on the character screen.
+- Prefetched story details, premises, and characters when opening a story
+  preview.
+- Prefetched premise characters when the premise is selected.
+- Seeded the first reading-session response into the reader cache before
+  navigation.
+- Added an in-memory token layer so API requests do not read Android secure
+  storage for every call.
+- Cleared cached user data on authentication changes.
+- Increased the Android beta version code from `11` to `12`.
+
+### Backend changes
+
+- Added browser and edge cache headers to the public story catalog.
+- Added a five-minute in-process cache for catalog queries.
+- Deduplicated concurrent identical catalog requests.
+- Kept filtered catalog requests in separate cache entries.
+- Added regression tests for cache reuse and query isolation.
+
+### Validation
+
+- Mobile TypeScript compilation: passed.
+- Expo Doctor: 18 of 18 checks passed.
+- Backend TypeScript compilation: passed.
+- Library service and controller tests: 2 suites passed, 41 tests passed.
+- Git whitespace validation: passed.
+
+### Follow-up performance work
+
+- Story start still waits for the first AI scene before navigation. A future
+  phase should create the session immediately and generate the first scene
+  asynchronously with a progress screen.
+- Large binary covers should later be replaced with resized thumbnails stored
+  in object storage or a CDN.
+- Moving Railway closer to Brazil should be evaluated after measuring the new
+  APK, because physical latency remains outside the application cache.

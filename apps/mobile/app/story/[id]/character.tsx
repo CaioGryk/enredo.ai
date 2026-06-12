@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Bell, CheckCircle2, Compass, Hand, Lamp, Moon, Shield, Sparkles, Swords, UserRound, VenetianMask, X } from 'lucide-react-native';
 import { api, NARRATIVE_GENERATION_TIMEOUT_MS, resolveApiAssetUrl } from '../../../src/api/client';
+import { queryKeys } from '../../../src/api/queryKeys';
 import { StartReadingResponse, StoryPlayableCharacter, StoryPremise } from '../../../src/api/types';
 import { StateBlock } from '../../../src/components/state-block';
 import { colors } from '../../../src/theme/colors';
@@ -32,20 +33,20 @@ export default function StoryCharacterScreen() {
   const selectedPremiseId = Array.isArray(premiseId) ? premiseId[0] : premiseId;
 
   const {
-    data: premise,
+    data: premises = [],
     isLoading: premiseLoading,
     isError: premiseError,
     refetch: refetchPremise,
-  } = useQuery<StoryPremise | null>({
-    queryKey: ['story-premise-single', selectedPremiseId],
+  } = useQuery<StoryPremise[]>({
+    queryKey: queryKeys.storyPremises(id),
     queryFn: async () => {
-      if (!selectedPremiseId || !id) return null;
+      if (!id) return [];
       const { data } = await api.get(`/story-setup/stories/${id}/premises`);
-      const list = Array.isArray(data) ? data : (data?.premises ?? data?.data ?? []);
-      return (list as StoryPremise[]).find((item) => item.id === selectedPremiseId) || null;
+      return Array.isArray(data) ? data : (data?.premises ?? data?.data ?? []);
     },
-    enabled: Boolean(id && selectedPremiseId),
+    enabled: Boolean(id),
   });
+  const premise = premises.find((item) => item.id === selectedPremiseId) || null;
 
   const {
     data: characters = [],
@@ -53,7 +54,7 @@ export default function StoryCharacterScreen() {
     isError: charactersError,
     refetch: refetchCharacters,
   } = useQuery<StoryPlayableCharacter[]>({
-    queryKey: ['premise-characters', selectedPremiseId],
+    queryKey: queryKeys.premiseCharacters(selectedPremiseId),
     queryFn: async () => {
       try {
         const { data } = await api.get(`/story-setup/premises/${selectedPremiseId}/characters`);
@@ -96,6 +97,8 @@ export default function StoryCharacterScreen() {
     },
     onSuccess: (data) => {
       if (data.session?.id) {
+        queryClient.setQueryData(queryKeys.session(data.session.id), data);
+        queryClient.invalidateQueries({ queryKey: ['sessions'] });
         router.push(`/reader/${data.session.id}` as any);
       } else {
         Alert.alert('Erro', 'Sessão de leitura não foi criada. Tente novamente.');

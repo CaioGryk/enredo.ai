@@ -34,6 +34,8 @@ const SAFE_CHARACTER_SELECT = {
   role: true,
 } as const;
 
+const STORY_LIST_CACHE_TTL_MS = 5 * 60_000;
+
 interface SafeStoryRow {
   id: string;
   slug: string;
@@ -95,9 +97,43 @@ function mapToCharacterDto(character: {
 
 @Injectable()
 export class LibraryService {
+  private readonly storyListCache = new Map<string, {
+    expiresAt: number;
+    value: StoryListResponseDto;
+  }>();
+  private readonly pendingStoryLists = new Map<string, Promise<StoryListResponseDto>>();
+
   constructor(private readonly prisma: PrismaService) {}
 
   async getStories(query: GetStoriesDto): Promise<StoryListResponseDto> {
+    const { page = 1, limit = 20, genre, author, search, isPremium } = query;
+    const cacheKey = JSON.stringify({ page, limit, genre, author, search, isPremium });
+    const cached = this.storyListCache.get(cacheKey);
+
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
+    const pending = this.pendingStoryLists.get(cacheKey);
+    if (pending) return pending;
+
+    const request = this.loadStories({ page, limit, genre, author, search, isPremium })
+      .then((value) => {
+        this.storyListCache.set(cacheKey, {
+          expiresAt: Date.now() + STORY_LIST_CACHE_TTL_MS,
+          value,
+        });
+        return value;
+      })
+      .finally(() => {
+        this.pendingStoryLists.delete(cacheKey);
+      });
+
+    this.pendingStoryLists.set(cacheKey, request);
+    return request;
+  }
+
+  private async loadStories(query: GetStoriesDto): Promise<StoryListResponseDto> {
     const { page = 1, limit = 20, genre, author, search, isPremium } = query;
 
     const where: Prisma.StoryWhereInput = {

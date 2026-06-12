@@ -151,6 +151,29 @@ describe('LibraryService - Security (Private Story Access)', () => {
   });
 
   describe('getStories', () => {
+    it('reuses the cached public catalog for identical queries', async () => {
+      prisma.story.findMany.mockResolvedValue([]);
+      prisma.story.count.mockResolvedValue(0);
+
+      const first = await service.getStories({});
+      const second = await service.getStories({});
+
+      expect(second).toBe(first);
+      expect(prisma.story.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.story.count).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps filtered catalog queries in separate cache entries', async () => {
+      prisma.story.findMany.mockResolvedValue([]);
+      prisma.story.count.mockResolvedValue(0);
+
+      await service.getStories({});
+      await service.getStories({ genre: 'fantasia' });
+
+      expect(prisma.story.findMany).toHaveBeenCalledTimes(2);
+      expect(prisma.story.count).toHaveBeenCalledTimes(2);
+    });
+
     it('filters out stories with isBetaVisible=false', async () => {
       prisma.story.findMany.mockResolvedValue([]);
       prisma.story.count.mockResolvedValue(0);
