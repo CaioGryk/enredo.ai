@@ -351,7 +351,7 @@ export class AiService {
     if (chainEnv) {
       const chainIds = chainEnv.split(',').map((s) => s.trim()).filter(Boolean);
       const modelToId: Record<string, string> = {
-        groq: 'groq/free',
+        groq: context === 'USER_READING' ? 'groq/reading' : 'groq/free',
         openrouter: 'deepseek/deepseek-v4-flash:free',
         gemini: 'gemini/free',
         google: 'gemini/free',
@@ -377,7 +377,7 @@ export class AiService {
       addCandidate(requestedModelId, this.getProviderForModelId(requestedModelId));
     }
 
-    addCandidate('groq/free', this.groqProvider);
+    addCandidate(context === 'USER_READING' ? 'groq/reading' : 'groq/free', this.groqProvider);
     addCandidate('deepseek/deepseek-v4-flash:free', this.openRouterProvider);
     addCandidate('gemini/free', this.googleTextProvider);
 

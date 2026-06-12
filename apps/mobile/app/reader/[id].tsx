@@ -173,7 +173,7 @@ export default function ReaderScreen() {
   }, [session?.history, currentScene]);
 
   const { data: storyInfo } = useQuery<{ title?: string }>({
-    queryKey: ['story-title', session?.storyId],
+    queryKey: queryKeys.story(session?.storyId),
     queryFn: async () => {
       const { data } = await api.get(`/library/stories/${session!.storyId}`);
       return data;

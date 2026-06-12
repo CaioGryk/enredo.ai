@@ -26,12 +26,14 @@ export class GroqProvider implements LLMProvider {
   name = 'groq';
   private readonly apiKey: string;
   private readonly defaultModel: string;
+  private readonly readingModel: string;
   private readonly baseUrl = 'https://api.groq.com/openai/v1';
   private readonly logger = new Logger(GroqProvider.name);
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GROQ_API_KEY') || '';
     this.defaultModel = this.configService.get<string>('GROQ_MODEL') || 'llama-3.3-70b-versatile';
+    this.readingModel = this.configService.get<string>('GROQ_READING_MODEL') || 'openai/gpt-oss-20b';
   }
 
   async generate(prompt: string, config: GenerateConfig): Promise<LLMResponse> {
@@ -39,9 +41,11 @@ export class GroqProvider implements LLMProvider {
       throw new Error('GROQ_API_KEY is not configured.');
     }
 
-    const model = config.model && config.model !== 'groq/free'
-      ? config.model
-      : this.defaultModel;
+    const model = config.model === 'groq/reading'
+      ? this.readingModel
+      : config.model && config.model !== 'groq/free'
+        ? config.model
+        : this.defaultModel;
 
     this.logger.debug(`Groq request: model=${model}, maxTokens=${config.maxTokens || 500}`);
 
@@ -65,6 +69,12 @@ export class GroqProvider implements LLMProvider {
         messages: [{ role: 'user', content: prompt }],
         max_tokens: config.maxTokens || 500,
         temperature: config.temperature || 0.7,
+        ...(model.includes('gpt-oss')
+          ? {
+              reasoning_effort: 'low',
+              reasoning_format: 'hidden',
+            }
+          : {}),
       }),
     });
 

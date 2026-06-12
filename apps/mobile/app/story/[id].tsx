@@ -11,7 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Play, Sparkles } from 'lucide-react-native';
 import { api, resolveApiAssetUrl } from '../../src/api/client';
 import { queryKeys } from '../../src/api/queryKeys';
-import { Character, Story, StoryCharactersResponse, StoryPremise } from '../../src/api/types';
+import { Story, StoryPremise } from '../../src/api/types';
 import { CachedImage, CachedImageBackground } from '../../src/components/cached-image';
 import { StateBlock } from '../../src/components/state-block';
 import { colors } from '../../src/theme/colors';
@@ -41,20 +41,6 @@ export default function StoryDetailScreen() {
   });
 
   const {
-    data: charactersResponse,
-    isLoading: charsLoading,
-    isError: charactersError,
-    refetch: refetchCharacters,
-  } = useQuery<StoryCharactersResponse>({
-    queryKey: queryKeys.storyCharacters(id),
-    queryFn: async () => {
-      const { data } = await api.get(`/library/stories/${id}/characters`);
-      return data;
-    },
-    enabled: Boolean(id),
-  });
-
-  const {
     data: premises = [],
     isLoading: premisesLoading,
     isError: premisesError,
@@ -74,9 +60,9 @@ export default function StoryDetailScreen() {
   });
 
   const heroImage = useMemo(() => resolveApiAssetUrl(story?.coverUrl || story?.coverImageUrl), [story]);
-  const baseCharacters = charactersResponse?.characters ?? [];
+  const baseCharacters = story?.characters ?? [];
 
-  if (storyLoading || charsLoading || premisesLoading) {
+  if (storyLoading || premisesLoading) {
     return (
       <View style={styles.container}>
         <View style={styles.backBar}>
@@ -94,7 +80,7 @@ export default function StoryDetailScreen() {
     );
   }
 
-  if (storyError || charactersError || premisesError) {
+  if (storyError || premisesError) {
     return (
       <View style={styles.container}>
         <View style={styles.backBar}>
@@ -109,7 +95,6 @@ export default function StoryDetailScreen() {
           actionLabel="Tentar novamente"
           onAction={() => {
             refetchStory();
-            refetchCharacters();
             refetchPremises();
           }}
         />

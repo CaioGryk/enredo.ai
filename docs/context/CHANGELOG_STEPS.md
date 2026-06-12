@@ -9415,10 +9415,93 @@ persistent memory-and-disk cache or provide a consistent image transition.
 
 ### Follow-up performance work
 
-- Story start still waits for the first AI scene before navigation. A future
-  phase should create the session immediately and generate the first scene
-  asynchronously with a progress screen.
+- The reader still waits synchronously for AI completion after the app
+  navigates to its preparation screen. A persistent background job remains a
+  possible future improvement.
 - Large binary covers should later be replaced with resized thumbnails stored
   in object storage or a CDN.
 - Moving Railway closer to Brazil should be evaluated after measuring the new
   APK, because physical latency remains outside the application cache.
+
+---
+
+## Step 131 — Reduce Cold-Start, Image, and Reading Latency
+
+**Date:** June 12, 2026
+
+### Production measurements
+
+The previous cache work improved revisits but did not remove the first-load
+delay. Direct production measurements found:
+
+- Health response: between 1.4 and 7.6 seconds.
+- Library cold response: 8.9 seconds.
+- Library warm response: approximately 0.57 seconds.
+- Sample cover sizes: 578 KB, 735 KB, and 773 KB.
+- Sample first cover loads: between 4.3 and 7.1 seconds.
+
+These numbers confirmed three separate costs: Railway/backend cold latency,
+large first-time image transfers, and synchronous AI scene generation.
+
+### Mobile startup
+
+- The last authenticated user is now cached securely with the tokens.
+- A returning user can enter the app from the local session immediately while
+  `/auth/profile` validates in the background.
+- Temporary Railway/network failures no longer erase a valid local session.
+- Cached user data is refreshed after login, registration, SSO, and successful
+  profile validation, and removed on logout or an actual 401 response.
+
+### Request reduction
+
+- Removed the duplicate story-character request from library prefetch.
+- Story detail now uses the characters already returned by the main story
+  detail endpoint.
+- Reader story metadata now uses the shared story query key, allowing it to
+  reuse data prefetched earlier in the flow.
+
+### Image thumbnails
+
+- Added Sharp to the backend.
+- Story, premise, and playable-character binary image endpoints now accept a
+  bounded `w` query parameter.
+- Requested thumbnails are resized without enlargement, converted to WebP at
+  quality 78, and cached in process for 24 hours.
+- The cache is bounded to 100 entries.
+- The mobile cached-image component automatically requests 720 px thumbnails
+  for Enredo API cover/image routes.
+- Original image responses remain available when no width is requested.
+
+### Faster Groq reading model
+
+- Added a reading-only Groq alias so catalog and administrative generation keep
+  their existing model configuration.
+- Interactive reading uses `GROQ_READING_MODEL`, defaulting to
+  `openai/gpt-oss-20b`.
+- GPT-OSS reading requests use low reasoning effort and hidden reasoning.
+- The provider fallback chain maps Groq to the reading alias only for the
+  `USER_READING` context.
+- Added `GROQ_READING_MODEL` to the backend environment example.
+- Groq reference:
+  `https://console.groq.com/docs/reasoning`
+
+### Validation
+
+- Mobile TypeScript compilation: passed.
+- Backend TypeScript compilation: passed.
+- Expo Doctor: 18 of 18 checks passed.
+- AI, library, story setup, and image optimization suites: 162 tests passed.
+- Reading regression suites: 73 tests passed.
+- Git whitespace validation: passed.
+
+### Build target
+
+- Android version code increased from `13` to `14`.
+
+### Remaining infrastructure limit
+
+The first uncached JSON request can still inherit several seconds of Railway
+latency. The code changes reduce how often the user must wait for it and shrink
+the payloads, but they cannot remove the physical US West to São Paulo path or
+Railway instance startup behavior. The previously documented V1 migration to a
+São Paulo backend remains the final infrastructure fix.

@@ -10,6 +10,7 @@ export interface Story {
   coverImageUrl?: string;
   totalChapters?: number;
   publishedAt?: string;
+  characters?: Character[];
 }
 
 export interface User {

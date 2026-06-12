@@ -44,9 +44,10 @@ export class LibraryController {
   @ApiResponse({ status: 404, description: 'Story cover not found' })
   async getStoryCover(
     @Param('id') id: string,
+    @Query('w') width: string | undefined,
     @Res() res: Response,
   ) {
-    const image = await this.libraryService.getStoryCoverImage(id);
+    const image = await this.libraryService.getStoryCoverImage(id, width);
     res.type(image.contentType);
     res.send(image.buffer);
   }

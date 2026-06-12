@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { PrismaService } from '@common/prisma.service';
 import {
   CharacterResponseDto,
@@ -10,6 +10,7 @@ import {
 import { paginate } from '@common/utils/pagination';
 import { isInlineImageDataUrl, parseInlineImageDataUrl, safeImageUrl } from '@common/safe-image-url';
 import { Prisma, StoryVisibility, StoryModerationStatus } from '@prisma/client';
+import { ImageOptimizationService } from '@common/image-optimization.service';
 
 const SAFE_STORY_SELECT = {
   id: true,
@@ -103,7 +104,11 @@ export class LibraryService {
   }>();
   private readonly pendingStoryLists = new Map<string, Promise<StoryListResponseDto>>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    private readonly imageOptimization: ImageOptimizationService = new ImageOptimizationService(),
+  ) {}
 
   async getStories(query: GetStoriesDto): Promise<StoryListResponseDto> {
     const { page = 1, limit = 20, genre, author, search, isPremium } = query;
@@ -235,7 +240,7 @@ export class LibraryService {
     };
   }
 
-  async getStoryCoverImage(id: string): Promise<{ contentType: string; buffer: Buffer }> {
+  async getStoryCoverImage(id: string, width?: string): Promise<{ contentType: string; buffer: Buffer }> {
     const story = await this.prisma.story.findUnique({
       where: { id },
       select: {
@@ -278,7 +283,7 @@ export class LibraryService {
       throw new NotFoundException('Story cover', id);
     }
 
-    return parsed;
+    return this.imageOptimization.resizeToWebp(parsed, `story:${id}`, width);
   }
 
   async getStoryCharacters(storyId: string, userId?: string) {

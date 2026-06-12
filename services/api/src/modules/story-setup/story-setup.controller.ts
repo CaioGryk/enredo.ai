@@ -12,6 +12,7 @@ import {
   Req,
   Res,
   Header,
+  Query,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
@@ -77,10 +78,11 @@ export class StorySetupController {
   @ApiResponse({ status: 404, description: 'Premise cover not found' })
   async getPremiseCover(
     @Param('premiseId') premiseId: string,
+    @Query('w') width: string | undefined,
     @Req() req: Request & { user?: User },
     @Res() res: Response,
   ) {
-    const image = await this.storySetupService.getPremiseCoverImage(premiseId, req.user?.id);
+    const image = await this.storySetupService.getPremiseCoverImage(premiseId, req.user?.id, width);
     res.type(image.contentType);
     res.send(image.buffer);
   }
@@ -94,10 +96,11 @@ export class StorySetupController {
   @ApiResponse({ status: 404, description: 'Playable character image not found' })
   async getCharacterImage(
     @Param('characterId') characterId: string,
+    @Query('w') width: string | undefined,
     @Req() req: Request & { user?: User },
     @Res() res: Response,
   ) {
-    const image = await this.storySetupService.getCharacterImage(characterId, req.user?.id);
+    const image = await this.storySetupService.getCharacterImage(characterId, req.user?.id, width);
     res.type(image.contentType);
     res.send(image.buffer);
   }

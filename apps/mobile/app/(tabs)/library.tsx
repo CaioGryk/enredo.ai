@@ -55,13 +55,6 @@ export default function LibraryScreen() {
       },
     });
     void queryClient.prefetchQuery({
-      queryKey: queryKeys.storyCharacters(story.id),
-      queryFn: async () => {
-        const { data } = await api.get(`/library/stories/${story.id}/characters`);
-        return data;
-      },
-    });
-    void queryClient.prefetchQuery({
       queryKey: queryKeys.storyPremises(story.id),
       queryFn: async () => {
         const { data } = await api.get(`/story-setup/stories/${story.id}/premises`);

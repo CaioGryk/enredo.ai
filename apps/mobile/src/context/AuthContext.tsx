@@ -25,6 +25,18 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 const getOnboardingCompleteKey = (userId: string) => `onboardingComplete:${userId}`;
+const CACHED_USER_KEY = 'cachedUser';
+
+function parseCachedUser(value: string | null): User | null {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value) as User;
+    return parsed?.id && parsed?.email ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -83,8 +95,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       const token = await tokenStorage.getItem('accessToken');
       if (token) {
-        const { data } = await api.get('/auth/profile');
-        setUser(data);
+        const cachedUser = parseCachedUser(await tokenStorage.getItem(CACHED_USER_KEY));
+        if (cachedUser) {
+          setUser(cachedUser);
+          setIsLoading(false);
+        }
+
+        try {
+          const { data } = await api.get('/auth/profile');
+          setUser(data);
+          await tokenStorage.setItem(CACHED_USER_KEY, JSON.stringify(data));
+        } catch (error: any) {
+          if (error?.response?.status === 401) {
+            await tokenStorage.deleteItem('accessToken');
+            await tokenStorage.deleteItem('refreshToken');
+            await tokenStorage.deleteItem(CACHED_USER_KEY);
+            queryClient.clear();
+            setUser(null);
+          } else if (!cachedUser) {
+            throw error;
+          }
+        }
       } else if (__DEV__ && Platform.OS === 'web') {
         const shouldDemoLogin = search.includes('demoLogin=1');
         if (shouldDemoLogin) {
@@ -97,6 +128,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
       await tokenStorage.deleteItem('accessToken');
       await tokenStorage.deleteItem('refreshToken');
+      await tokenStorage.deleteItem(CACHED_USER_KEY);
       queryClient.clear();
     } finally {
       setIsLoading(false);
@@ -108,6 +140,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     queryClient.clear();
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
+    await tokenStorage.setItem(CACHED_USER_KEY, JSON.stringify(data.user));
     setUser(data.user);
   };
 
@@ -116,6 +149,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     queryClient.clear();
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
+    await tokenStorage.setItem(CACHED_USER_KEY, JSON.stringify(data.user));
     setUser(data.user);
   };
 
@@ -124,12 +158,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     queryClient.clear();
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
+    await tokenStorage.setItem(CACHED_USER_KEY, JSON.stringify(data.user));
     setUser(data.user);
   };
 
   const logout = async () => {
     await tokenStorage.deleteItem('accessToken');
     await tokenStorage.deleteItem('refreshToken');
+    await tokenStorage.deleteItem(CACHED_USER_KEY);
     queryClient.clear();
     setUser(null);
     router.replace('/(auth)/login');

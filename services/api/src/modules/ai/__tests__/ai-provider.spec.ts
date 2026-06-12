@@ -150,6 +150,42 @@ describe('OpenAIProvider Model Tracking', () => {
   });
 });
 
+describe('GroqProvider Reading Optimization', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = jest.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('uses the fast reading model with low hidden reasoning', async () => {
+    const { GroqProvider } = require('../providers/groq.provider');
+    const provider = new GroqProvider({
+      get: (key: string) => key === 'GROQ_API_KEY' ? 'test-key' : undefined,
+    } as any);
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'openai/gpt-oss-20b',
+        choices: [{ message: { content: 'Response' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      }),
+    });
+
+    await provider.generate('test', { model: 'groq/reading', maxTokens: 400 });
+
+    const request = (global.fetch as jest.Mock).mock.calls[0][1];
+    const body = JSON.parse(request.body);
+    expect(body.model).toBe('openai/gpt-oss-20b');
+    expect(body.reasoning_effort).toBe('low');
+    expect(body.reasoning_format).toBe('hidden');
+  });
+});
+
 describe('AI Model Catalog', () => {
   it('has at least 4 models in catalog', () => {
     expect(AI_MODEL_CATALOG.length).toBeGreaterThanOrEqual(4);

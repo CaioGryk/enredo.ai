@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException, HttpException, HttpStatus, Logger, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, HttpException, HttpStatus, Logger, ForbiddenException, Optional } from '@nestjs/common';
 import { PrismaService } from '@common/prisma.service';
 import { AiService } from '@modules/ai/ai.service';
 import { ImageGenerationService } from '@modules/ai/image-generation.service';
 import { StoryQualityService } from '@modules/story-quality/story-quality.service';
 import { isInlineImageDataUrl, parseInlineImageDataUrl, safeImageUrl } from '@common/safe-image-url';
+import { ImageOptimizationService } from '@common/image-optimization.service';
 import { SubscriptionType, NarrativeFunction, ReadingSessionStatus, StoryVisibility, StoryModerationStatus } from '@prisma/client';
 import {
   PremiseResponseDto,
@@ -20,6 +21,8 @@ export class StorySetupService {
     private readonly aiService: AiService,
     private readonly imageGenerationService: ImageGenerationService,
     private readonly storyQualityService: StoryQualityService,
+    @Optional()
+    private readonly imageOptimization: ImageOptimizationService = new ImageOptimizationService(),
   ) {}
 
   async getCachedPremises(storyId: string, userId?: string): Promise<PremiseResponseDto[]> {
@@ -202,6 +205,7 @@ export class StorySetupService {
   async getPremiseCoverImage(
     premiseId: string,
     userId?: string,
+    width?: string,
   ): Promise<{ contentType: string; buffer: Buffer }> {
     const premise = await this.prisma.storyPremise.findUnique({
       where: { id: premiseId },
@@ -219,12 +223,13 @@ export class StorySetupService {
       throw new NotFoundException('StoryPremise cover', premiseId);
     }
 
-    return image;
+    return this.imageOptimization.resizeToWebp(image, `premise:${premiseId}`, width);
   }
 
   async getCharacterImage(
     characterId: string,
     userId?: string,
+    width?: string,
   ): Promise<{ contentType: string; buffer: Buffer }> {
     const character = await this.prisma.storyPlayableCharacter.findUnique({
       where: { id: characterId },
@@ -250,7 +255,7 @@ export class StorySetupService {
       throw new NotFoundException('StoryPlayableCharacter image', characterId);
     }
 
-    return image;
+    return this.imageOptimization.resizeToWebp(image, `character:${characterId}`, width);
   }
 
   async generateCharacters(premiseId: string, userId?: string, force: boolean = false): Promise<CharacterResponseDto[]> {
