@@ -9581,6 +9581,11 @@ The URL and service-role key are available in Supabase under Project Settings,
 API. Changing Railway variables triggers a redeploy, and the startup migration
 runs automatically.
 
+For this Storage integration, `SUPABASE_SERVICE_ROLE_KEY` must contain the
+legacy JWT `service_role` value from the **Legacy anon, service_role API keys**
+tab. The newer `sb_secret_...` key caused the Storage endpoint to return
+`Invalid Compact JWS` with the current Supabase client/runtime combination.
+
 ### Validation
 
 - Backend TypeScript compilation: passed.
@@ -9599,3 +9604,14 @@ runs automatically.
 - Added the `ws` transport and passed it explicitly through
   `realtime.transport`.
 - This prevents backend startup failure without enabling or using Realtime.
+
+### Storage key correction
+
+- Railway started successfully after the Node.js 20 hotfix.
+- The first migration then reported:
+  - `Failed to list Supabase Storage buckets: Invalid Compact JWS`
+  - `migrated=0, failed=167`
+- Root cause: the configured `sb_secret_...` key is not a compact JWT, while
+  this Storage management path expected the legacy JWT service key.
+- Operational fix: replace only `SUPABASE_SERVICE_ROLE_KEY` with the legacy
+  `service_role` JWT and redeploy.
