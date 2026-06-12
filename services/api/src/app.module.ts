@@ -17,6 +17,7 @@ import { AdminStoryGenerationUsageModule } from './modules/admin/story-generatio
 import { AdminSceneMediaModule } from './modules/admin/scene-media-moderation/admin-scene-media.module';
 import { AdminBillingModule } from './modules/admin/billing/admin-billing.module';
 import { PrismaModule } from './common/prisma.module';
+import { PublicMediaStorageModule } from './common/public-media-storage.module';
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -38,6 +39,7 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
       }],
     }),
     PrismaModule,
+    PublicMediaStorageModule,
     HealthModule,
     AuthModule,
     LibraryModule,

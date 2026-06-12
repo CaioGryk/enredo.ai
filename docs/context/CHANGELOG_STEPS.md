@@ -9519,3 +9519,73 @@ latency. The code changes reduce how often the user must wait for it and shrink
 the payloads, but they cannot remove the physical US West to São Paulo path or
 Railway instance startup behavior. The previously documented V1 migration to a
 São Paulo backend remains the final infrastructure fix.
+
+---
+
+## Step 132 — Serve Public Catalog Images from Supabase CDN
+
+**Date:** June 12, 2026
+
+### Goal
+
+Remove Railway from the image delivery path. The previous WebP endpoint reduced
+payload size by approximately 93%, but every first image still required a
+Railway request, PostgreSQL lookup, and runtime transformation.
+
+### Supabase Storage integration
+
+- Added the official `@supabase/supabase-js` client to the backend.
+- Added an optional public media storage service controlled by:
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `SUPABASE_STORAGE_BUCKET`
+- The default bucket name is `enredo-public-media`.
+- The backend creates the bucket as public when it does not exist.
+- Uploads are converted to 720 px WebP at quality 78.
+- Objects use a one-year CDN cache directive and stable UUID-based paths.
+- Remote provider images are downloaded with a 20-second timeout and a 15 MB
+  safety limit before conversion.
+- The service-role key remains backend-only and must never be added to Expo.
+
+### Automatic catalog migration
+
+- On backend startup, an idempotent background migration scans only beta-visible
+  stories that are public and approved.
+- It migrates:
+  - story covers;
+  - premise covers;
+  - playable-character portraits;
+  - catalog-character portraits.
+- After a successful upload, the database field is replaced with the public
+  Supabase CDN URL.
+- Existing CDN URLs are skipped.
+- Failed uploads preserve the old value so the Railway image endpoint remains
+  a safe fallback.
+- Private or non-approved story media is not moved into the public bucket.
+
+### New catalog generation
+
+- Newly generated premise and playable-character images for public, approved
+  beta stories are persisted to Supabase Storage immediately.
+- Private/user-owned story images retain the protected API path.
+
+### Railway variables
+
+```env
+SUPABASE_URL=https://PROJECT_REF.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=PASTE_THE_BACKEND_SERVICE_ROLE_KEY
+SUPABASE_STORAGE_BUCKET=enredo-public-media
+```
+
+The URL and service-role key are available in Supabase under Project Settings,
+API. Changing Railway variables triggers a redeploy, and the startup migration
+runs automatically.
+
+### Validation
+
+- Backend TypeScript compilation: passed.
+- Mobile TypeScript compilation: passed.
+- Image optimization, public storage, public migration, library security, and
+  story setup security suites: 58 tests passed.
+- The previously misplaced image optimization test was moved under
+  `src/common/__tests__`, matching the repository Jest collection rule.

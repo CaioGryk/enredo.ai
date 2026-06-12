@@ -5,6 +5,7 @@ import { ImageGenerationService } from '@modules/ai/image-generation.service';
 import { StoryQualityService } from '@modules/story-quality/story-quality.service';
 import { isInlineImageDataUrl, parseInlineImageDataUrl, safeImageUrl } from '@common/safe-image-url';
 import { ImageOptimizationService } from '@common/image-optimization.service';
+import { PublicMediaStorageService } from '@common/public-media-storage.service';
 import { SubscriptionType, NarrativeFunction, ReadingSessionStatus, StoryVisibility, StoryModerationStatus } from '@prisma/client';
 import {
   PremiseResponseDto,
@@ -23,6 +24,8 @@ export class StorySetupService {
     private readonly storyQualityService: StoryQualityService,
     @Optional()
     private readonly imageOptimization: ImageOptimizationService = new ImageOptimizationService(),
+    @Optional()
+    private readonly publicMediaStorage?: PublicMediaStorageService,
   ) {}
 
   async getCachedPremises(storyId: string, userId?: string): Promise<PremiseResponseDto[]> {
@@ -118,7 +121,11 @@ export class StorySetupService {
             premise.coverPrompt || undefined,
           );
 
-          const generatedCoverUrl = this.resolveGeneratedImageUrl(imageResult);
+          const generatedCoverUrl = await this.persistPublicCatalogImage(
+            story,
+            this.resolveGeneratedImageUrl(imageResult),
+            `premises/${premise.id}/cover-720.webp`,
+          );
 
           if (imageResult.success && generatedCoverUrl) {
             await this.prisma.storyPremise.update({
@@ -356,7 +363,11 @@ export class StorySetupService {
               character.visualPrompt,
             );
 
-            const generatedImageUrl = this.resolveGeneratedImageUrl(imageResult);
+            const generatedImageUrl = await this.persistPublicCatalogImage(
+              story,
+              this.resolveGeneratedImageUrl(imageResult),
+              `characters/playable/${character.id}-720.webp`,
+            );
 
             if (imageResult.success && generatedImageUrl) {
               await this.prisma.storyPlayableCharacter.update({
@@ -705,6 +716,22 @@ export class StorySetupService {
 
     const mimeType = this.inferImageMimeType(result.base64Image);
     return `data:${mimeType};base64,${result.base64Image}`;
+  }
+
+  private async persistPublicCatalogImage(
+    story: { isBetaVisible?: boolean; visibility?: StoryVisibility; moderationStatus?: StoryModerationStatus },
+    source: string | null,
+    objectPath: string,
+  ): Promise<string | null> {
+    if (!source || !this.publicMediaStorage?.isEnabled()) return source;
+
+    const isPublicCatalog =
+      story.isBetaVisible === true &&
+      story.visibility === StoryVisibility.PUBLIC &&
+      story.moderationStatus === StoryModerationStatus.APPROVED;
+    if (!isPublicCatalog) return source;
+
+    return await this.publicMediaStorage.persistPublicImage(source, objectPath) ?? source;
   }
 
   private inferImageMimeType(base64: string): string {

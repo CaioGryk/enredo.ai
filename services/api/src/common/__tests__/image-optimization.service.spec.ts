@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { ImageOptimizationService } from './image-optimization.service';
+import { ImageOptimizationService } from '../image-optimization.service';
 
 describe('ImageOptimizationService', () => {
   it('resizes API images to a bounded WebP thumbnail', async () => {
