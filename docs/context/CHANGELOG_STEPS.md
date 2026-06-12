@@ -9497,6 +9497,20 @@ large first-time image transfers, and synchronous AI scene generation.
 ### Build target
 
 - Android version code increased from `13` to `14`.
+- EAS Android preview build:
+  `20665ee0-c3d8-4784-8d25-4f7230a1cec0`.
+- Build page:
+  `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/20665ee0-c3d8-4784-8d25-4f7230a1cec0`.
+- APK:
+  `https://expo.dev/artifacts/eas/ybiU2zOgy_PWnNdJLKW9SmzLSYtpAHDn42u0mOaBCKU.apk`.
+
+### Production verification
+
+- Railway deployed commit `ea38b81`.
+- Health endpoint returned HTTP 200 after the deployment.
+- The measured 720 px cover changed from a 577,636-byte JPEG to a
+  38,120-byte WebP.
+- This reduced that first image transfer by approximately 93.4%.
 
 ### Remaining infrastructure limit
 
