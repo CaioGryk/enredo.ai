@@ -9589,3 +9589,13 @@ runs automatically.
   story setup security suites: 58 tests passed.
 - The previously misplaced image optimization test was moved under
   `src/common/__tests__`, matching the repository Jest collection rule.
+
+### Node.js 20 Railway compatibility hotfix
+
+- The first CDN deployment exposed that Supabase JS initializes its Realtime
+  client while constructing the Storage client.
+- Railway runs Node.js 20, which does not provide the native WebSocket expected
+  by the installed Supabase client.
+- Added the `ws` transport and passed it explicitly through
+  `realtime.transport`.
+- This prevents backend startup failure without enabling or using Realtime.

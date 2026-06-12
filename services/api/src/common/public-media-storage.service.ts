@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 import { ImageOptimizationService } from './image-optimization.service';
 import { isInlineImageDataUrl, parseInlineImageDataUrl } from './safe-image-url';
 
@@ -30,6 +31,7 @@ export class PublicMediaStorageService {
     this.client = this.supabaseUrl && serviceRoleKey
       ? createClient(this.supabaseUrl, serviceRoleKey, {
           auth: { persistSession: false, autoRefreshToken: false },
+          realtime: { transport: WebSocket as any },
         })
       : null;
   }
