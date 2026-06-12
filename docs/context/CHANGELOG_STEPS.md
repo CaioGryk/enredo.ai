@@ -9065,6 +9065,217 @@ For this beta:
 - Load balancer pricing:
   `https://cloud.google.com/load-balancing/pricing`
 
+---
+
+## Step 128 — Evaluate a Lower-Cost São Paulo Provider
+
+**Date:** June 12, 2026
+
+### Recommended alternative
+
+Use **Fly.io in São Paulo (`gru`)** for the controlled beta.
+
+Fly.io is materially cheaper than a continuously warm Cloud Run service, has a
+native São Paulo region, runs the existing Docker image, and supports custom
+domains without requiring a separately billed load balancer.
+
+### São Paulo compute pricing
+
+Published Fly.io prices for `gru` are:
+
+- `shared-cpu-1x`, 256 MB: about US$ 3.14/month.
+- `shared-cpu-1x`, 512 MB: about US$ 5.16/month.
+- `shared-cpu-1x`, 1 GB: about US$ 9.20/month.
+- `shared-cpu-1x`, 2 GB: about US$ 17.28/month.
+
+The Enredo.ai backend should start with **1 shared CPU and 1 GB RAM**. A
+512 MB machine is cheaper but may be too tight for Node.js, NestJS, Prisma, and
+bursty AI response processing. Runtime memory should be measured before trying
+the smaller machine.
+
+Fly Machines are billed per second while running. A stopped machine is billed
+only for its root filesystem at US$ 0.15/GB/month.
+
+### Optional reservation
+
+Fly.io offers shared-compute reservation blocks with a 40% discount:
+
+- Pay US$ 36/year.
+- Receive US$ 5/month in shared-compute credit.
+
+For a continuously running 1 GB São Paulo machine, this can reduce the
+effective average compute cost from about US$ 9.20/month to about
+US$ 7.20/month, assuming the monthly credit is fully used.
+
+### Network pricing
+
+South America public internet egress is US$ 0.04/GB:
+
+- 10 GB: about US$ 0.40.
+- 50 GB: about US$ 2.00.
+- 100 GB: about US$ 4.00.
+
+This is substantially lower than Cloud Run's approximately US$ 0.19/GiB
+Premium Tier price for South American destinations.
+
+Inbound traffic is free.
+
+### Domain and TLS
+
+- Every app receives a `.fly.dev` HTTPS domain.
+- Shared IPv4 and Anycast IPv6 are included.
+- Custom domains can use CNAME or A/AAAA DNS records.
+- The first 10 single-hostname managed TLS certificates per organization are
+  free.
+- Additional single-hostname certificates are US$ 0.10/month.
+- A dedicated IPv4 address is optional at US$ 2/month.
+
+Unlike the recommended Cloud Run custom-domain architecture, Fly.io does not
+require a US$ 18.25/month global load-balancer floor for `api.enredo.ai`.
+
+### Scale-to-zero and cold starts
+
+Fly Proxy can automatically stop or suspend idle machines and start them on
+incoming traffic:
+
+- `auto_stop_machines = "stop"` avoids CPU and RAM cost while idle.
+- `auto_start_machines = true` restarts machines on demand.
+- `min_machines_running = 0` minimizes cost but introduces cold starts.
+- `min_machines_running = 1` keeps the beta API warm.
+
+For usability testing, keep one machine running. After the beta, scale-to-zero
+can be evaluated if cost is more important than first-request latency.
+
+### Recommended Enredo.ai configuration
+
+- Primary region: `gru`.
+- Machine: `shared-cpu-1x`.
+- Memory: 1 GB.
+- Machine count: 1 during the controlled beta.
+- `auto_stop_machines = "stop"`.
+- `auto_start_machines = true`.
+- `min_machines_running = 1`.
+- HTTP internal port: platform `PORT` or explicit `3001`.
+- HTTPS forced.
+- Health check: `/api/health`.
+- Runtime database pool: `connection_limit=1`.
+- Soft concurrency limit: 8.
+- Hard concurrency limit: 12.
+
+One machine is not highly available. It is acceptable for the controlled beta
+while Railway remains available for rollback. Production availability would
+require at least two machines, approximately doubling compute cost.
+
+### Deployment and secrets
+
+Fly.io can deploy the current `services/api/Dockerfile`. Runtime secrets are
+encrypted in the Fly app vault and injected as environment variables when a
+machine starts.
+
+Continuous deployment can use GitHub Actions:
+
+`GitHub push -> flyctl deploy --remote-only -> Fly Machine`
+
+The repository would need:
+
+- A `fly.toml` configuration.
+- A GitHub Actions deploy workflow.
+- An app-scoped `FLY_API_TOKEN` GitHub secret.
+- Production environment variables loaded with `fly secrets set`.
+
+### Operational trade-offs
+
+Advantages:
+
+- São Paulo region.
+- Lower always-on compute cost.
+- Much cheaper image and API egress.
+- Cheap custom domain and managed TLS.
+- Existing Dockerfile is compatible.
+- Straightforward secrets and GitHub deployment.
+- Machine count creates a predictable database connection ceiling.
+
+Risks:
+
+- One beta machine has no high availability.
+- Free support is community-based; standard support starts at US$ 29/month.
+- New organizations have no legacy free resource allowance.
+- Scaling and rollback are less managed than Cloud Run revisions.
+- Capacity can vary by region.
+- A stopped machine produces cold-start latency.
+- External AI provider latency remains unchanged.
+
+### Other providers reviewed
+
+**Oracle Cloud Infrastructure**
+
+- Has São Paulo and Vinhedo regions.
+- Offers Always Free AMD and Ampere A1 compute, subject to capacity limits.
+- Could reduce compute cost to US$ 0.
+- Requires self-managing the VM, OS patches, Docker runtime, reverse proxy,
+  TLS, firewall, deployment automation, monitoring, backups, and recovery.
+- Free accounts idle for 30 days or more may be considered abandoned and can
+  become eligible for suspension or termination.
+
+OCI is the absolute lowest-cost option, but it has the highest operational
+burden and capacity risk. It is not recommended for the current beta.
+
+**Amazon Lightsail**
+
+- Offers inexpensive fixed-price instances.
+- Does not currently list São Paulo among supported Lightsail regions.
+- It does not satisfy the latency objective.
+
+**Koyeb**
+
+- Supports Docker, GitHub, scale-to-zero, and managed deployment.
+- Current core regions are Frankfurt, Washington, Singapore, Tokyo, Paris, and
+  AWS Northern Virginia.
+- It does not currently offer São Paulo as a core region.
+
+### Cost comparison for the beta
+
+Approximate warm-service comparison:
+
+- Fly.io, São Paulo, 1 GB: US$ 9.20/month.
+- Fly.io with fully used reservation credit: about US$ 7.20/month effective.
+- Cloud Run, São Paulo, one warm 1 GB instance: roughly US$ 13/month base
+  estimate before Tier 2 regional variation.
+- Cloud Run with production custom-domain load balancer: approximately
+  US$ 31/month before usage and traffic.
+- OCI Always Free VM: potentially US$ 0, with substantially more operations.
+
+### Decision
+
+Fly.io is the best current balance of:
+
+- low latency,
+- low predictable cost,
+- managed deployment,
+- Docker compatibility,
+- and low operational complexity.
+
+The safe next step is to create a Fly.io app in `gru`, deploy it alongside
+Railway, and benchmark both before changing the mobile API URL.
+
+### Sources
+
+- Fly.io pricing: `https://fly.io/docs/about/pricing/`
+- Fly.io regions: `https://fly.io/docs/reference/regions/`
+- Autostop and autostart:
+  `https://fly.io/docs/launch/autostop-autostart/`
+- Custom domains: `https://fly.io/docs/networking/custom-domain/`
+- Secrets: `https://fly.io/docs/apps/secrets/`
+- GitHub Actions deployment:
+  `https://fly.io/docs/launch/continuous-deployment-with-github-actions/`
+- Health checks: `https://fly.io/docs/reference/health-checks/`
+- Fly.io support: `https://fly.io/docs/about/support/`
+- OCI Free Tier: `https://www.oracle.com/cloud/free/`
+- OCI regions: `https://www.oracle.com/cloud/public-cloud-regions/`
+- Amazon Lightsail regions:
+  `https://docs.aws.amazon.com/lightsail/latest/userguide/understanding-regions-and-availability-zones-in-amazon-lightsail.html`
+- Koyeb regions: `https://www.koyeb.com/docs/reference/regions`
+
 ### Follow-up performance work
 
 - Story start still waits for the first AI scene before navigation. A future
