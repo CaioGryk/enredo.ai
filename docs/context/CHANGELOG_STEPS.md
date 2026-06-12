@@ -8598,3 +8598,45 @@ generic `500`.
 
 This is a backend-only fix. Android APK version `11` remains valid and does
 not require a rebuild.
+
+---
+
+## Step 123 — Restore Covers in My Stories
+
+**Date:** June 12, 2026
+
+### Problem
+
+The Android `Minhas Histórias` screen displayed generated fallback artwork
+instead of the selected story, premise, or character image.
+
+### Root cause
+
+The reading sessions endpoint intentionally removed inline `data:image/...`
+payloads from list responses, but returned `null` in their place. Most beta
+catalog artwork is currently stored as inline image data, so the mobile app
+had no usable cover URL even though the backend already exposed lightweight
+binary image endpoints.
+
+### Backend changes
+
+- Included selected premise and character IDs in the reading-session query.
+- Kept external HTTP(S) image URLs unchanged.
+- Replaced inline story covers with
+  `/api/library/stories/:storyId/cover`.
+- Replaced inline premise covers with
+  `/api/story-setup/premises/:premiseId/cover`.
+- Replaced inline character images with
+  `/api/story-setup/characters/:characterId/image`.
+- Preserved the existing cover priority: story, premise, then character.
+- Added regression coverage for inline images and mixed external/inline
+  image sources.
+
+### Validation
+
+- Reading runtime scenarios: 1 suite passed, 53 tests passed.
+- Backend TypeScript compilation: passed.
+- Backend production build: passed.
+
+This is a backend-only fix. Android APK version `11` remains valid and does
+not require a rebuild.

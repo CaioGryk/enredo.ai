@@ -779,7 +779,7 @@ describe('Reading Runtime Scenarios', () => {
       expect(result.sessions[1].storyCoverUrl).toBe('https://example.com/hero-two.jpg');
     });
 
-    it('should not expose data-url images in session summaries', async () => {
+    it('should expose binary image routes instead of data-url payloads in session summaries', async () => {
       mockPrisma.readingSession.findMany.mockResolvedValue([{
         id: 'session-1',
         storyId: 'story-1',
@@ -789,13 +789,15 @@ describe('Reading Runtime Scenarios', () => {
         startedAt: new Date(),
         lastSceneAt: new Date(),
         story: { title: 'Story With Inline Cover', coverUrl: 'data:image/png;base64,large-payload' },
-        premise: { title: 'Premise With Inline Cover', coverUrl: 'data:image/png;base64,large-payload' },
-        character: { name: 'Hero', imageUrl: 'data:image/png;base64,large-payload' },
+        premise: { id: 'premise-1', title: 'Premise With Inline Cover', coverUrl: 'data:image/png;base64,large-payload' },
+        character: { id: 'character-1', name: 'Hero', imageUrl: 'data:image/png;base64,large-payload' },
       }]);
 
       const result = await (service as any).getUserSessions('user-1', {});
 
-      expect(result.sessions[0].storyCoverUrl).toBeNull();
+      expect(result.sessions[0].storyCoverUrl).toBe('/api/library/stories/story-1/cover');
+      expect(result.sessions[0].selectedPremiseCoverUrl).toBe('/api/story-setup/premises/premise-1/cover');
+      expect(result.sessions[0].selectedCharacterImageUrl).toBe('/api/story-setup/characters/character-1/image');
     });
 
     it('should return null for optional fields when relations are missing', async () => {
@@ -998,22 +1000,22 @@ describe('Reading Runtime Scenarios', () => {
       expect(s.selectedCharacterImageUrl).toBe('https://cdn.example.com/char.jpg');
     });
 
-    it('inline/base64 coverUrl is stripped and returns null', async () => {
+    it('inline/base64 images are replaced by their binary API routes', async () => {
       mockPrisma.readingSession.findMany.mockResolvedValue([{
         id: 'session-1', storyId: 'story-1', currentChapter: 1, currentSceneIndex: 2,
         status: 'ACTIVE', startedAt: new Date(), lastSceneAt: new Date(),
         story: { title: 'Test', coverUrl: 'data:image/png;base64,iVBORw0KGgo=' },
-        premise: { title: 'P1', coverUrl: 'data:image/png;base64,AAAA' },
-        character: { name: 'Hero', imageUrl: 'data:image/png;base64,BBBB' },
+        premise: { id: 'premise-1', title: 'P1', coverUrl: 'data:image/png;base64,AAAA' },
+        character: { id: 'character-1', name: 'Hero', imageUrl: 'data:image/png;base64,BBBB' },
       }]);
       mockPrisma.readingSession.count.mockResolvedValue(1);
 
       const result = await (service as any).getUserSessions('user-1', {});
       const s = result.sessions[0];
 
-      expect(s.storyCoverUrl).toBeNull();
-      expect(s.selectedPremiseCoverUrl).toBeNull();
-      expect(s.selectedCharacterImageUrl).toBeNull();
+      expect(s.storyCoverUrl).toBe('/api/library/stories/story-1/cover');
+      expect(s.selectedPremiseCoverUrl).toBe('/api/story-setup/premises/premise-1/cover');
+      expect(s.selectedCharacterImageUrl).toBe('/api/story-setup/characters/character-1/image');
     });
 
     it('mixed http and inline returns http URL only, stripping inline', async () => {
@@ -1022,7 +1024,7 @@ describe('Reading Runtime Scenarios', () => {
         status: 'ACTIVE', startedAt: new Date(), lastSceneAt: new Date(),
         story: { title: 'Test', coverUrl: null },
         premise: { title: 'P1', coverUrl: 'https://cdn.example.com/premise-cover.jpg' },
-        character: { name: 'Hero', imageUrl: 'data:image/png;base64,BBBB' },
+        character: { id: 'character-1', name: 'Hero', imageUrl: 'data:image/png;base64,BBBB' },
       }]);
       mockPrisma.readingSession.count.mockResolvedValue(1);
 
@@ -1031,7 +1033,7 @@ describe('Reading Runtime Scenarios', () => {
 
       expect(s.storyCoverUrl).toBe('https://cdn.example.com/premise-cover.jpg');
       expect(s.selectedPremiseCoverUrl).toBe('https://cdn.example.com/premise-cover.jpg');
-      expect(s.selectedCharacterImageUrl).toBeNull();
+      expect(s.selectedCharacterImageUrl).toBe('/api/story-setup/characters/character-1/image');
     });
   });
 

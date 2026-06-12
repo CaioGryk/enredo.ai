@@ -11,6 +11,7 @@ import { NarrativePreferencesService } from '@modules/narrative-preferences/narr
 import { getDefaultFreeModel, getDefaultPremiumModel } from '../ai/model-catalog';
 import { throwReadingError, throwBudgetDenied, ReadingErrorCode } from './application/reading-errors';
 import { FREE_DAILY_INTERACTION_LIMIT, FREE_ACTIVE_SESSION_LIMIT } from './application/reading.constants';
+import { isInlineImageDataUrl, safeImageUrl } from '@common/safe-image-url';
 
 const READER_RECENT_EVENT_LIMIT = 8;
 
@@ -613,8 +614,8 @@ export class ReadingOrchestratorService {
       where,
       include: {
         story: { select: { title: true, coverUrl: true } },
-        premise: { select: { title: true, coverUrl: true } },
-        character: { select: { name: true, imageUrl: true } },
+        premise: { select: { id: true, title: true, coverUrl: true } },
+        character: { select: { id: true, name: true, imageUrl: true } },
       },
       skip: (page -1) * limit,
       take: limit,
@@ -1241,11 +1242,17 @@ export class ReadingOrchestratorService {
         id: s.id,
         storyId: s.storyId,
         storyTitle: s.story?.title,
-        storyCoverUrl: this.pickSessionSummaryImageUrl(s.story?.coverUrl, s.premise?.coverUrl, s.character?.imageUrl),
+        storyCoverUrl: this.getSessionSummaryCoverUrl(s),
         selectedPremiseTitle: s.premise?.title ?? null,
-        selectedPremiseCoverUrl: this.pickSessionSummaryImageUrl(s.premise?.coverUrl),
+        selectedPremiseCoverUrl: this.resolveSessionSummaryImageUrl(
+          s.premise?.coverUrl,
+          s.premise?.id ? `/api/story-setup/premises/${s.premise.id}/cover` : null,
+        ),
         selectedCharacterName: s.character?.name ?? null,
-        selectedCharacterImageUrl: this.pickSessionSummaryImageUrl(s.character?.imageUrl),
+        selectedCharacterImageUrl: this.resolveSessionSummaryImageUrl(
+          s.character?.imageUrl,
+          s.character?.id ? `/api/story-setup/characters/${s.character.id}/image` : null,
+        ),
         currentChapter: s.currentChapter,
         currentSceneIndex: s.currentSceneIndex,
         status: s.status,
@@ -1269,14 +1276,24 @@ export class ReadingOrchestratorService {
     };
   }
 
-  private pickSessionSummaryImageUrl(...urls: Array<string | null | undefined>): string | null {
-    const url = urls.find((candidate) => {
-      if (!candidate) return false;
-      const normalized = candidate.trim().toLowerCase();
-      return normalized.startsWith('http://') || normalized.startsWith('https://');
-    });
+  private getSessionSummaryCoverUrl(session: any): string | null {
+    return this.resolveSessionSummaryImageUrl(
+      session.story?.coverUrl,
+      `/api/library/stories/${session.storyId}/cover`,
+    ) ?? this.resolveSessionSummaryImageUrl(
+      session.premise?.coverUrl,
+      session.premise?.id ? `/api/story-setup/premises/${session.premise.id}/cover` : null,
+    ) ?? this.resolveSessionSummaryImageUrl(
+      session.character?.imageUrl,
+      session.character?.id ? `/api/story-setup/characters/${session.character.id}/image` : null,
+    );
+  }
 
-    return url ?? null;
+  private resolveSessionSummaryImageUrl(
+    url: string | null | undefined,
+    inlineImageRoute: string | null,
+  ): string | null {
+    return safeImageUrl(url) ?? (inlineImageRoute && isInlineImageDataUrl(url) ? inlineImageRoute : null);
   }
 
   async abandonSession(userId: string, sessionId: string): Promise<void> {
