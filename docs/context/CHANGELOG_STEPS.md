@@ -9398,6 +9398,13 @@ persistent memory-and-disk cache or provide a consistent image transition.
 ### Build
 
 - Android build version increased from `12` to `13`.
+- Railway production deployment for commit `8e2bd56`: successful.
+- EAS build `da3249ec-518f-495a-9b87-aa95e8ed472a`: finished.
+- Expo installation page:
+  `https://expo.dev/accounts/enredo.ai/projects/enredo-ai/builds/da3249ec-518f-495a-9b87-aa95e8ed472a`
+- APK artifact:
+  `https://expo.dev/artifacts/eas/4kBgbYO4Zk5la8bd8UD7OP0dfSWkU6TTlOkLS3TRtd4.apk`
+- APK artifact expiration: June 26, 2026.
 
 ### Remaining work
 
