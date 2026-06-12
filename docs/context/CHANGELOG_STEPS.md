@@ -9276,6 +9276,64 @@ Railway, and benchmark both before changing the mobile API URL.
   `https://docs.aws.amazon.com/lightsail/latest/userguide/understanding-regions-and-availability-zones-in-amazon-lightsail.html`
 - Koyeb regions: `https://www.koyeb.com/docs/reference/regions`
 
+---
+
+## Step 129 — Keep Railway During Beta and Defer Hosting Migration
+
+**Date:** June 12, 2026
+
+### Decision
+
+Keep the Enredo.ai backend on Railway throughout the controlled beta.
+
+Migrating providers now would introduce avoidable operational risk while the
+product flows, mobile experience, AI generation, and beta feedback are still
+being stabilized. Continuity is more valuable at this stage than the potential
+latency and cost improvements of a new provider.
+
+### Beta infrastructure
+
+- Backend remains on Railway.
+- Database remains on Supabase in São Paulo.
+- Existing Railway URL remains embedded in Android beta builds.
+- Current caching, prefetching, and image optimizations remain the primary
+  performance strategy.
+- Railway remains the single active backend environment unless a separate test
+  deployment is explicitly created.
+
+### V1 requirement
+
+Before the official V1 launch, reassess and migrate the backend to a provider
+with a São Paulo region. Fly.io is currently the leading cost-conscious option,
+while Cloud Run remains the leading fully managed option.
+
+The V1 migration must include:
+
+- A parallel deployment with no immediate traffic cutover.
+- Production secrets managed outside the repository.
+- A stable API domain independent of the hosting provider.
+- Latency comparison from Brazilian mobile networks.
+- Authentication, catalog, image, reading, and AI generation smoke tests.
+- Monitoring, budget alerts, health checks, and rollback procedures.
+- At least two instances if V1 availability requirements justify the cost.
+- Optimized image storage and thumbnails to reduce API egress.
+
+### Triggers to begin the migration
+
+Start the hosting migration work when the first of these conditions occurs:
+
+- V1 scope and release date are defined.
+- Beta flows are considered functionally stable.
+- Railway latency becomes a material blocker for testers.
+- Monthly infrastructure or egress cost exceeds the selected São Paulo option.
+- The project is ready to introduce a stable production API domain.
+
+### Rationale
+
+This decision avoids interrupting the beta while preserving the São Paulo
+hosting migration as an explicit V1 usability requirement rather than losing
+it as an informal future idea.
+
 ### Follow-up performance work
 
 - Story start still waits for the first AI scene before navigation. A future
