@@ -9615,3 +9615,45 @@ tab. The newer `sb_secret_...` key caused the Storage endpoint to return
   this Storage management path expected the legacy JWT service key.
 - Operational fix: replace only `SUPABASE_SERVICE_ROLE_KEY` with the legacy
   `service_role` JWT and redeploy.
+
+## Step 133 — Unlimited Free interactions and model-based monetization
+
+**Date:** 2026-06-12
+
+### Product rule
+
+- Narrative interactions are unlimited for Free and Premium users.
+- Free users can keep up to 3 active stories.
+- Free users can only use Free-tier LLMs, even when their credit wallet has a
+  positive balance.
+- Premium users can select Premium models and can use Credits-tier models when
+  their wallet has sufficient credits.
+- Image and video credit rules are unchanged.
+
+### Implementation
+
+- Removed the daily interaction denial from `GenerationBudgetGuard`.
+- Legacy daily counters remain in the database only for analytics and ad
+  cadence; existing `10/10` rows no longer block users.
+- Reading and billing usage contracts now report `dailyLimit=0` and
+  `isLimited=false`.
+- Added `ACTIVE_SESSION_LIMIT_REACHED` so the 3-story limit is no longer
+  presented as a daily reading limit.
+- Tightened model entitlement so every non-Free LLM requires a Premium plan.
+- Updated mobile plan copy, legal copy, error handling, environment examples,
+  roadmap, and production validation instructions.
+
+### Railway configuration
+
+- Set `FREE_LLM_ONLY=false` so Premium users can access entitled models.
+- Free users remain restricted to Free-tier LLMs by backend entitlement,
+  independent of this global emergency switch.
+
+### Validation
+
+- Backend: 56 suites and 927 tests passed.
+- Backend TypeScript: passed with `tsc --noEmit`.
+- Mobile TypeScript: passed with `tsc --noEmit`.
+- The local Nest build could not clean an existing `dist/tsconfig.tsbuildinfo`
+  because of filesystem ownership (`EPERM`); direct TypeScript validation and
+  the full test suite passed.

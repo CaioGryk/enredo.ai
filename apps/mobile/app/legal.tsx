@@ -25,8 +25,8 @@ Recursos: geração de imagens (1 crédito), vídeos (5 créditos), modo cinemat
 Você deve fornecer um email válido e senha. É responsável pela segurança da sua conta. Reservamo-nos o direito de suspender contas que violem estes termos.
 
 4. Planos e Créditos
-Free: 10 interações/dia, 3 histórias ativas, modelo padrão, anúncios (mock).
-Premium: ilimitado, modelos avançados, sem anúncios. Não inclui créditos gratuitos.
+Free: interações narrativas ilimitadas, 3 histórias ativas, apenas o modelo gratuito e anúncios (mock).
+Premium: histórias ativas ilimitadas, modelos avançados e sem anúncios. Não inclui créditos gratuitos.
 Créditos: adquiridos separadamente para modo cine, imagens e vídeos.
 
 IMPORTANTE (Beta): Todas as compras são simuladas (mock/dev). Nenhuma cobrança real é feita.

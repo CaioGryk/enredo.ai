@@ -644,7 +644,11 @@ export class ReadingOrchestratorService {
     });
 
     if (activeSessionCount >= FREE_ACTIVE_SESSION_LIMIT) {
-      throwReadingError('Free users can have up to 3 active stories. Abandon one story or upgrade to Premium.', ReadingErrorCode.DAILY_LIMIT_REACHED, 402);
+      throwReadingError(
+        'Free users can have up to 3 active stories. Abandon one story or upgrade to Premium.',
+        ReadingErrorCode.ACTIVE_SESSION_LIMIT_REACHED,
+        402,
+      );
     }
 
     const today = new Date();
@@ -1420,10 +1424,10 @@ export class ReadingOrchestratorService {
 
   private formatUsage(usage: any, creditsRemaining?: number): any {
     return {
-      dailyLimit: usage.limit,
+      dailyLimit: 0,
       dailyUsed: usage.freeInteractionsUsed,
-      dailyRemaining: usage.limit - usage.freeInteractionsUsed,
-      isLimited: usage.freeInteractionsUsed >= usage.limit,
+      dailyRemaining: 0,
+      isLimited: false,
       creditsRemaining: creditsRemaining ?? 0,
     };
   }

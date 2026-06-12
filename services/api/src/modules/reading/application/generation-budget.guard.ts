@@ -1,6 +1,5 @@
 import { getModelById, getDefaultFreeModel, getDefaultPremiumModel, canUserAccessModel, AIModel } from '@modules/ai/model-catalog';
 import { SubscriptionType } from '@prisma/client';
-import { FREE_DAILY_INTERACTION_LIMIT } from './reading.constants';
 
 export type GenerationBudgetInput = {
   userId: string;
@@ -65,26 +64,6 @@ export class GenerationBudgetGuard {
         fallbackApplied: false,
         blockReason: `Model ${model.id} is not currently available`,
       };
-    }
-
-    // 3. Check daily limit for FREE users (PRESERVE current behavior)
-    // First scene is EXEMPT from daily limit (requirement from task)
-    // Daily limit of 0 means "no limit"
-    if (input.subscriptionType === SubscriptionType.FREE && !input.isFirstScene) {
-      const count = input.dailyUsageCount ?? 0;
-      const limit = input.dailyUsageLimit ?? FREE_DAILY_INTERACTION_LIMIT;
-      if (limit > 0 && count >= limit) {
-        return {
-          allowed: false,
-          finalModel: model,
-          maxOutputTokens: model.maxTokens,
-          budgetTier: 'FREE',
-          requiresCredits: false,
-          estimatedCreditCost: 0,
-          fallbackApplied: false,
-          blockReason: 'Daily interaction limit reached',
-        };
-      }
     }
 
     // 4. Check catalog-based access using actual user balance.

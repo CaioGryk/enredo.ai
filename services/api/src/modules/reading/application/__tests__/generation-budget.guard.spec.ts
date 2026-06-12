@@ -38,10 +38,10 @@ describe('GenerationBudgetGuard', () => {
       });
 
       expect(decision.allowed).toBe(false);
-      expect(decision.blockReason).toContain('Requires 2 credits');
+      expect(decision.blockReason).toContain('Requires Premium');
     });
 
-    it('should ALLOW free user under daily limit with default model', () => {
+    it('should ALLOW free user with default model regardless of daily usage', () => {
       const decision = guard.decide({
         userId: 'user-1',
         subscriptionType: SubscriptionType.FREE,
@@ -58,7 +58,7 @@ describe('GenerationBudgetGuard', () => {
       expect(decision.finalModel.tier).toBe('FREE');
     });
 
-    it('should DENY free user at daily limit', () => {
+    it('should ALLOW free user when a legacy daily counter is at its old limit', () => {
       const decision = guard.decide({
         userId: 'user-1',
         subscriptionType: SubscriptionType.FREE,
@@ -70,11 +70,11 @@ describe('GenerationBudgetGuard', () => {
         isFirstScene: false,
       });
 
-      expect(decision.allowed).toBe(false);
-      expect(decision.blockReason).toContain('Daily interaction limit reached');
+      expect(decision.allowed).toBe(true);
+      expect(decision.finalModel.id).toBe('groq/free');
     });
 
-    it('should ALLOW free user at daily limit for first scene', () => {
+    it('should ALLOW free user at a legacy daily limit for first scene', () => {
       const decision = guard.decide({
         userId: 'user-1',
         subscriptionType: SubscriptionType.FREE,
@@ -104,6 +104,22 @@ describe('GenerationBudgetGuard', () => {
 
       expect(decision.allowed).toBe(true);
       expect(decision.finalModel.id).toBe('openrouter/free');
+    });
+
+    it('should DENY credits models for free users even with sufficient credits', () => {
+      const decision = guard.decide({
+        userId: 'user-1',
+        subscriptionType: SubscriptionType.FREE,
+        requestedModelId: 'claude-3-5-sonnet-20241022',
+        dailyUsageCount: 100,
+        dailyUsageLimit: 10,
+        creditBalance: 100,
+        isCinematicMode: true,
+        isFirstScene: false,
+      });
+
+      expect(decision.allowed).toBe(false);
+      expect(decision.blockReason).toContain('Requires Premium');
     });
   });
 

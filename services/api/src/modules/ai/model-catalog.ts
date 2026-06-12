@@ -171,11 +171,12 @@ export function canUserAccessModel(
     return { allowed: true };
   }
 
+  if (plan === SubscriptionType.FREE) {
+    return { allowed: false, reason: 'Requires Premium plan for non-free models' };
+  }
+
   if (model.tier === 'PREMIUM') {
-    if (plan === SubscriptionType.PREMIUM) {
-      return { allowed: true };
-    }
-    return { allowed: false, reason: 'Requires Premium' };
+    return { allowed: true };
   }
 
   if (model.tier === 'CREDITS') {

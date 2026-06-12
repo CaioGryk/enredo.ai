@@ -80,7 +80,7 @@ O Enredo é uma aplicação web/mobile de histórias interativas guiadas por IA.
 - Subscription (plano Free/Premium)
 - CreditWallet (carteira de créditos)
 - CreditTransaction (histórico de créditos)
-- DailyUsageLimit (limite diário de interações Free)
+- DailyUsageLimit (contador de interações para métricas e cadência de anúncios; não bloqueia leitura)
 
 ### Analytics Module
 - ModelUsage (cada chamada a LLM com custo)

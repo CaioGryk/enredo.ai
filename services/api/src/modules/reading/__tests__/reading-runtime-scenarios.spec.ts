@@ -227,9 +227,9 @@ describe('Reading Runtime Scenarios', () => {
   });
 
   // ─────────────────────────────────────────────
-  // Scenario 2: Free user reaches daily limit
+  // Scenario 2: Legacy daily counter no longer blocks Free users
   // ─────────────────────────────────────────────
-  describe('Scenario 2 — Free user reaches daily limit', () => {
+  describe('Scenario 2 — Free user has unlimited narrative interactions', () => {
     const usageAtLimit = { id: 'usage-1', freeInteractionsUsed: 10, limit: 10 };
     const sessionWithStory = { ...mockSession, story: { ...publicStory } };
 
@@ -242,21 +242,22 @@ describe('Reading Runtime Scenarios', () => {
       mockPrisma.narrativeEvent.findMany.mockResolvedValue([]);
       mockPrisma.storyPremise.findFirst.mockResolvedValue(null);
       mockPrisma.storyPlayableCharacter.findFirst.mockResolvedValue(null);
+      mockNarrativeEngine.generateScene.mockResolvedValue(mockScene);
+      mockPrisma.narrativeEvent.create.mockResolvedValue({
+        id: 'event-1', chapterNumber: 1, sceneIndex: 1, sceneText: mockScene.sceneText,
+        choices: mockScene.suggestedActions,
+      });
+      mockPrisma.readingSession.update.mockResolvedValue({ ...mockSession, currentSceneIndex: 1 });
+      mockPrisma.dailyUsageLimit.upsert.mockResolvedValue(usageAtLimit);
+      mockPrisma.narrativeMemory.upsert.mockResolvedValue({});
     });
 
-    it('should deny action with 402 DAILY_LIMIT_REACHED', async () => {
-      const promise = service.sendAction('user-1', 'session-1', { action: 'Continue' });
+    it('should continue the story even when the legacy counter is 10/10', async () => {
+      const result = await service.sendAction('user-1', 'session-1', { action: 'Continue' });
 
-      await expectHttpException(promise, 402, 'DAILY_LIMIT_REACHED');
-    });
-
-    it('should not call generateScene or create events', async () => {
-      await service.sendAction('user-1', 'session-1', { action: 'Continue' })
-        .then(() => { throw new Error('Expected error'); })
-        .catch(() => {});
-
-      expect(mockNarrativeEngine.generateScene).not.toHaveBeenCalled();
-      expect(mockPrisma.narrativeEvent.create).not.toHaveBeenCalled();
+      expect(result.session.currentScene.sceneText).toBe(mockScene.sceneText);
+      expect(mockNarrativeEngine.generateScene).toHaveBeenCalled();
+      expect(mockPrisma.narrativeEvent.create).toHaveBeenCalled();
     });
   });
 
@@ -328,9 +329,9 @@ describe('Reading Runtime Scenarios', () => {
   });
 
   // ─────────────────────────────────────────────
-  // Scenario 4: User without credits tries Cine / credits model
+  // Scenario 4: Free user tries a non-free model
   // ─────────────────────────────────────────────
-  describe('Scenario 4 — User without credits tries credits model', () => {
+  describe('Scenario 4 — Free user tries credits model', () => {
     const poorUser = {
       id: 'user-1',
       subscription: { type: SubscriptionType.FREE },
@@ -344,13 +345,13 @@ describe('Reading Runtime Scenarios', () => {
       mockPrisma.dailyUsageLimit.findUnique.mockResolvedValue(defaultUsage);
     });
 
-    it('should deny with 402 INSUFFICIENT_CREDITS', async () => {
+    it('should deny with 402 PREMIUM_REQUIRED', async () => {
       const promise = service.sendAction('user-1', 'session-1', {
         action: 'Continue',
         modelId: 'claude-3-5-sonnet-20241022',
       });
 
-      await expectHttpException(promise, 402, 'INSUFFICIENT_CREDITS');
+      await expectHttpException(promise, 402, 'PREMIUM_REQUIRED');
     });
 
     it('should not generate or persist anything', async () => {
@@ -368,12 +369,12 @@ describe('Reading Runtime Scenarios', () => {
   });
 
   // ─────────────────────────────────────────────
-  // Scenario 5: User with credits uses Cine / credits model
+  // Scenario 5: Premium user with credits uses Cine / credits model
   // ─────────────────────────────────────────────
-  describe('Scenario 5 — User with credits uses credits model successfully', () => {
+  describe('Scenario 5 — Premium user with credits uses credits model successfully', () => {
     const richUser = {
       id: 'user-1',
-      subscription: { type: SubscriptionType.FREE },
+      subscription: { type: SubscriptionType.PREMIUM },
       creditWallet: { id: 'wallet-1', balance: 10 },
     };
     const sessionWithStory = { ...mockSession, story: { ...publicStory } };

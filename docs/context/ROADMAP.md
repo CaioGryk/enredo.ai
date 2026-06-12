@@ -12,7 +12,7 @@
 - ✅ 3 playable characters per premise
 - ✅ Characters with narrative function, motivation, secret, conflict, visual prompt
 - ✅ Interactive reading with suggested choices and free text
-- ✅ Free with ads, daily limit, 3 active sessions limit
+- ✅ Free with ads, unlimited narrative interactions, 3 active sessions limit, and Free LLM only
 - ✅ Premium with better models and premium stories
 - ✅ Mobile-first frontend with real flow:
   - Library → Detail → Premise → Character → Reader

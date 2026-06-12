@@ -5,8 +5,11 @@
  * generation-budget.guard.ts, billing.service.ts, and benefits copy.
  */
 
-/** Max daily interactions for Free users (scene continuations). First scene is exempt. */
-export const FREE_DAILY_INTERACTION_LIMIT = 10;
+/**
+ * Daily interaction counters remain available for analytics and ad cadence,
+ * but zero means narrative interactions are unlimited for every plan.
+ */
+export const FREE_DAILY_INTERACTION_LIMIT = 0;
 
 /** Max concurrent ACTIVE reading sessions for Free users. */
 export const FREE_ACTIVE_SESSION_LIMIT = 3;

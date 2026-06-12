@@ -2,6 +2,7 @@ import { ReadingOrchestratorService } from '../reading-orchestrator.service';
 import { NarrativeEngine } from '../narrative/narrative-engine.service';
 import { StoryQualityService } from '@modules/story-quality/story-quality.service';
 import { Prisma, SubscriptionType } from '@prisma/client';
+import { HttpException } from '@nestjs/common';
 
 describe('ReadingOrchestratorService - Transaction Failure Regression', () => {
   let service: ReadingOrchestratorService;
@@ -183,6 +184,33 @@ describe('ReadingOrchestratorService - Transaction Failure Regression', () => {
         [sessionCreate, usageUpdate],
         { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
       );
+    });
+
+    it('returns the dedicated active-session limit error at 3 active stories', async () => {
+      const mockPrisma = {
+        readingSession: {
+          count: jest.fn().mockResolvedValue(3),
+          create: jest.fn(),
+        },
+        dailyUsageLimit: {
+          update: jest.fn(),
+        },
+        $transaction: jest.fn(),
+      };
+
+      (service as any).prisma = mockPrisma;
+
+      try {
+        await service.createFreeSessionWithLimitTransaction('user-1', 'story-1', {});
+        throw new Error('Expected active-session limit error');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HttpException);
+        expect((error as HttpException).getStatus()).toBe(402);
+        expect((error as HttpException).getResponse()).toMatchObject({
+          error: 'ACTIVE_SESSION_LIMIT_REACHED',
+        });
+      }
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
   });
 });

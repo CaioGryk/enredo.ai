@@ -5,6 +5,7 @@ export const ReadingErrorCode = {
   STORY_NOT_FOUND: 'STORY_NOT_FOUND',
   PREMIUM_REQUIRED: 'PREMIUM_REQUIRED',
   DAILY_LIMIT_REACHED: 'DAILY_LIMIT_REACHED',
+  ACTIVE_SESSION_LIMIT_REACHED: 'ACTIVE_SESSION_LIMIT_REACHED',
   INSUFFICIENT_CREDITS: 'INSUFFICIENT_CREDITS',
   MODEL_ACCESS_DENIED: 'MODEL_ACCESS_DENIED',
   INVALID_READING_ACTION: 'INVALID_READING_ACTION',
@@ -21,13 +22,6 @@ export function throwReadingError(
 }
 
 export function throwBudgetDenied(blockReason: string): never {
-  if (blockReason.includes('Daily interaction limit')) {
-    return throwReadingError(
-      'Daily reading limit reached.',
-      ReadingErrorCode.DAILY_LIMIT_REACHED,
-      HttpStatus.PAYMENT_REQUIRED,
-    );
-  }
   if (blockReason.includes('Requires Premium')) {
     return throwReadingError(
       'This story requires a Premium subscription.',

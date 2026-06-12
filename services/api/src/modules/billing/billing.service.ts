@@ -1,7 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@common/prisma.service';
-import { FREE_DAILY_INTERACTION_LIMIT } from '@modules/reading/application/reading.constants';
 import {
   GetUserSubscriptionDto,
   CreditWalletDto,
@@ -52,9 +51,10 @@ export class BillingService {
 
   private getBenefits(type: SubscriptionType): string[] {
     const freeBenefits = [
-      `${FREE_DAILY_INTERACTION_LIMIT} interações gratuitas por dia`,
+      'Interações narrativas ilimitadas',
+      'Até 3 histórias ativas',
       'Acesso à biblioteca pública',
-      'Modelo padrão (OpenRouter Free)',
+      'Modelo de IA gratuito',
       'Respostas curtas',
     ];
 
@@ -265,11 +265,6 @@ export class BillingService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const subscription = await this.prisma.subscription.findUnique({
-      where: { userId },
-    });
-    const hasActivePremium = subscription?.type === SubscriptionType.PREMIUM && subscription.status === 'ACTIVE';
-
     const dailyLimit = await this.prisma.dailyUsageLimit.findUnique({
       where: {
         userId_date: { userId, date: today },
@@ -287,15 +282,12 @@ export class BillingService {
     });
 
     const dailyUsed = dailyLimit?.freeInteractionsUsed || 0;
-    const effectiveDailyLimit = hasActivePremium
-      ? 0
-      : dailyLimit?.limit || FREE_DAILY_INTERACTION_LIMIT;
 
     return {
-      dailyLimit: effectiveDailyLimit,
+      dailyLimit: 0,
       dailyUsed,
-      dailyRemaining: hasActivePremium ? 0 : effectiveDailyLimit - dailyUsed,
-      isLimited: hasActivePremium ? false : dailyUsed >= effectiveDailyLimit,
+      dailyRemaining: 0,
+      isLimited: false,
       monthlyUsage: {
         totalInteractions: monthlyUsage._sum.inputTokens ? 1 : 0,
         totalCostUsd: 0,

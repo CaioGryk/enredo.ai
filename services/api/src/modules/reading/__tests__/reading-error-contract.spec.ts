@@ -134,47 +134,6 @@ describe('ReadingOrchestratorService - Error Contract', () => {
     });
   });
 
-  describe('budget denial for daily limit', () => {
-    it('should return 402 with DAILY_LIMIT_REACHED when free user exceeds daily limit on sendAction', async () => {
-      const sessionWithEvents = {
-        id: 'session-1',
-        userId: 'user-1',
-        storyId: 'story-1',
-        status: ReadingSessionStatus.ACTIVE,
-        currentChapter: 1,
-        currentSceneIndex: 0,
-        selectedPremiseId: null,
-        selectedCharacterId: null,
-        story: publicStory,
-      };
-
-      jest.spyOn(service as any, 'getSessionWithStory').mockResolvedValue(sessionWithEvents);
-
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'user-1',
-        subscription: { type: SubscriptionType.FREE },
-        creditWallet: { balance: 0 },
-      });
-
-      mockPrisma.dailyUsageLimit.findUnique.mockResolvedValue({
-        id: 'usage-1',
-        freeInteractionsUsed: 10,
-        limit: 10,
-      });
-
-      try {
-        await service.sendAction('user-1', 'session-1', { action: 'Continue' });
-        fail('Expected HttpException to be thrown');
-      } catch (error) {
-        expect(error).toBeInstanceOf(HttpException);
-        expect((error as HttpException).getStatus()).toBe(402);
-        expect((error as HttpException).getResponse()).toMatchObject({
-          error: 'DAILY_LIMIT_REACHED',
-        });
-      }
-    });
-  });
-
   describe('insufficient credits', () => {
     it('should return 402 with INSUFFICIENT_CREDITS when PREMIUM user requests high-cost model without credits', async () => {
       const sessionWithEvents = {

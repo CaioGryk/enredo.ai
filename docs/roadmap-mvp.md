@@ -113,7 +113,7 @@ Implementar planos, créditos, limites e trilha de auditoria de gastos.
 
 ### Entregue
 - Free/Premium.
-- Limite diário Free.
+- Interações narrativas ilimitadas no Free, com limite de 3 histórias ativas e LLM gratuita.
 - Limite de 3 sessões ativas para Free.
 - Modelos por plano/tier.
 - Modelos `CREDITS`.

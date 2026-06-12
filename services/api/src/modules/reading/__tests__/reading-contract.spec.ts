@@ -173,6 +173,9 @@ describe('ReadingOrchestratorService - Reading Contract Fix', () => {
       const usage = (service as any).formatUsage({ freeInteractionsUsed: 3, limit: 10 }, undefined);
       expect(typeof usage.creditsRemaining).toBe('number');
       expect(usage.creditsRemaining).toBe(0);
+      expect(usage.dailyLimit).toBe(0);
+      expect(usage.dailyRemaining).toBe(0);
+      expect(usage.isLimited).toBe(false);
     });
 
     it('should always return numeric creditsRemaining when balance is null', () => {

@@ -5,6 +5,7 @@ import { goBackSafe } from './navigation-helper';
 
 export const READING_ERROR_CODES = {
   DAILY_LIMIT_REACHED: 'DAILY_LIMIT_REACHED',
+  ACTIVE_SESSION_LIMIT_REACHED: 'ACTIVE_SESSION_LIMIT_REACHED',
   INSUFFICIENT_CREDITS: 'INSUFFICIENT_CREDITS',
   PREMIUM_REQUIRED: 'PREMIUM_REQUIRED',
   MODEL_ACCESS_DENIED: 'MODEL_ACCESS_DENIED',
@@ -22,10 +23,15 @@ export function handleReadingError(e: any): void {
 
   if (errorCode) {
     switch (errorCode) {
-      case READING_ERROR_CODES.DAILY_LIMIT_REACHED:
-        Alert.alert('Limite diário atingido', 'Você atingiu o limite de leitura do seu plano atual.', [
+      case READING_ERROR_CODES.ACTIVE_SESSION_LIMIT_REACHED:
+        Alert.alert('Limite de histórias ativas', 'Seu plano permite até 3 histórias ativas. Abandone uma história ou conheça o Premium.', [
           { text: 'Cancelar', style: 'cancel' },
           { text: 'Ver Premium', onPress: () => router.push('/(tabs)/upgrade') },
+        ]);
+        return;
+      case READING_ERROR_CODES.DAILY_LIMIT_REACHED:
+        Alert.alert('Atualização necessária', 'As interações agora são ilimitadas. Atualize o aplicativo e tente novamente.', [
+          { text: 'OK', style: 'default' },
         ]);
         return;
       case READING_ERROR_CODES.INSUFFICIENT_CREDITS:

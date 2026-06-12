@@ -27,7 +27,6 @@ Crie um arquivo `.env` em `services/api/` baseado no `.env.example`.
 | `LLM_MOCK_MODE` | Usar mock em vez de LLM real | `false` |
 | `DEFAULT_FREE_MODEL` | Modelo padrão para Free | `openrouter/free` |
 | `DEFAULT_PREMIUM_MODEL` | Modelo padrão para Premium | `gpt-4.1-nano` |
-| `FREE_DAILY_INTERACTIONS` | Limite diário Free | `10` |
 | `FREE_MAX_TOKENS_PER_RESPONSE` | Máximo de tokens por resposta Free | `500` |
 | `PORT` | Porta do backend | `3001` |
 | `FRONTEND_URL` | URL do frontend | `https://enredo.ai` |
@@ -152,11 +151,11 @@ A resposta deve incluir:
 - `history`: Array de eventos narrativos (cenas anteriores e escolhas)
 - `currentScene`: Cena atual com texto e escolhas
 
-## 9. Confirmar Limites do Plano Free
+## 9. Confirmar Interações Ilimitadas e Limite de Histórias Ativas
 
 ```bash
 # Usuário Free: fazer mais de 10 interações no dia
-# O 11º request deve retornar erro 403 com mensagem de limite
+# Todas as interações devem continuar usando a LLM gratuita
 
 for i in {1..12}; do
   echo "Request $i"
@@ -168,13 +167,8 @@ for i in {1..12}; do
 done
 ```
 
-O 11º request deve retornar:
-```json
-{
-  "message": "Limite diário de interações atingido",
-  "code": "DAILY_LIMIT_REACHED"
-}
-```
+Nenhum request deve retornar `DAILY_LIMIT_REACHED`. Ao tentar criar uma quarta
+história ativa, a API deve retornar `ACTIVE_SESSION_LIMIT_REACHED`.
 
 ## 10. Confirmar Modelos Premium Bloqueados para Free
 

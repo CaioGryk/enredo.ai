@@ -260,17 +260,18 @@ describe('Model Entitlement', () => {
     expect(result.reason).toContain('Premium');
   });
 
-  it('FREE user cannot access CREDITS tier models without credits', () => {
+  it('FREE user cannot access CREDITS tier models', () => {
     const creditsModel = getModelById('claude-3-5-sonnet-20241022')!;
     const result = canUserAccessModel(creditsModel, SubscriptionType.FREE, 0);
     expect(result.allowed).toBe(false);
-    expect(result.reason).toContain('credits');
+    expect(result.reason).toContain('Premium');
   });
 
-  it('FREE user with sufficient credits CAN access CREDITS models', () => {
+  it('FREE user with sufficient credits still cannot access CREDITS models', () => {
     const creditsModel = getModelById('claude-3-5-sonnet-20241022')!;
     const result = canUserAccessModel(creditsModel, SubscriptionType.FREE, 5);
-    expect(result.allowed).toBe(true);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain('Premium');
   });
 
   it('PREMIUM user can access FREE and PREMIUM models', () => {
@@ -515,8 +516,11 @@ describe('AiService Mock Mode', () => {
     const premiumResult = canUserAccessModel(creditsModel, SubscriptionType.PREMIUM, 1);
     expect(premiumResult.allowed).toBe(false);
 
-    const enoughBalance = canUserAccessModel(creditsModel, SubscriptionType.FREE, 5);
-    expect(enoughBalance.allowed).toBe(true);
+    const freeWithBalance = canUserAccessModel(creditsModel, SubscriptionType.FREE, 5);
+    expect(freeWithBalance.allowed).toBe(false);
+
+    const premiumWithBalance = canUserAccessModel(creditsModel, SubscriptionType.PREMIUM, 5);
+    expect(premiumWithBalance.allowed).toBe(true);
   });
 
   it('FREE default model is Groq free model', () => {
@@ -1985,7 +1989,7 @@ describe('AiService Mock Mode', () => {
         genre: 'mistério',
         userAction: 'abrir a porta',
         userActionType: UserActionType.CHOICE,
-        plan: SubscriptionType.FREE,
+        plan: SubscriptionType.PREMIUM,
         isCinematic: true,
         walletBalance: 10,
       });

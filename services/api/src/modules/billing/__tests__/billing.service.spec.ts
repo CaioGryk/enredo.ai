@@ -269,15 +269,15 @@ describe('BillingService', () => {
       prisma.modelUsage.aggregate.mockResolvedValue({ _sum: { inputTokens: null, outputTokens: null } });
     });
 
-    it('should return free daily limit when user has no active premium subscription', async () => {
+    it('should return unlimited daily usage for free users', async () => {
       prisma.subscription.findUnique.mockResolvedValue({ type: SubscriptionType.FREE, status: 'ACTIVE' });
       prisma.dailyUsageLimit.findUnique.mockResolvedValue({ freeInteractionsUsed: 3, limit: 10 });
 
       const result = await service.getUsageStats('user-1');
 
-      expect(result.dailyLimit).toBe(10);
+      expect(result.dailyLimit).toBe(0);
       expect(result.dailyUsed).toBe(3);
-      expect(result.dailyRemaining).toBe(7);
+      expect(result.dailyRemaining).toBe(0);
       expect(result.isLimited).toBe(false);
     });
 

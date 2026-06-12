@@ -375,7 +375,7 @@ function ReaderMock({
       </ScrollView>
 
       <View style={styles.modelDock}>
-        <Text style={styles.usageText}>4 / 10 interações hoje</Text>
+        <Text style={styles.usageText}>Interações narrativas ilimitadas</Text>
         <View style={styles.progressTrack}>
           <View style={styles.progressFill} />
         </View>

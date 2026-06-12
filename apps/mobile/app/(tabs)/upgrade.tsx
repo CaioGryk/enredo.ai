@@ -233,7 +233,7 @@ function FreeCard({ active }: { active: boolean }) {
       </View>
 
       <View style={styles.featureListMuted}>
-        <Feature icon={<Check color={colors.textMuted} size={18} />} text="10 interações diárias" muted />
+        <Feature icon={<Check color={colors.textMuted} size={18} />} text="Interações narrativas ilimitadas" muted />
         <Feature icon={<Check color={colors.textMuted} size={18} />} text="3 histórias ativas" muted />
         <Feature icon={<Check color={colors.textMuted} size={18} />} text="Modelo IA padrão" muted />
         <Feature icon={<Info color={colors.textMuted} size={18} />} text="Exibição de anúncios" muted />
