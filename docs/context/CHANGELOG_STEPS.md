@@ -8696,6 +8696,11 @@ Brazil, so network distance also contributes to every uncached request.
 - Backend TypeScript compilation: passed.
 - Library service and controller tests: 2 suites passed, 41 tests passed.
 - Git whitespace validation: passed.
+- Railway production deployment for commit `6f3a9fe`: successful.
+- Production health check: `200 OK`.
+- Production catalog cold request: about 7.07 seconds.
+- Production catalog cached requests: about 0.70 and 0.62 seconds, reducing
+  repeat-request latency by roughly 90%.
 
 ### Follow-up performance work
 
