@@ -8709,6 +8709,67 @@ Brazil, so network distance also contributes to every uncached request.
   `https://expo.dev/artifacts/eas/296C-BYWPMXmr-W0tkdva4wdMaPKj0VMsV5nCS5mP8o.apk`
 - APK artifact expiration: June 26, 2026.
 
+---
+
+## Step 125 — Evaluate Railway Region for Brazilian Beta Users
+
+**Date:** June 12, 2026
+
+### Current topology
+
+- Mobile beta users: primarily Brazil.
+- Railway backend: US West, California.
+- Supabase database and transaction pooler: `sa-east-1`, São Paulo.
+
+The current request path can cross the continent several times:
+
+`Brazil user -> California API -> São Paulo database -> California API -> Brazil user`
+
+This contributes to cold-request latency even after application-level caching.
+
+### Railway region availability
+
+Railway currently documents four deployment regions:
+
+- US West, California
+- US East, Virginia
+- Europe West, Amsterdam
+- Southeast Asia, Singapore
+
+Railway does not currently offer a Brazil or South America deployment region.
+
+### Recommendation
+
+Move the backend service from **US West, California** to
+**US East, Virginia**.
+
+Virginia is the best available compromise because it is materially closer to
+Brazil and São Paulo than California. The public Railway domain remains the
+same, so the mobile application does not require another APK build after the
+region migration.
+
+### Migration validation
+
+After changing the region and redeploying:
+
+- Confirm `/api/health` returns `200 OK` with `database: "ok"`.
+- Measure health and library cold-request latency from Brazil.
+- Measure repeated catalog requests to confirm the application cache remains
+  effective.
+- Test registration, login, library loading, and story start from Android.
+
+### Longer-term option
+
+If latency remains unacceptable, evaluate a backend host with a São Paulo
+region. Keeping both the API and Supabase in `sa-east-1` would provide the
+lowest network latency, but changing hosting providers is a larger operational
+decision than the Railway region migration.
+
+### Source
+
+- Railway deployment regions:
+  `https://docs.railway.com/reference/regions`
+
 ### Follow-up performance work
 
 - Story start still waits for the first AI scene before navigation. A future
