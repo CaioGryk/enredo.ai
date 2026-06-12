@@ -8770,6 +8770,85 @@ decision than the Railway region migration.
 - Railway deployment regions:
   `https://docs.railway.com/reference/regions`
 
+---
+
+## Step 126 — Recommend a São Paulo Backend Host
+
+**Date:** June 12, 2026
+
+### Decision
+
+For the next infrastructure phase, prefer moving the NestJS backend to
+**Google Cloud Run in São Paulo (`southamerica-east1`)** instead of keeping the
+long-term production API on Railway.
+
+The Supabase database is already in AWS `sa-east-1`, São Paulo. Running the API
+in the same metropolitan region removes the current intercontinental API to
+database path and places the public backend much closer to Brazilian beta
+users.
+
+### Why Cloud Run
+
+- Native São Paulo region.
+- Runs the existing production Docker container.
+- Managed TLS, revisions, logs, autoscaling, and rollback.
+- Can deploy continuously from a Git repository.
+- Supports a minimum instance when avoiding cold starts is more important than
+  minimizing cost.
+- Does not require moving or duplicating the Supabase database.
+
+### Project readiness
+
+The backend is already largely migration-ready:
+
+- `services/api/Dockerfile` provides a multi-stage production image.
+- The runtime uses the platform-provided `PORT`.
+- OpenSSL and CA certificates are included for Prisma.
+- The production health endpoint is available at `/api/health`.
+- Runtime configuration is already environment-variable based.
+
+### Alternative
+
+Fly.io also documents a São Paulo region named `gru` and can run the same
+container. It is a viable simpler alternative, but Cloud Run is preferred for
+this project because of its managed deployment, observability, revisions, and
+scaling controls.
+
+### Important mobile consideration
+
+Changing from the Railway-generated URL to a Cloud Run-generated URL would
+require another APK because the preview build currently embeds
+`EXPO_PUBLIC_API_URL`.
+
+Before migration, create a stable custom API domain such as
+`api.enredo.ai`. Point the mobile app to that domain once. Future hosting
+changes can then be made through DNS without rebuilding the application.
+
+### Safe migration sequence
+
+1. Create the Cloud Run service in `southamerica-east1`.
+2. Copy production environment variables through Secret Manager or Cloud Run
+   secrets.
+3. Deploy the existing backend container with no public traffic cutover.
+4. Validate health, authentication, catalog, image routes, and story start.
+5. Compare latency against Railway from a Brazilian Android device.
+6. Configure `api.enredo.ai` and TLS.
+7. Build one APK that uses the stable API domain.
+8. Keep Railway available temporarily for rollback.
+9. Move DNS traffic and monitor errors and latency.
+10. Remove Railway only after the beta remains stable.
+
+### Sources
+
+- Cloud Run locations:
+  `https://cloud.google.com/run/docs/locations`
+- Cloud Run minimum instances:
+  `https://cloud.google.com/run/docs/configuring/min-instances`
+- Cloud Run pricing:
+  `https://cloud.google.com/run/pricing`
+- Fly.io regions:
+  `https://fly.io/docs/reference/regions/`
+
 ### Follow-up performance work
 
 - Story start still waits for the first AI scene before navigation. A future
