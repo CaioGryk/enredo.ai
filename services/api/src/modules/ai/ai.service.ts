@@ -242,6 +242,7 @@ export class AiService {
   }
 
   private async generateWithProviderFallback(prompt: string, config: GenerateConfig, context?: AiGenerationContext): Promise<LLMResponse> {
+    const startedAt = Date.now();
     const requestedModelId = config.model || getDefaultFreeModel().id;
 
     if (this.isMockMode()) {
@@ -268,13 +269,20 @@ export class AiService {
       }
 
       try {
+        const attemptStartedAt = Date.now();
         this.logger.log(
           `Attempting provider: ${candidate.provider.name}, model: ${candidate.modelId}`,
         );
-        return await candidate.provider.generate(prompt, {
+        const response = await candidate.provider.generate(prompt, {
           ...config,
           model: candidate.modelId,
         });
+        this.logger.log(
+          `ProviderTiming context=${context || 'UNKNOWN'} provider=${candidate.provider.name} ` +
+          `model=${candidate.modelId} attemptMs=${Date.now() - attemptStartedAt} ` +
+          `totalMs=${Date.now() - startedAt}`,
+        );
+        return response;
       } catch (error) {
         lastError = error;
         const message = error instanceof Error ? error.message : String(error);

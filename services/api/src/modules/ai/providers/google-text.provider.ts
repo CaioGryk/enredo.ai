@@ -9,12 +9,14 @@ export class GoogleTextProvider implements LLMProvider {
   name = 'google';
   private readonly apiKey: string;
   private readonly defaultModel: string;
+  private readonly requestTimeoutMs: number;
   private readonly baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
   private readonly logger = new Logger(GoogleTextProvider.name);
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GOOGLE_AI_API_KEY') || '';
     this.defaultModel = this.configService.get<string>('GOOGLE_TEXT_MODEL') || 'gemini-2.5-flash-lite';
+    this.requestTimeoutMs = Number(this.configService.get<string>('TEXT_PROVIDER_TIMEOUT_MS')) || 20_000;
   }
 
   async generate(prompt: string, config: GenerateConfig): Promise<LLMResponse> {
@@ -47,6 +49,7 @@ export class GoogleTextProvider implements LLMProvider {
           temperature: config.temperature || 0.7,
         },
       }),
+      signal: AbortSignal.timeout(this.requestTimeoutMs),
     });
 
     if (!response.ok) {

@@ -9657,3 +9657,53 @@ tab. The newer `sb_secret_...` key caused the Storage endpoint to return
 - The local Nest build could not clean an existing `dist/tsconfig.tsbuildinfo`
   because of filesystem ownership (`EPERM`); direct TypeScript validation and
   the full test suite passed.
+
+## Step 134 — Faster first-scene startup and production timing telemetry
+
+**Date:** 2026-06-12
+
+### Investigation
+
+- Starting a story uses a deferred flow: the mobile app creates the reading
+  session first, opens the reader, and the reader request generates scene zero.
+- The main user-visible wait is therefore the first LLM response, followed by
+  persistence of the generated event and narrative memory.
+- The critical path also contained redundant database work:
+  - narrative preferences were loaded even when scene generation was deferred;
+  - public approved stories were loaded again for quality validation;
+  - selected premise and character were queried again after loading the session;
+  - first-scene persistence writes ran sequentially.
+
+### Backend optimization
+
+- Deferred session creation no longer loads narrative preferences before
+  returning to the mobile app.
+- Public approved and admin catalog stories skip the redundant quality lookup.
+- Session loading now includes the selected premise and character.
+- Initial narrative-memory creation returns the created/existing record,
+  removing a follow-up read.
+- Session, model-usage, and memory writes after scene generation now run in
+  parallel after the narrative event is created.
+
+### Observability
+
+Railway logs now expose:
+
+- `StartReadingTiming`: deferred session creation time.
+- `GetSessionTiming`: reader load and total request time.
+- `FirstSceneTiming`: context, LLM, persistence, and total time.
+- `ProviderTiming`: provider/model attempt time and fallback-chain total.
+
+These logs distinguish database/region latency from model-provider latency.
+
+### Provider timeout
+
+- Groq, Google text, and OpenRouter requests now have a bounded timeout.
+- New optional Railway variable:
+
+```env
+TEXT_PROVIDER_TIMEOUT_MS=20000
+```
+
+- The default is 20 seconds. A timed-out provider is released to the existing
+  fallback chain instead of leaving the reader waiting indefinitely.

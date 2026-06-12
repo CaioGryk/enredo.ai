@@ -27,6 +27,7 @@ export class GroqProvider implements LLMProvider {
   private readonly apiKey: string;
   private readonly defaultModel: string;
   private readonly readingModel: string;
+  private readonly requestTimeoutMs: number;
   private readonly baseUrl = 'https://api.groq.com/openai/v1';
   private readonly logger = new Logger(GroqProvider.name);
 
@@ -34,6 +35,7 @@ export class GroqProvider implements LLMProvider {
     this.apiKey = this.configService.get<string>('GROQ_API_KEY') || '';
     this.defaultModel = this.configService.get<string>('GROQ_MODEL') || 'llama-3.3-70b-versatile';
     this.readingModel = this.configService.get<string>('GROQ_READING_MODEL') || 'openai/gpt-oss-20b';
+    this.requestTimeoutMs = Number(this.configService.get<string>('TEXT_PROVIDER_TIMEOUT_MS')) || 20_000;
   }
 
   async generate(prompt: string, config: GenerateConfig): Promise<LLMResponse> {
@@ -76,6 +78,7 @@ export class GroqProvider implements LLMProvider {
             }
           : {}),
       }),
+      signal: AbortSignal.timeout(this.requestTimeoutMs),
     });
 
     if (!response.ok) {

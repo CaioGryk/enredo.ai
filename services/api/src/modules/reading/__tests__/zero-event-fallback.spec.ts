@@ -59,6 +59,19 @@ describe('ReadingOrchestratorService - Zero-Event Fallback', () => {
       moderationStatus: 'APPROVED' as any,
       creatorUserId: null,
     },
+    premise: {
+      id: 'premise-1',
+      storyId: 'story-1',
+      title: 'The Beginning',
+      synopsis: 'An epic start',
+    },
+    character: {
+      id: 'character-1',
+      premiseId: 'premise-1',
+      name: 'Hero',
+      roleLabel: 'The Hero',
+      narrativeFunction: 'HERO',
+    },
   };
 
   const mockSessionNoPremise = {
@@ -81,6 +94,8 @@ describe('ReadingOrchestratorService - Zero-Event Fallback', () => {
       moderationStatus: 'APPROVED' as any,
       creatorUserId: null,
     },
+    premise: null,
+    character: null,
   };
 
   const mockPremise = {
@@ -177,13 +192,8 @@ describe('ReadingOrchestratorService - Zero-Event Fallback', () => {
     it('should resolve premise and character when selectedPremiseId and selectedCharacterId exist', async () => {
       const result = await service.getSessionWithStatus('user-1', 'session-1');
 
-      expect(mockPrismaInstance.storyPremise.findUnique).toHaveBeenCalledWith({
-        where: { id: 'premise-1' },
-        include: { characters: true },
-      });
-      expect(mockPrismaInstance.storyPlayableCharacter.findFirst).toHaveBeenCalledWith({
-        where: { id: 'character-1', premiseId: 'premise-1' },
-      });
+      expect(mockPrismaInstance.storyPremise.findUnique).not.toHaveBeenCalled();
+      expect(mockPrismaInstance.storyPlayableCharacter.findFirst).not.toHaveBeenCalled();
 
       expect(narrativeEngine.generateScene).toHaveBeenCalledWith(
         expect.objectContaining({

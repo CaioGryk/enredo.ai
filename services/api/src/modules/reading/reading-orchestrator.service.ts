@@ -1,6 +1,6 @@
-import { Injectable, Inject, HttpException, Optional } from '@nestjs/common';
+import { Injectable, Inject, HttpException, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, ReadingSession, Story, NarrativeMemory, NarrativeEvent, StoryPremise, StoryPlayableCharacter, SubscriptionType, ReadingSessionStatus, StoryVisibility, StoryModerationStatus, UserActionType } from '@prisma/client';
+import { Prisma, ReadingSession, Story, NarrativeMemory, NarrativeEvent, StoryPremise, StoryPlayableCharacter, SubscriptionType, ReadingSessionStatus, StoryVisibility, StoryModerationStatus, StoryOrigin, UserActionType } from '@prisma/client';
 import { PrismaService } from '@common/prisma.service';
 import { NarrativeEngine } from './narrative/narrative-engine.service';
 import { NarrativeContextBuilder, StoryCodex } from './narrative/narrative-context.builder';
@@ -17,6 +17,7 @@ const READER_RECENT_EVENT_LIMIT = 8;
 
 @Injectable()
 export class ReadingOrchestratorService {
+  private readonly logger = new Logger(ReadingOrchestratorService.name);
   private budgetGuard: GenerationBudgetGuard;
   private storyQualityService: StoryQualityService;
   private readonly pendingFirstScenes = new Map<string, Promise<{
@@ -365,7 +366,13 @@ export class ReadingOrchestratorService {
   async getSessionWithStory(sessionId: string): Promise<(ReadingSession & { story: Story }) | null> {
     return this.prisma.readingSession.findUnique({
       where: { id: sessionId },
-      include: { story: true },
+      include: {
+        story: true,
+        premise: {
+          include: { characters: true },
+        },
+        character: true,
+      },
     });
   }
 
@@ -721,11 +728,10 @@ export class ReadingOrchestratorService {
     isCinematic?: boolean,
     narrativePolicy?: any,
   ): Promise<{ id: string; chapterNumber: number; sceneIndex: number; sceneText: string; choices: string[]; sceneMetadata?: { emotion?: string; pacing?: string } }> {
-    await this.createInitialMemory(session.id, session.story || await this.findStoryById(session.storyId), premise, character);
-
-    const narrativeMemory = await this.findMemoryBySessionId(session.id);
-
+    const startedAt = Date.now();
     const story = session.story || await this.findStoryById(session.storyId);
+    const narrativeMemory = await this.createInitialMemory(session.id, story, premise, character);
+    const contextReadyAt = Date.now();
 
     const input: GenerateSceneInput = {
       userId,
@@ -751,6 +757,7 @@ export class ReadingOrchestratorService {
     } catch (error) {
       this.mapNarrativeGenerationError(error);
     }
+    const generatedAt = Date.now();
 
     const narrativeEvent = await this.createNarrativeEvent({
       sessionId: session.id,
@@ -766,20 +773,21 @@ export class ReadingOrchestratorService {
       adultContentGenerated: narrativePolicy?.adultContentAllowed === true,
     });
 
-    await this.updateReadingSession(session.id, { currentSceneIndex: 0 });
-
-    await this.createModelUsage({
-      userId,
-      sessionId: session.id,
-      model: result.modelUsed,
-      inputTokens: result.tokenUsage?.inputTokens || 0,
-      outputTokens: result.tokenUsage?.outputTokens || 0,
-      costUsed: 0,
-      feature: 'SCENE_GENERATION',
-    });
+    const persistenceTasks: Promise<any>[] = [
+      this.updateReadingSession(session.id, { currentSceneIndex: 0 }),
+      this.createModelUsage({
+        userId,
+        sessionId: session.id,
+        model: result.modelUsed,
+        inputTokens: result.tokenUsage?.inputTokens || 0,
+        outputTokens: result.tokenUsage?.outputTokens || 0,
+        costUsed: 0,
+        feature: 'SCENE_GENERATION',
+      }),
+    ];
 
     if (result.memoryPatch) {
-      await this.updateNarrativeMemory(session.id, {
+      persistenceTasks.push(this.updateNarrativeMemory(session.id, {
         summary: result.memoryPatch.summary || narrativeMemory?.summary || '',
         worldState: result.memoryPatch.worldState || narrativeMemory?.worldState || '',
         characterState: result.memoryPatch.characterState || narrativeMemory?.characterState || '',
@@ -788,8 +796,16 @@ export class ReadingOrchestratorService {
         constraints: result.memoryPatch.constraints || narrativeMemory?.constraints || '',
         sceneCount: 1,
         codex: result.memoryPatch.codex as any,
-      });
+      }));
     }
+
+    await Promise.all(persistenceTasks);
+    const completedAt = Date.now();
+    this.logger.log(
+      `FirstSceneTiming session=${session.id} model=${result.modelUsed} ` +
+      `contextMs=${contextReadyAt - startedAt} llmMs=${generatedAt - contextReadyAt} ` +
+      `persistMs=${completedAt - generatedAt} totalMs=${completedAt - startedAt}`,
+    );
 
     return {
       id: narrativeEvent.id,
@@ -846,7 +862,7 @@ export class ReadingOrchestratorService {
     }
   }
 
-  private async createInitialMemory(sessionId: string, story: any, premise?: any, character?: any): Promise<void> {
+  private async createInitialMemory(sessionId: string, story: any, premise?: any, character?: any): Promise<any> {
     const charactersList = NarrativeContextBuilder.buildStoryCharacters(story, premise, character)
       .map((c: any) => {
         const traits = [
@@ -881,7 +897,7 @@ export class ReadingOrchestratorService {
       character: character ? { name: character.name, roleLabel: character.roleLabel, narrativeFunction: character.narrativeFunction, personality: character.personality, motivation: character.motivation, secret: character.secret, relationshipToPlayer: character.relationshipToPlayer, initialGoal: character.initialGoal, startingSituation: character.startingSituation, conflictPotential: character.conflictPotential } : null,
     });
 
-    await this.prisma.narrativeMemory.upsert({
+    return this.prisma.narrativeMemory.upsert({
       where: { sessionId },
       create: {
         sessionId,
@@ -943,13 +959,13 @@ export class ReadingOrchestratorService {
   }
 
   async startReading(userId: string, dto: any): Promise<any> {
+    const startedAt = Date.now();
     const [story, user, usage] = await Promise.all([
       this.getStoryWithPremises(dto.storyId),
       this.getUserWithSubscription(userId),
       this.getOrCreateDailyLimit(userId),
     ]);
-
-    const narrativePolicy = await this.getEffectiveNarrativePolicy(userId);
+    const initialDataReadyAt = Date.now();
 
     if (!story) {
       throwReadingError('Story not found.', ReadingErrorCode.STORY_NOT_FOUND, 404);
@@ -959,8 +975,15 @@ export class ReadingOrchestratorService {
     // Private or non-approved stories require creator access
     this.assertCanAccessStory(story, userId);
 
-    // Validate story quality before starting reading
-    await this.storyQualityService.validateStoryQuality(story.id);
+    // Public approved catalog stories already passed moderation. Avoid loading
+    // the same story a second time on the reader's critical path.
+    if (
+      story.origin !== StoryOrigin.ADMIN &&
+      !(story.visibility === StoryVisibility.PUBLIC &&
+        story.moderationStatus === StoryModerationStatus.APPROVED)
+    ) {
+      await this.storyQualityService.validateStoryQuality(story.id);
+    }
 
     if (story.isPremium && user?.subscription?.type === SubscriptionType.FREE) {
       throwReadingError('This story requires a Premium subscription.', ReadingErrorCode.PREMIUM_REQUIRED, 402);
@@ -1007,6 +1030,10 @@ export class ReadingOrchestratorService {
         }
 
         if (dto.deferFirstScene) {
+          this.logger.log(
+            `StartReadingTiming story=${dto.storyId} session=${existingSession.id} reused=true ` +
+            `deferred=true loadMs=${initialDataReadyAt - startedAt} totalMs=${Date.now() - startedAt}`,
+          );
           return {
             session: {
               ...this.formatSession(existingSession),
@@ -1018,6 +1045,7 @@ export class ReadingOrchestratorService {
           };
         }
 
+        const narrativePolicy = await this.getEffectiveNarrativePolicy(userId);
         const firstScene = await this.generateFirstSceneOnce(
           existingSession,
           userId,
@@ -1077,6 +1105,10 @@ export class ReadingOrchestratorService {
     }
 
     if (dto.deferFirstScene) {
+      this.logger.log(
+        `StartReadingTiming story=${dto.storyId} session=${session.id} reused=false ` +
+        `deferred=true loadMs=${initialDataReadyAt - startedAt} totalMs=${Date.now() - startedAt}`,
+      );
       return {
         session: {
           ...this.formatSession(session),
@@ -1088,6 +1120,7 @@ export class ReadingOrchestratorService {
       };
     }
 
+    const narrativePolicy = await this.getEffectiveNarrativePolicy(userId);
     const firstScene = await this.generateFirstSceneOnce(
       session,
       userId,
@@ -1126,6 +1159,7 @@ export class ReadingOrchestratorService {
   }
 
   async getSessionWithStatus(userId: string, sessionId: string): Promise<any> {
+    const startedAt = Date.now();
     const sessionWithStory = await this.getSessionWithStory(sessionId);
 
     if (!sessionWithStory) {
@@ -1146,19 +1180,11 @@ export class ReadingOrchestratorService {
       this.getSessionEvents(sessionId, READER_RECENT_EVENT_LIMIT),
       this.getEffectiveNarrativePolicy(userId),
     ]);
+    const sessionDataReadyAt = Date.now();
 
     if (events.length === 0) {
-      const premise = sessionWithStory.selectedPremiseId
-        ? await this.prisma.storyPremise.findUnique({
-            where: { id: sessionWithStory.selectedPremiseId },
-            include: { characters: true },
-          })
-        : null;
-      const character = sessionWithStory.selectedCharacterId && premise
-        ? await this.prisma.storyPlayableCharacter.findFirst({
-            where: { id: sessionWithStory.selectedCharacterId, premiseId: premise.id },
-          })
-        : null;
+      const premise = (sessionWithStory as any).premise || null;
+      const character = (sessionWithStory as any).character || null;
 
       // Call guard before generateFirstScene
       const budgetInput: GenerationBudgetInput = {
@@ -1189,6 +1215,10 @@ export class ReadingOrchestratorService {
         false,
         narrativePolicy,
       );
+      this.logger.log(
+        `GetSessionTiming session=${sessionId} generated=true ` +
+        `loadMs=${sessionDataReadyAt - startedAt} totalMs=${Date.now() - startedAt}`,
+      );
       return {
         session: {
           ...this.formatSession(sessionWithStory),
@@ -1199,6 +1229,10 @@ export class ReadingOrchestratorService {
       };
     }
 
+    this.logger.log(
+      `GetSessionTiming session=${sessionId} generated=false ` +
+      `loadMs=${sessionDataReadyAt - startedAt} totalMs=${Date.now() - startedAt}`,
+    );
     return {
       session: {
         ...this.formatSession(sessionWithStory),

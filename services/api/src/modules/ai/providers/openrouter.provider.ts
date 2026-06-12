@@ -31,6 +31,7 @@ export class OpenRouterProvider implements LLMProvider {
   name = 'openrouter';
   private apiKey: string;
   private baseUrl = 'https://openrouter.ai/api/v1';
+  private readonly requestTimeoutMs: number;
   private readonly logger = new Logger(OpenRouterProvider.name);
 
   constructor(
@@ -39,6 +40,7 @@ export class OpenRouterProvider implements LLMProvider {
   ) {
     setDefaultResultOrder('ipv4first');
     this.apiKey = this.configService.get<string>('OPENROUTER_API_KEY') || '';
+    this.requestTimeoutMs = Number(this.configService.get<string>('TEXT_PROVIDER_TIMEOUT_MS')) || 20_000;
   }
 
   async generate(prompt: string, config: GenerateConfig): Promise<LLMResponse> {
@@ -84,6 +86,7 @@ export class OpenRouterProvider implements LLMProvider {
         max_tokens: config.maxTokens || 500,
         temperature: config.temperature || 0.7,
       }),
+      signal: AbortSignal.timeout(this.requestTimeoutMs),
     });
 
     if (!response.ok) {
