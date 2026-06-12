@@ -8849,6 +8849,222 @@ changes can then be made through DNS without rebuilding the application.
 - Fly.io regions:
   `https://fly.io/docs/reference/regions/`
 
+---
+
+## Step 127 — Cloud Run Technical and Cost Assessment
+
+**Date:** June 12, 2026
+
+### How Cloud Run works
+
+Cloud Run runs an OCI container as a stateless HTTP service. It creates
+immutable revisions for deployments, routes HTTPS traffic to the configured
+container port, and automatically scales the number of instances according to
+traffic and concurrency.
+
+- It can scale to zero when idle.
+- The default request timeout is 5 minutes and can be increased to 60 minutes.
+- The default concurrency is 80 requests per instance and can be configured up
+  to 1,000.
+- Deployments support gradual traffic splitting and rollback between revisions.
+- The filesystem is ephemeral and must not be used as permanent storage.
+- TLS is terminated by Cloud Run.
+- Cloud Run injects the `PORT` environment variable.
+
+### Recommended Enredo.ai configuration
+
+Initial beta configuration:
+
+- Region: `southamerica-east1` (São Paulo).
+- Billing: request-based.
+- CPU: 1 vCPU.
+- Memory: start with 1 GiB and measure actual usage.
+- Concurrency: 8 to 10, rather than the default 80.
+- Minimum instances: 1 during controlled beta testing.
+- Maximum instances: 3 initially.
+- Startup CPU boost: enabled.
+- Request timeout: 300 seconds initially.
+- Public ingress with application JWT authentication.
+- Startup and liveness checks using `/api/health`.
+
+The low concurrency and maximum instance cap protect the Supabase PgBouncer
+pool while long AI requests are running. These values should be adjusted using
+production metrics rather than increased preemptively.
+
+### Cloud Run compute pricing
+
+Cloud Run is billed in 100 millisecond increments after the monthly free tier.
+For request-based services, the published free tier is:
+
+- 180,000 vCPU-seconds.
+- 360,000 GiB-seconds of memory.
+- 2 million requests.
+
+Published base request-based rates are:
+
+- Active CPU: US$ 0.000024 per vCPU-second.
+- Idle minimum-instance CPU: US$ 0.0000025 per vCPU-second.
+- Active or idle memory: US$ 0.0000025 per GiB-second.
+- Requests above the free tier: US$ 0.40 per million.
+
+São Paulo is a Tier 2 pricing region. The Google pricing calculator and the
+account's local Cloud SKU prices must be used before budget approval; the free
+tier is applied as a spending-based Tier 1 discount.
+
+### Expected beta cost ranges
+
+These are planning estimates, not invoices:
+
+- Scale-to-zero, low traffic: compute can remain close to US$ 0/month after the
+  free tier, but users can experience cold starts.
+- One warm instance, 1 vCPU and 512 MiB: the published base idle rates are
+  roughly US$ 9.72/month before active usage and regional price differences.
+- One warm instance, 1 vCPU and 1 GiB: roughly US$ 12.96/month at the published
+  base idle rates before active usage and regional price differences.
+- Continuous active use is significantly more expensive than an idle minimum
+  instance, so request-based billing is important for this beta.
+
+Set a billing budget and alerts before exposing the service publicly.
+
+### Network cost
+
+Inbound traffic is free. Responses sent to South American users through the
+Premium Network Tier are published at approximately:
+
+- First 1,024 GiB: US$ 0.19/GiB.
+- 1,024 to 10,240 GiB: US$ 0.18/GiB.
+
+Illustrative response-transfer costs:
+
+- 10 GiB/month: about US$ 1.90.
+- 50 GiB/month: about US$ 9.50.
+- 100 GiB/month: about US$ 19.00.
+
+This makes image optimization a cost requirement. Story covers and generated
+media should move to object storage with resized thumbnails and appropriate
+cache headers instead of repeatedly traversing the NestJS API.
+
+### Supporting service costs
+
+- Cloud Build: 2,500 promotional free build-minutes per billing account per
+  month on the default `e2-standard-2`; then US$ 0.006/minute at the published
+  rate.
+- Artifact Registry: first 0.5 GB stored free, then US$ 0.10/GB/month.
+- Cloud Logging: first 50 GiB/project/month free, then US$ 0.50/GiB.
+- Secret Manager: first 6 active secret versions and 10,000 accesses/month are
+  free; excess accesses are US$ 0.03 per 10,000.
+
+For the controlled beta, these supporting services should normally remain
+inside or close to their free allowances.
+
+### Cold starts
+
+With minimum instances set to zero, Cloud Run may need to start the NestJS and
+Prisma container before serving a request. Cloud Run supports startup CPU
+boost, but a minimum instance is the most predictable way to avoid this delay.
+
+Minimum instances are billed while idle at reduced request-based rates and can
+still be restarted by the platform. The application must remain restart-safe.
+
+### Database behavior
+
+Cloud Run can create multiple instances quickly. Each instance has its own
+Prisma connection pool, so unconstrained autoscaling can exhaust database
+connections.
+
+For the current Supabase transaction pooler:
+
+- Continue using PgBouncer-compatible runtime settings.
+- Keep `connection_limit=1` initially.
+- Cap Cloud Run at 3 instances during the beta.
+- Monitor connection waits and Prisma errors before increasing concurrency or
+  instance count.
+
+Cloud Run and Supabase are both geographically in São Paulo, but they are on
+different cloud providers. Communication still uses public networking and TLS;
+it is geographically local, not an intra-cloud private connection.
+
+### Secrets and security
+
+Google recommends Secret Manager for database credentials, JWT secrets, and
+provider API keys. Cloud Run can expose secrets as mounted files or environment
+variables. Environment-variable secrets are resolved when an instance starts.
+
+Use a dedicated runtime service account with only Secret Manager access. Avoid
+placing production secrets directly in the repository, Docker image, or build
+configuration.
+
+### Deployments and rollback
+
+The project can deploy its existing production Dockerfile through Cloud Build
+and Artifact Registry. Each deployment creates a revision. Cloud Run can split
+traffic between revisions, migrate traffic gradually, or send traffic back to
+a previous revision without rebuilding it.
+
+The recommended pipeline is:
+
+`GitHub -> Cloud Build -> Artifact Registry -> Cloud Run revision`
+
+### Domain considerations
+
+Cloud Run provides a stable HTTPS `run.app` URL at no separate domain charge.
+Google recommends a global external Application Load Balancer for production
+custom domains. Its published global forwarding-rule floor is US$ 0.025/hour,
+or roughly US$ 18.25/month, plus data processing and network transfer.
+
+Native Cloud Run domain mapping remains Preview and Google explicitly does not
+recommend it for production because of latency concerns.
+
+For this beta:
+
+1. Validate Cloud Run using its `run.app` URL.
+2. Keep Railway as rollback.
+3. Generate an APK pointing to Cloud Run only after latency tests pass.
+4. Postpone the paid load balancer/custom-domain setup until a stable domain is
+   operationally necessary.
+
+### Main benefits
+
+- API and database are geographically close to Brazilian users.
+- Scale-to-zero and pay-per-use are suitable for uneven beta traffic.
+- Managed TLS, logs, revisions, health checks, and rollback reduce operations.
+- The existing Docker image is compatible.
+
+### Main risks
+
+- Cold starts when minimum instances is zero.
+- Unexpected costs from images, logs, or unconstrained autoscaling.
+- Database connection exhaustion if concurrency and maximum instances are not
+  capped.
+- A production custom domain adds load-balancer cost.
+- Cloud Run does not remove latency from external AI providers.
+- Long synchronous AI generation still affects perceived story-start latency.
+
+### Sources
+
+- Cloud Run pricing: `https://cloud.google.com/run/pricing`
+- Locations: `https://cloud.google.com/run/docs/locations`
+- Concurrency: `https://cloud.google.com/run/docs/about-concurrency`
+- Minimum instances:
+  `https://cloud.google.com/run/docs/configuring/min-instances`
+- CPU: `https://cloud.google.com/run/docs/configuring/services/cpu`
+- Request timeout:
+  `https://cloud.google.com/run/docs/configuring/request-timeout`
+- Maximum instances:
+  `https://cloud.google.com/run/docs/configuring/max-instances`
+- Secrets:
+  `https://cloud.google.com/run/docs/configuring/services/secrets`
+- Custom domains:
+  `https://cloud.google.com/run/docs/mapping-custom-domains`
+- Cloud Build pricing: `https://cloud.google.com/build/pricing`
+- Artifact Registry pricing:
+  `https://cloud.google.com/artifact-registry/pricing`
+- Observability pricing:
+  `https://cloud.google.com/products/observability/pricing`
+- Network pricing: `https://cloud.google.com/vpc/network-pricing`
+- Load balancer pricing:
+  `https://cloud.google.com/load-balancing/pricing`
+
 ### Follow-up performance work
 
 - Story start still waits for the first AI scene before navigation. A future
