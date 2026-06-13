@@ -1833,9 +1833,13 @@ describe('AiService Mock Mode', () => {
       });
 
       const prompt = (provider.generate as jest.Mock).mock.calls[0][0];
-      expect(prompt).toContain('180');
-      expect(prompt).toContain('350 palavras');
+      const config = (provider.generate as jest.Mock).mock.calls[0][1];
+      expect(prompt).toContain('140');
+      expect(prompt).toContain('260 palavras');
       expect(prompt).toContain('2-4 blocos');
+      expect(config.maxTokens).toBe(450);
+      expect(config.maxAttempts).toBe(1);
+      expect(config.requestTimeoutMs).toBe(15_000);
     });
 
     it('continuation prompt includes relational choice guidance', async () => {

@@ -4,6 +4,8 @@ export interface GenerateConfig {
   model?: string;
   maxTokens?: number;
   temperature?: number;
+  maxAttempts?: number;
+  requestTimeoutMs?: number;
 }
 
 export interface LLMResponse {

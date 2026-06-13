@@ -559,7 +559,9 @@ export class AiService {
     } = params;
 
     const model = this.getModelForRequest({ plan, isCinematic, modelId, walletBalance });
-    const maxTokens = isCinematic ? 3000 : Math.min(model.maxTokens, plan === SubscriptionType.PREMIUM ? 2000 : 500);
+    const maxTokens = isCinematic
+      ? 3000
+      : Math.min(model.maxTokens, plan === SubscriptionType.PREMIUM ? 900 : 450);
 
     const context = this.buildStoryContext({
       title: storyTitle,
@@ -626,7 +628,7 @@ export class AiService {
 
     const sceneInstruction = isCinematic 
       ? 'Esta é uma cena CINEMÁTICA. Escreva com prosa literária rica e atmosfera intensa (8-12 parágrafos). IMPORTANTE: mesmo no modo cinematográfico, mantenha personagens ativos que reagem ao leitor, diálogos com subtexto, e evite exposição descritiva excessiva. A cena deve sentir-se viva, não um bloco de narração.'
-      : 'Esta é uma cena narrativa interativa. Cena padrão: ~180-350 palavras, 2-4 blocos. Foco em personagens que reagem à ação do leitor, com diálogo, subtexto e tensão. Narração atmosférica concisa — apenas o suficiente para ambientar. Termine com um ponto de decisão natural. Escolhas devem ser relacionais e específicas da cena.';
+      : 'Esta é uma cena narrativa interativa. Cena padrão: ~140-260 palavras, 2-4 blocos. Foco em personagens que reagem à ação do leitor, com diálogo, subtexto e tensão. Narração atmosférica concisa — apenas o suficiente para ambientar. Termine com um ponto de decisão natural. Escolhas devem ser relacionais e específicas da cena.';
 
     const prompt = memoryContext + premiseNote + characterNote + SCENE_GENERATION_PROMPT
       .replace('{context}', context)
@@ -640,6 +642,8 @@ export class AiService {
       model: model.id,
       maxTokens,
       temperature: isCinematic ? 0.75 : 0.7,
+      maxAttempts: isCinematic ? 2 : 1,
+      requestTimeoutMs: isCinematic ? undefined : 15_000,
     }, 'USER_READING');
 
     return this.parseSceneResponse(response, model.id);

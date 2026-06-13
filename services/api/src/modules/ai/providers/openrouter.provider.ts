@@ -61,7 +61,7 @@ export class OpenRouterProvider implements LLMProvider {
 
     const response = await withRetry(
       () => this.executeRequest(model, config, prompt),
-      { maxAttempts: 2 },
+      { maxAttempts: config.maxAttempts || 2 },
       this.logger,
       `model=${model}`,
     );
@@ -86,7 +86,7 @@ export class OpenRouterProvider implements LLMProvider {
         max_tokens: config.maxTokens || 500,
         temperature: config.temperature || 0.7,
       }),
-      signal: AbortSignal.timeout(this.requestTimeoutMs),
+      signal: AbortSignal.timeout(config.requestTimeoutMs || this.requestTimeoutMs),
     });
 
     if (!response.ok) {

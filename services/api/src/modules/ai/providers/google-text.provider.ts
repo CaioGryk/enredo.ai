@@ -32,7 +32,7 @@ export class GoogleTextProvider implements LLMProvider {
 
     return withRetry(
       () => this.executeRequest(model, prompt, config),
-      { maxAttempts: 2 },
+      { maxAttempts: config.maxAttempts || 2 },
       this.logger,
       `model=${model}`,
     );
@@ -49,7 +49,7 @@ export class GoogleTextProvider implements LLMProvider {
           temperature: config.temperature || 0.7,
         },
       }),
-      signal: AbortSignal.timeout(this.requestTimeoutMs),
+      signal: AbortSignal.timeout(config.requestTimeoutMs || this.requestTimeoutMs),
     });
 
     if (!response.ok) {

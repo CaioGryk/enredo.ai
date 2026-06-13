@@ -9744,3 +9744,57 @@ TEXT_PROVIDER_TIMEOUT_MS=20000
   failed and how long it took.
 - `GetSessionTiming generated=background` confirms that the mobile reader
   reused the pre-generated scene.
+
+## Step 136 — Faster interactive-reader responses
+
+**Date:** 2026-06-12
+
+### Request critical path
+
+- `sendAction` now reuses the session, story, selected premise, and selected
+  character already loaded for access validation.
+- User subscription and narrative policy are loaded in parallel.
+- Narrative memory, recent events, and fallback premise data are loaded in
+  parallel before calling the LLM.
+- The retired daily interaction-limit row is no longer read while preparing
+  an interaction.
+- The event returned by the persistence transaction is reused in the API
+  response, removing the extra recent-history query after generation.
+
+### Prompt and output size
+
+- Long-term continuity remains in narrative memory and the story codex.
+- Only the two latest scene excerpts are sent as raw recent context, capped at
+  1,800 characters total instead of the previous 4,000-character window.
+- Standard interactive scenes now target approximately 140-260 words.
+- Standard output ceilings are:
+  - Free: 450 tokens.
+  - Premium: 900 tokens.
+  - Cinematic: unchanged at 3,000 tokens.
+
+### Tail-latency protection
+
+- Standard reader interactions make one attempt per provider with a 15-second
+  provider timeout before moving through the existing fallback chain.
+- Cinematic generation keeps the previous retry and timeout behavior because
+  its output is intentionally longer.
+
+### Runtime diagnostics
+
+Railway logs now expose:
+
+- `InteractionTiming`: context loading, LLM generation, persistence, and total.
+- `SendActionTiming`: request setup, generation/save, and end-to-end backend
+  time.
+- `ProviderTiming`: the provider and concrete model duration.
+
+These three lines make it possible to distinguish database latency from model
+latency for every reader interaction.
+
+### Deployment note
+
+- This step changes only the backend. Railway redeployment is required.
+- A new Expo/APK build is not required.
+- If `ProviderTiming` remains dominant, the next controlled experiment is a
+  lower-latency model in `GROQ_READING_MODEL`, validated against the models
+  enabled in the project's Groq account before changing production.

@@ -279,7 +279,14 @@ export class NarrativeEngine {
       if (!input.previousEvents || input.previousEvents.length === 0) {
         return undefined;
       }
-      const { trimmedText } = NarrativeContextBuilder.trimPreviousScenes(input.previousEvents);
+      // Persistent memory and codex already carry long-term continuity. Keep only
+      // the latest scene excerpts here to reduce prompt size and time-to-first-token.
+      const { trimmedText } = NarrativeContextBuilder.trimPreviousScenes(
+        input.previousEvents,
+        2,
+        900,
+        1800,
+      );
       return trimmedText;
     })();
 

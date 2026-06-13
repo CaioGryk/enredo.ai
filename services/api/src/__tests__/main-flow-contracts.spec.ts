@@ -140,12 +140,20 @@ describe('Main Flow Contracts', () => {
         sceneMetadata: { emotion: 'tense' },
         session: { currentSceneIndex: 2 },
         adPlacement: null,
-      });
-      jest.spyOn(readingService as any, 'getSessionEvents').mockResolvedValue([
-        { id: 'event-latest', sceneIndex: 2, sceneText: 'Newest scene text', choices: ['Choice A'] },
+        modelUsed: 'gpt-4.1-nano',
+        savedEvent: {
+          id: 'event-latest',
+          sceneIndex: 2,
+          sceneText: 'Newest scene text',
+          choices: ['Choice A'],
+          userAction: 'Look around',
+          userActionType: 'FREE_TEXT',
+        },
+        previousEvents: [
         { id: 'event-older', sceneIndex: 1, sceneText: 'Older scene text', choices: ['Continue'] },
         { id: 'event-oldest', sceneIndex: 0, sceneText: 'Oldest scene text', choices: ['Begin'] },
-      ]);
+        ],
+      });
 
       const result = await readingService.sendAction('u-1', 'ses-1', {
         action: 'Look around',
@@ -173,12 +181,24 @@ describe('Main Flow Contracts', () => {
       (readingService as any).budgetGuard = { decide: jest.fn().mockReturnValue({ allowed: true, finalModel: { id: 'groq/free', tier: 'FREE' }, budgetTier: 'FREE', blockReason: null }) };
       jest.spyOn(readingService as any, 'isFreeLlmOnly').mockReturnValue(true);
       jest.spyOn(readingService as any, 'generateNextScene').mockResolvedValue({
-        sceneText: 'Scene text', suggestedActions: ['Go'], sceneMetadata: {}, session: { currentSceneIndex: 1 }, adPlacement: null,
+        sceneText: 'Scene text',
+        suggestedActions: ['Go'],
+        sceneMetadata: {},
+        session: { currentSceneIndex: 1 },
+        adPlacement: null,
+        modelUsed: 'groq/free',
+        savedEvent: {
+          id: 'ev-1',
+          sceneIndex: 1,
+          userAction: 'Look around',
+          userActionType: 'FREE_TEXT',
+          sceneText: 'Scene text',
+          choices: ['Go'],
+        },
+        previousEvents: [
+          { id: 'ev-0', sceneIndex: 0, userAction: 'Início da história', userActionType: 'FREE_TEXT', sceneText: 'First', choices: ['Start'] },
+        ],
       });
-      jest.spyOn(readingService as any, 'getSessionEvents').mockResolvedValue([
-        { id: 'ev-1', sceneIndex: 1, userAction: 'Look around', userActionType: 'FREE_TEXT', sceneText: 'Scene text', choices: ['Go'] },
-        { id: 'ev-0', sceneIndex: 0, userAction: 'Início da história', userActionType: 'FREE_TEXT', sceneText: 'First', choices: ['Start'] },
-      ]);
       jest.spyOn(readingService as any, 'getEffectiveNarrativePolicy').mockResolvedValue(undefined);
 
       const result = await readingService.sendAction('u-1', 'ses-1', { action: 'Look around', actionType: 'FREE_TEXT' });

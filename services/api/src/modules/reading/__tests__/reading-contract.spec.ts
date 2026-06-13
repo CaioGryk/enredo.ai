@@ -347,14 +347,19 @@ describe('ReadingOrchestratorService - Reading Contract Fix', () => {
         memoryPatch: null,
         session: { currentSceneIndex: 2 },
         adPlacement: null,
-      });
-
-      // Events ordered by generatedAt desc — events[0] is the newest
-      jest.spyOn(service as any, 'getSessionEvents').mockResolvedValue([
-        { id: 'event-latest', sceneIndex: 2, sceneText: 'Newest scene text', choices: ['Choice A'] },
+        savedEvent: {
+          id: 'event-latest',
+          sceneIndex: 2,
+          sceneText: 'Newest scene text',
+          choices: ['Choice A'],
+          userAction: 'Look around',
+          userActionType: 'FREE_TEXT',
+        },
+        previousEvents: [
         { id: 'event-older', sceneIndex: 1, sceneText: 'Older scene text', choices: ['Continue'] },
         { id: 'event-oldest', sceneIndex: 0, sceneText: 'Oldest scene text', choices: ['Begin'] },
-      ]);
+        ],
+      });
 
       (service as any).budgetGuard = {
         decide: jest.fn().mockReturnValue({
@@ -376,10 +381,8 @@ describe('ReadingOrchestratorService - Reading Contract Fix', () => {
         actionType: 'FREE_TEXT' as any,
       });
 
-      // events[0] is newest due to generatedAt desc ordering
       expect(result.session.currentScene.id).toBe('event-latest');
       expect(result.session.currentScene.sceneText).toBe('Newest scene text');
-      // Should NOT be the oldest event
       expect(result.session.currentScene.id).not.toBe('event-oldest');
     });
 

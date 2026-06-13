@@ -241,7 +241,7 @@ describe('NarrativeEngine - Context Window Safety Integration', () => {
     expect(capturedParams.memorySummary).toContain(MEMORY_MARKER_MUST_REMAIN);
   });
 
-  it('should respect max 3 recent events limit', async () => {
+  it('should keep only the 2 most recent raw events for faster continuation prompts', async () => {
     mockAiService.isMockMode.mockReturnValue(false);
 
     let capturedParams: any;
@@ -300,7 +300,7 @@ describe('NarrativeEngine - Context Window Safety Integration', () => {
 
     expect(capturedParams.previousSceneText).not.toContain(EVENT_1_MARKER);
     expect(capturedParams.previousSceneText).not.toContain(EVENT_2_MARKER);
-    expect(capturedParams.previousSceneText).toContain(EVENT_3_MARKER);
+    expect(capturedParams.previousSceneText).not.toContain(EVENT_3_MARKER);
     expect(capturedParams.previousSceneText).toContain(EVENT_4_MARKER);
     expect(capturedParams.previousSceneText).toContain(EVENT_5_MARKER);
   });
