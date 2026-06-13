@@ -1,7 +1,7 @@
 import { ReadingOrchestratorService } from '../reading-orchestrator.service';
 import { NarrativeEngine } from '../narrative/narrative-engine.service';
 import { StoryQualityService } from '@modules/story-quality/story-quality.service';
-import { Prisma, SubscriptionType } from '@prisma/client';
+import { SubscriptionType } from '@prisma/client';
 import { HttpException } from '@nestjs/common';
 
 describe('ReadingOrchestratorService - Transaction Failure Regression', () => {
@@ -156,19 +156,13 @@ describe('ReadingOrchestratorService - Transaction Failure Regression', () => {
   });
 
   describe('createFreeSessionWithLimitTransaction', () => {
-    it('uses a short batch transaction compatible with pooled production connections', async () => {
+    it('creates the session without updating the retired daily interaction counter', async () => {
       const createdSession = { ...mockSession, id: 'session-new' };
-      const sessionCreate = Promise.resolve(createdSession);
-      const usageUpdate = Promise.resolve({ freeInteractionsUsed: 1 });
       const mockPrisma = {
         readingSession: {
           count: jest.fn().mockResolvedValue(0),
-          create: jest.fn().mockReturnValue(sessionCreate),
+          create: jest.fn().mockResolvedValue(createdSession),
         },
-        dailyUsageLimit: {
-          update: jest.fn().mockReturnValue(usageUpdate),
-        },
-        $transaction: jest.fn().mockResolvedValue([createdSession, { freeInteractionsUsed: 1 }]),
       };
 
       (service as any).prisma = mockPrisma;
@@ -180,10 +174,7 @@ describe('ReadingOrchestratorService - Transaction Failure Regression', () => {
       );
 
       expect(result).toBe(createdSession);
-      expect(mockPrisma.$transaction).toHaveBeenCalledWith(
-        [sessionCreate, usageUpdate],
-        { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
-      );
+      expect(mockPrisma.readingSession.create).toHaveBeenCalledTimes(1);
     });
 
     it('returns the dedicated active-session limit error at 3 active stories', async () => {
@@ -192,10 +183,6 @@ describe('ReadingOrchestratorService - Transaction Failure Regression', () => {
           count: jest.fn().mockResolvedValue(3),
           create: jest.fn(),
         },
-        dailyUsageLimit: {
-          update: jest.fn(),
-        },
-        $transaction: jest.fn(),
       };
 
       (service as any).prisma = mockPrisma;
@@ -210,7 +197,7 @@ describe('ReadingOrchestratorService - Transaction Failure Regression', () => {
           error: 'ACTIVE_SESSION_LIMIT_REACHED',
         });
       }
-      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPrisma.readingSession.create).not.toHaveBeenCalled();
     });
   });
 });

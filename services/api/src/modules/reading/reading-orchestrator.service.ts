@@ -658,37 +658,15 @@ export class ReadingOrchestratorService {
       );
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Keep the write transaction short so it remains compatible with PgBouncer
-    // transaction pooling and a single Prisma connection in production.
-    const [newSession] = await this.prisma.$transaction([
-      this.prisma.readingSession.create({
-        data: {
-          userId,
-          storyId,
-          currentChapter: 1,
-          currentSceneIndex: 0,
-          ...setupData,
-        },
-      }),
-      this.prisma.dailyUsageLimit.update({
-        where: {
-          userId_date: {
-            userId,
-            date: today,
-          },
-        },
-        data: {
-          freeInteractionsUsed: { increment: 1 },
-        },
-      }),
-    ], {
-      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+    return this.prisma.readingSession.create({
+      data: {
+        userId,
+        storyId,
+        currentChapter: 1,
+        currentSceneIndex: 0,
+        ...setupData,
+      },
     });
-
-    return newSession;
   }
 
   async findDailyUsageLimit(userId: string, date: Date): Promise<any> {
@@ -828,27 +806,77 @@ export class ReadingOrchestratorService {
     isCinematic?: boolean,
     narrativePolicy?: any,
   ) {
-    const pending = this.pendingFirstScenes.get(session.id);
+    return this.runFirstSceneOnce(session.id, () => this.generateFirstScene(
+        session,
+        userId,
+        plan,
+        walletBalance,
+        premise,
+        character,
+        selectedModelId,
+        isCinematic,
+        narrativePolicy,
+      ));
+  }
+
+  private runFirstSceneOnce(
+    sessionId: string,
+    generate: () => Promise<{
+      id: string;
+      chapterNumber: number;
+      sceneIndex: number;
+      sceneText: string;
+      choices: string[];
+      sceneMetadata?: { emotion?: string; pacing?: string };
+    }>,
+  ) {
+    const pending = this.pendingFirstScenes.get(sessionId);
     if (pending) return pending;
 
-    const generation = this.generateFirstScene(
-      session,
-      userId,
-      plan,
-      walletBalance,
-      premise,
-      character,
-      selectedModelId,
-      isCinematic,
-      narrativePolicy,
-    ).finally(() => {
-      if (this.pendingFirstScenes.get(session.id) === generation) {
-        this.pendingFirstScenes.delete(session.id);
+    const generation = generate().finally(() => {
+      if (this.pendingFirstScenes.get(sessionId) === generation) {
+        this.pendingFirstScenes.delete(sessionId);
       }
     });
 
-    this.pendingFirstScenes.set(session.id, generation);
+    this.pendingFirstScenes.set(sessionId, generation);
     return generation;
+  }
+
+  private queueFirstSceneGeneration(
+    session: any,
+    userId: string,
+    plan: SubscriptionType,
+    walletBalance: number | undefined,
+    premise: any,
+    character: any,
+    selectedModelId: string,
+  ): void {
+    const queuedAt = Date.now();
+    void this.runFirstSceneOnce(session.id, async () => {
+      const narrativePolicy = await this.getEffectiveNarrativePolicy(userId);
+      return this.generateFirstScene(
+        { ...session, story: session.story || undefined },
+        userId,
+        plan,
+        walletBalance,
+        premise,
+        character,
+        selectedModelId,
+        false,
+        narrativePolicy,
+      );
+    }).then(() => {
+      this.logger.log(
+        `FirstSceneBackground session=${session.id} status=ready totalMs=${Date.now() - queuedAt}`,
+      );
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `FirstSceneBackground session=${session.id} status=failed totalMs=${Date.now() - queuedAt} ` +
+        `message=${message.substring(0, 160)}`,
+      );
+    });
   }
 
   private assertCanAccessStory(story: any, userId: string): void {
@@ -960,11 +988,11 @@ export class ReadingOrchestratorService {
 
   async startReading(userId: string, dto: any): Promise<any> {
     const startedAt = Date.now();
-    const [story, user, usage] = await Promise.all([
+    const [story, user] = await Promise.all([
       this.getStoryWithPremises(dto.storyId),
       this.getUserWithSubscription(userId),
-      this.getOrCreateDailyLimit(userId),
     ]);
+    const usage = { freeInteractionsUsed: 0, limit: 0 };
     const initialDataReadyAt = Date.now();
 
     if (!story) {
@@ -1030,6 +1058,15 @@ export class ReadingOrchestratorService {
         }
 
         if (dto.deferFirstScene) {
+          this.queueFirstSceneGeneration(
+            { ...existingSession, story },
+            userId,
+            user?.subscription?.type || SubscriptionType.FREE,
+            user?.creditWallet?.balance,
+            selectedPremise,
+            selectedCharacter,
+            decision.finalModel.id,
+          );
           this.logger.log(
             `StartReadingTiming story=${dto.storyId} session=${existingSession.id} reused=true ` +
             `deferred=true loadMs=${initialDataReadyAt - startedAt} totalMs=${Date.now() - startedAt}`,
@@ -1105,6 +1142,15 @@ export class ReadingOrchestratorService {
     }
 
     if (dto.deferFirstScene) {
+      this.queueFirstSceneGeneration(
+        { ...session, story },
+        userId,
+        user?.subscription?.type || SubscriptionType.FREE,
+        user?.creditWallet?.balance,
+        selectedPremise,
+        selectedCharacter,
+        decision.finalModel.id,
+      );
       this.logger.log(
         `StartReadingTiming story=${dto.storyId} session=${session.id} reused=false ` +
         `deferred=true loadMs=${initialDataReadyAt - startedAt} totalMs=${Date.now() - startedAt}`,
@@ -1174,15 +1220,32 @@ export class ReadingOrchestratorService {
     // Private or non-approved stories require creator access
     this.assertCanAccessStory(sessionWithStory.story, userId);
 
-    const [user, usage, events, narrativePolicy] = await Promise.all([
+    const pendingFirstScene = this.pendingFirstScenes.get(sessionId);
+    const [user, events, narrativePolicy, preparedFirstScene] = await Promise.all([
       this.getUserWithSubscription(userId),
-      this.getOrCreateDailyLimit(userId),
       this.getSessionEvents(sessionId, READER_RECENT_EVENT_LIMIT),
-      this.getEffectiveNarrativePolicy(userId),
+      pendingFirstScene ? Promise.resolve(undefined) : this.getEffectiveNarrativePolicy(userId),
+      pendingFirstScene || Promise.resolve(undefined),
     ]);
+    const usage = { freeInteractionsUsed: 0, limit: 0 };
     const sessionDataReadyAt = Date.now();
 
     if (events.length === 0) {
+      if (preparedFirstScene) {
+        this.logger.log(
+          `GetSessionTiming session=${sessionId} generated=background ` +
+          `loadMs=${sessionDataReadyAt - startedAt} totalMs=${Date.now() - startedAt}`,
+        );
+        return {
+          session: {
+            ...this.formatSession(sessionWithStory),
+            currentScene: preparedFirstScene,
+            history: [],
+          },
+          usage: this.formatUsage(usage, user?.creditWallet?.balance),
+        };
+      }
+
       const premise = (sessionWithStory as any).premise || null;
       const character = (sessionWithStory as any).character || null;
 

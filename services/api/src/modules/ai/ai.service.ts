@@ -698,7 +698,7 @@ export class AiService {
     } = params;
 
     const model = this.getModelForRequest({ plan, isCinematic, modelId, walletBalance });
-    const maxTokens = isCinematic ? 3000 : Math.min(model.maxTokens, plan === SubscriptionType.PREMIUM ? 2000 : 500);
+    const maxTokens = isCinematic ? 3000 : Math.min(model.maxTokens, plan === SubscriptionType.PREMIUM ? 1600 : 420);
 
     const context = this.buildStoryContext({
       title,

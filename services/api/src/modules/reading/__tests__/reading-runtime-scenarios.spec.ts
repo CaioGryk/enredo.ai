@@ -190,7 +190,7 @@ describe('Reading Runtime Scenarios', () => {
       expect(mockPrisma.modelUsage.create).toHaveBeenCalled();
     });
 
-    it('should return the prepared session before generating the first scene', async () => {
+    it('should return the prepared session while generating the first scene in background', async () => {
       const result = await service.startReading('user-1', {
         ...startDto,
         deferFirstScene: true,
@@ -200,8 +200,8 @@ describe('Reading Runtime Scenarios', () => {
       expect(result.session.currentScene).toBeNull();
       expect(result.session.isPreparing).toBe(true);
       expect(mockPrisma.readingSession.create).toHaveBeenCalled();
-      expect(mockNarrativeEngine.generateScene).not.toHaveBeenCalled();
-      expect(mockPrisma.narrativeEvent.create).not.toHaveBeenCalled();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(mockNarrativeEngine.generateScene).toHaveBeenCalled();
     });
 
     it('should deduplicate concurrent first-scene generation for the same session', async () => {

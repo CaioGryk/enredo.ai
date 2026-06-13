@@ -9707,3 +9707,40 @@ TEXT_PROVIDER_TIMEOUT_MS=20000
 
 - The default is 20 seconds. A timed-out provider is released to the existing
   fallback chain instead of leaving the reader waiting indefinitely.
+
+## Step 135 — First-scene pre-generation
+
+**Date:** 2026-06-12
+
+### Critical-path improvement
+
+- `POST /reading/start` still returns the prepared reading session immediately,
+  but now starts scene-zero generation in the background before the mobile app
+  finishes navigating to the reader.
+- The reader's first `GET /reading/sessions/:id` reuses the exact same in-flight
+  promise instead of starting or preparing another generation.
+- While a background scene is running, the GET no longer reloads narrative
+  policy or repeats the model decision.
+
+### Retired daily-limit work
+
+- Story start and session loading no longer read/create the old daily-limit row.
+- Creating a Free reading session no longer increments the retired daily
+  interaction counter.
+- The active-story limit remains enforced at 3 sessions for Free users.
+
+### Output latency
+
+- Only scene zero uses a smaller output ceiling:
+  - Free: 420 tokens.
+  - Premium: 1600 tokens.
+- Subsequent narrative interactions keep their previous output limits.
+- This reduces first-scene generation time while retaining enough room for the
+  mobile-first 110-190 word opening and JSON response.
+
+### Runtime diagnostics
+
+- `FirstSceneBackground` reports whether the pre-generation completed or
+  failed and how long it took.
+- `GetSessionTiming generated=background` confirms that the mobile reader
+  reused the pre-generated scene.

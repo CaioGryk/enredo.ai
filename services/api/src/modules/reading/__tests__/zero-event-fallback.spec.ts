@@ -189,6 +189,22 @@ describe('ReadingOrchestratorService - Zero-Event Fallback', () => {
   });
 
   describe('getSessionWithStatus - zero-event fallback', () => {
+    it('reuses a background first-scene generation without calling the engine again', async () => {
+      const preparedScene = {
+        id: 'event-background',
+        chapterNumber: 1,
+        sceneIndex: 0,
+        sceneText: 'Background scene ready',
+        choices: ['Continue'],
+      };
+      (service as any).pendingFirstScenes.set('session-1', Promise.resolve(preparedScene));
+
+      const result = await service.getSessionWithStatus('user-1', 'session-1');
+
+      expect(result.session.currentScene).toEqual(preparedScene);
+      expect(narrativeEngine.generateScene).not.toHaveBeenCalled();
+    });
+
     it('should resolve premise and character when selectedPremiseId and selectedCharacterId exist', async () => {
       const result = await service.getSessionWithStatus('user-1', 'session-1');
 
