@@ -10005,3 +10005,32 @@ Onboarding eligibility depended on the local `onboardingComplete:${user.id}` fla
 - `npx tsc --noEmit`
 - `npx expo-doctor`
 - `git diff --check`
+
+---
+
+## Step 139 — New EAS Project for Beta Builds
+
+**Objective:** Continue Android beta distribution under a new Expo account with a fresh EAS project.
+
+### Expo Configuration
+
+- New Expo owner: `enredo.aiv2`
+- New EAS project: `@enredo.aiv2/enredo-ai`
+- New EAS project ID: `ad1eb4b7-972a-4e2e-8e96-34b985c4efc7`
+- Android package remains `ai.enredo.app`.
+- Android `versionCode` remains `16`.
+- Preview builds continue using `https://enredoai-production.up.railway.app/api`.
+
+### Distribution Impact
+
+The new EAS project creates and owns a new Android signing credential. Testers must
+uninstall APKs produced by the previous Expo project before installing the first APK
+from `@enredo.aiv2/enredo-ai`. Future updates should be built from this EAS project
+to preserve signature compatibility.
+
+### Verification
+
+- `npx eas-cli whoami` — authenticated as `enredo.aiv2`.
+- `npx eas-cli init --force` — created and linked the new EAS project.
+- `npx expo config --type public` — confirmed owner, project ID, Android package,
+  version code, and application configuration.

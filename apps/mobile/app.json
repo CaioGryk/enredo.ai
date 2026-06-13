@@ -1,5 +1,6 @@
 {
   "expo": {
+    "owner": "enredo.aiv2",
     "name": "Enredo.ai",
     "slug": "enredo-ai",
     "version": "1.0.0",
@@ -47,7 +48,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "ccf84c49-0a5d-4534-bfa3-d8dd9a08f621"
+        "projectId": "ad1eb4b7-972a-4e2e-8e96-34b985c4efc7"
       }
     }
   }
