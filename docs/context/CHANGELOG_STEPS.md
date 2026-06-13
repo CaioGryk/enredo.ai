@@ -9798,3 +9798,184 @@ latency for every reader interaction.
 - If `ProviderTiming` remains dominant, the next controlled experiment is a
   lower-latency model in `GROQ_READING_MODEL`, validated against the models
   enabled in the project's Groq account before changing production.
+
+---
+
+## Step 137 — Declarative Route Protection, Runtime Session Invalidation & Cold-Start Library Guarantee
+
+**Objective:** Fix the blank/dark screen on Android cold start for authenticated users, implement declarative route protection with `Stack.Protected` covering every private route, add framework-independent runtime session invalidation, and guarantee `/(tabs)/library` on every authenticated cold process start.
+
+### Root Causes (by correction)
+
+1. **Blank startup screen:** `_layout.tsx` hid the splash on font load before auth init completed. `index.tsx` rendered a dark empty `View` (`backgroundColor: '#0A0A0A'`) when `isLoading || user` was truthy. `AuthContext` used an async imperative `useEffect` with delayed `router.replace()` after an async onboarding check — creating a race condition.
+
+2. **Missing route protection for 4 routes:** `story/[id]/premise`, `story/[id]/character`, `profile/avatar`, and `profile/consent` were not declared inside any `Stack.Protected` group. Expo Router auto-registered them without guard, making them reachable by unauthenticated users.
+
+3. **Runtime session invalidation gap:** The Axios interceptor cleared tokens on refresh failure, but AuthContext was never notified. `user` remained non-null and protected routes remained registered until the next process restart.
+
+4. **Last-visited route restoration:** On Android, a cold process start could restore the previously visited private route (Reader, Story, Profile) instead of always opening Library.
+
+5. **No-cached-user bootstrap path:** After `/auth/profile` succeeded for a user without a cached record, `onboardingStatus` was never resolved. The app would treat `'loading'` as a completed state.
+
+6. **Onboarding completion fragility:** Storage failures in `markOnboardingComplete()` were not caught. Navigation happened before `Stack.Protected` re-evaluated.
+
+### Solution
+
+#### 1. Complete route protection matrix
+
+Every private route is explicitly placed inside the correct `Stack.Protected` group in `app/_layout.tsx`. No route relies on Expo Router's automatic unguarded registration.
+
+| Guard | Screens |
+|-------|---------|
+| _none_ (public) | `index`, `preview`, `legal`, `modal`, `+not-found` |
+| `!isAuthenticated` | `(auth)` |
+| `isAuthenticated && onboardingStatus === 'incomplete'` | `onboarding` |
+| `isAuthenticated && onboardingStatus === 'complete'` | `(tabs)`, `story/[id]`, `story/[id]/premise`, `story/[id]/character`, `reader/[id]`, `scene-media`, `saved-scenes`, `profile/narrative-preferences`, `profile/avatar`, `profile/consent` |
+
+#### 2. Framework-independent session invalidation
+
+New module: `apps/mobile/src/auth/sessionEvents.ts`
+
+- Exposes a simple publish/subscribe API: `subscribe(listener)` / `emitSessionInvalidated()`.
+- Zero React or framework dependencies — a plain TypeScript event emitter using `Set`.
+
+Integration points:
+
+- **`src/api/client.ts`:** The Axios refresh failure handler awaits token cleanup with `Promise.allSettled()` before calling `sessionEvents.emitSessionInvalidated()`. The single-flight lock ensures only one refresh attempt runs; on failure the event fires once.
+- **`src/context/AuthContext.tsx`:** Subscribes to `session-invalidated` in a `useEffect`. The functional `setUser` update safely handles an already-null user. The handler clears `user`, resets `onboardingStatus`, removes the cached user from storage, and clears the React Query cache. No navigation call is made — `Stack.Protected` removal of protected routes handles the UX fallback.
+- **Idempotency:** Multiple simultaneous 401s each wait for the interceptor's single-flight refresh promise. When it fails, the event fires once. The AuthContext handler guards against duplicate work with a functional state update (`setUser(prev => ...)`).
+
+#### 3. Cold-start route normalization
+
+In `app/_layout.tsx` → `StartupGate`:
+
+- The Stack navigator is always rendered — `StartupGate` returns `<RootLayoutNav />` on every render. The native splash covers the content visually.
+- A `useRef` guard (`normalizedRef`) ensures normalization runs exactly once per process lifetime.
+- After the navigator mounts, a `useEffect` checks `fontsLoaded && !isInitializing`. If `user && onboardingStatus === 'complete'`, calls `router.replace('/(tabs)/library')`.
+- A `ready` state flag is set after normalization; the splash hides only when `ready === true`.
+- Background/foreground resume is handled naturally — `normalizedRef` is `true` after the first cold-start normalization, so the effect does not fire again.
+
+The splash stays visible until:
+1. Fonts are loaded.
+2. Auth and onboarding state are resolved (`isInitializing === false`).
+3. Initial route normalization is complete (`ready === true`).
+
+#### 4. `AuthContext` focused on session state only
+
+- No automatic navigation effects. The old `useEffect` + `useSegments` + `router.replace` pattern is fully removed.
+- `logout()` is the only function that calls `router.replace('/')` — a deliberate user action.
+- Bootstrap resolves `onboardingStatus` before `isInitializing` becomes `false` on both cached-user and no-cached-user paths.
+
+#### 5. Session expiry handling (cold start + runtime)
+
+**Cold start (bootstrap):**
+- The catch block checks `tokenStorage.getItem('accessToken')` directly, not `error.response.status`.
+- If tokens were cleared by the interceptor (without a 401 status code), this still detects the invalid state.
+
+**Runtime (post-bootstrap):**
+- Normal API calls trigger 401 → interceptor refresh → failure → `session-invalidated` event.
+- AuthContext subscription clears state; `Stack.Protected` removes protected routes; user falls to index.
+
+#### 6. Onboarding completion resilience
+
+- `markOnboardingComplete()` catches storage failures. State is always updated so the user can proceed.
+- The onboarding screen navigates to `/` (index) instead of `/(tabs)/library`. The index route's declarative `<Redirect>` fires in the same React render cycle where `Stack.Protected` re-evaluates.
+
+### Startup Routing Behavior
+
+| Scenario | Destination |
+|----------|-------------|
+| Cold start, returning user, onboarding complete | `/(tabs)/library` (guaranteed by normalization) |
+| Cold start, returning user, onboarding incomplete | `/onboarding` |
+| Cold start, unauthenticated | `/` (Welcome screen) |
+| Foreground resume during same process | Preserves current route (normalization flag prevents re-navigation) |
+| After login (onboarding complete) | `/(tabs)/library` |
+| After login/register (onboarding incomplete) | `/onboarding` |
+| After onboarding completion | `/(tabs)/library` (via index redirect) |
+| After deliberate logout | `/` (Welcome screen) |
+| Runtime session expiry on protected route | Falls back to `/` (`Stack.Protected` removes routes) |
+| Android Back from Library | Exits app. Auth/root routes are in different guarded groups and not on the stack. |
+
+### Runtime Session-Expiry Flow
+
+```
+Protected API call → 401
+  ── OR ──
+Request interceptor: token expires within 60s → proactive refresh
+
+  → refreshAccessToken() (single-flight lock via refreshTokenPromise)
+  → /auth/refresh POST fails
+  → .catch() inside refreshAccessToken():
+      await deletion of accessToken and refreshToken from storage
+      emitSessionInvalidated()
+      re-throw error
+  → .finally(): clear refreshTokenPromise lock
+  → AuthContext subscriber:
+      setUser(null)               // idempotent — returns early if already null
+      setOnboardingStatus('incomplete')
+      delete cached user from storage
+      React Query cache cleared
+  → Stack.Protected guard re-evaluates:
+      isAuthenticated === false → all protected routes removed
+  → User sees index (Welcome screen)
+```
+
+Key: cleanup and event emission live inside `refreshAccessToken()` itself, NOT in the
+callers (request interceptor or response interceptor). Both paths funnel through one
+promise. The single-flight lock guarantees at most one refresh attempt and one
+invalidation event for concurrent requests.
+
+### Cold-Start Normalization Flow
+
+```
+Process start
+  → SplashScreen.preventAutoHideAsync()
+  → RootLayout returns SafeAreaProvider > QueryClientProvider > AuthProvider > StartupGate
+  → StartupGate renders RootLayoutNav (Stack navigator) immediately
+      — Expo Router requirement satisfied: navigator always mounted
+  → Native splash covers the rendered Stack visually
+  → Fonts load
+  → AuthContext bootstrap:
+      token found → cached user restored → onboarding resolved
+      isInitializing = false
+  → StartupGate effect (runs after navigator is mounted):
+      fontsLoaded && !isInitializing
+      normalizedRef is false:
+        if user && onboardingStatus === 'complete':
+          router.replace('/(tabs)/library')
+        normalizedRef = true, setReady(true)
+  → StartupGate effect: fontsLoaded && !isInitializing && ready
+      → SplashScreen.hideAsync()
+  → User sees Library
+```
+
+Key: the Stack navigator is always rendered. `router.replace()` is called in a
+`useEffect` that fires after the component (and its child navigator) has mounted.
+The native splash covers all content until `hideAsync()` is called.
+
+### Verification
+
+- ✅ `npx tsc --noEmit` — passed, zero errors.
+- ✅ `npx expo-doctor` — 18/18 checks passed.
+- ✅ `git diff --check` — no whitespace issues.
+- ✅ `find apps/mobile/app -type f` — all 26 route files audited and categorized.
+- ✅ Navigation audit: no `useSegments` in source. `Stack.Protected` guards all route groups. Auth-related `router.replace` only in deliberate actions and the post-mount StartupGate normalization effect.
+- ✅ `session-invalidated` event wired: `refreshAccessToken()` is the single centralized failure handler; both proactive (request interceptor) and reactive (response interceptor) paths funnel through it. One event per failed single-flight refresh.
+- ✅ Cold-start normalization: `router.replace` runs in `useEffect` after Stack navigator mounts. `normalizedRef` + `ready` state guarantee Library on authenticated cold start.
+- ✅ Stack navigator always rendered on first render (never returns `null` from root layout).
+- ✅ `markOnboardingComplete()` catches storage failures and always updates state.
+- ✅ Android `versionCode` incremented from `14` to `15` for the next beta APK.
+
+### Files Changed
+
+- `apps/mobile/app.json`
+- `apps/mobile/src/auth/sessionEvents.ts` (new)
+- `apps/mobile/src/api/client.ts`
+- `apps/mobile/src/context/AuthContext.tsx`
+- `apps/mobile/app/_layout.tsx`
+- `apps/mobile/app/index.tsx`
+- `apps/mobile/app/onboarding.tsx`
+- `apps/mobile/app/(auth)/login.tsx`
+- `apps/mobile/app/(auth)/register.tsx`
+- `docs/context/CHANGELOG_STEPS.md`
+- `docs/context/MOBILE_CONTEXT.md`

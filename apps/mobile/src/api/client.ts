@@ -2,6 +2,7 @@ import axios from 'axios';
 
 import { Platform } from 'react-native';
 import { tokenStorage } from '../storage/tokenStorage';
+import { sessionEvents } from '../auth/sessionEvents';
 
 const LOCAL_API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3001/api' : 'http://localhost:3001/api';
 const PRODUCTION_API_URL = 'https://enredoai-production.up.railway.app/api';
@@ -102,9 +103,23 @@ async function refreshAccessToken(): Promise<string> {
       await tokenStorage.setItem('accessToken', data.accessToken);
       await tokenStorage.setItem('refreshToken', data.refreshToken);
       return data.accessToken as string;
-    })().finally(() => {
-      refreshTokenPromise = null;
-    });
+    })()
+      .catch(async (error) => {
+        // Token refresh failed — clear local session.
+        // Both the proactive request-interceptor refresh path and the reactive
+        // response-interceptor 401 path funnel through this single promise.
+        // Cleanup and event emission execute exactly once per failed
+        // single-flight refresh operation.
+        await Promise.allSettled([
+          tokenStorage.deleteItem('accessToken'),
+          tokenStorage.deleteItem('refreshToken'),
+        ]);
+        sessionEvents.emitSessionInvalidated();
+        throw error;
+      })
+      .finally(() => {
+        refreshTokenPromise = null;
+      });
   }
 
   return refreshTokenPromise;
@@ -137,8 +152,7 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
-        await tokenStorage.deleteItem('accessToken');
-        await tokenStorage.deleteItem('refreshToken');
+        // refreshAccessToken() already cleared tokens and emitted session-invalidated.
         return Promise.reject(refreshError);
       }
     }

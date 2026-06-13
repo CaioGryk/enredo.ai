@@ -69,7 +69,7 @@ export default function RegisterScreen() {
       setSubmitting(true);
       await register({ name: name.trim(), email: email.trim(), password });
       Alert.alert('Cadastro criado', 'Sua conta foi criada com sucesso.', [
-        { text: 'Continuar', onPress: () => router.replace('/onboarding' as any) },
+        { text: 'Continuar', onPress: () => router.replace('/') },
       ]);
     } catch (e: any) {
       const message = getRegisterErrorMessage(e);

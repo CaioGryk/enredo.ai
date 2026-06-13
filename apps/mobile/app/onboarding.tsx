@@ -3,7 +3,6 @@ import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { useRouter } from 'expo-router';
 import { ArrowRight, BookOpen, Coins, Image as ImageIcon, PenTool, Sparkles, Users } from 'lucide-react-native';
 import { typography } from '../src/theme/typography';
-import { tokenStorage } from '../src/storage/tokenStorage';
 import { useAuth } from '../src/context/AuthContext';
 
 const A = '#CEBDFF';
@@ -46,19 +45,17 @@ const steps = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { markOnboardingComplete } = useAuth();
   const [index, setIndex] = useState(0);
   const step = steps[index];
 
   const finish = async () => {
-    if (user?.id) {
-      try {
-        await tokenStorage.setItem(`onboardingComplete:${user.id}`, 'true');
-      } catch {
-        // Silently continue — onboarding will show again next time, but user isn't blocked.
-      }
-    }
-    router.replace('/(tabs)/library');
+    // Persist the flag via AuthContext (handles storage failures internally).
+    // State is updated before navigation so the route guard sees the new status.
+    await markOnboardingComplete();
+    // Navigate to index, which declaratively redirects to Library now that
+    // onboardingStatus is 'complete' and the (tabs) group is registered.
+    router.replace('/');
   };
 
   return (

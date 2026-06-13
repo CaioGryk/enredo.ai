@@ -747,6 +747,117 @@ Rail buttons (like, save, share) are now functional:
 - This applies both when starting the first scene and when sending later interactive reader actions.
 - Android `versionCode` is now `10` for the next APK.
 
+### Declarative Route Protection, Runtime Session Invalidation & Cold-Start Library Guarantee (Step 137)
+
+**Navigation ownership model:**
+
+- `app/_layout.tsx` uses Expo Router's `Stack.Protected` for declarative route protection. Every private route is explicitly inside its guard group.
+- `app/index.tsx` uses `<Redirect>` for the startup destination only — it is not the primary protection mechanism.
+- `AuthContext` manages authentication and onboarding state only. No automatic navigation effects. `logout()` is the only navigation call there (deliberate user action).
+- Cold-start route normalization in `StartupGate` guarantees `/(tabs)/library` on every authenticated cold process start. Normalization runs in a `useEffect` after the Stack navigator has mounted.
+- The native splash screen stays visible while the Stack is rendered underneath. Splash hides only after fonts + auth init + route normalization are complete.
+- The root layout never returns `null` — the Stack navigator is always mounted on the first render (Expo Router requirement).
+
+**Complete route protection matrix:**
+
+Every route file under `apps/mobile/app` is accounted for. No route relies on automatic unguarded registration.
+
+| Guard | Screens |
+|-------|---------|
+| _none_ (public) | `index`, `preview`, `legal`, `modal`, `+not-found` |
+| `!isAuthenticated` | `(auth)` — login, register |
+| `isAuthenticated && onboardingStatus === 'incomplete'` | `onboarding` |
+| `isAuthenticated && onboardingStatus === 'complete'` | `(tabs)` — library, active, scenes, upgrade, profile |
+| | `story/[id]`, `story/[id]/premise`, `story/[id]/character` |
+| | `reader/[id]` |
+| | `scene-media`, `saved-scenes` |
+| | `profile/narrative-preferences`, `profile/avatar`, `profile/consent` |
+
+**Runtime session invalidation mechanism:**
+
+Centralized in `refreshAccessToken()` (`src/api/client.ts`). Both the proactive request-interceptor
+refresh path and the reactive 401 response-interceptor path funnel through one promise.
+On failure, `refreshAccessToken()` clears tokens and emits `session-invalidated` exactly
+once per failed single-flight refresh operation.
+
+```
+Protected API call → 401
+  ── OR ──
+Request interceptor: token expires within 60s → proactive refresh
+
+  → refreshAccessToken() (single-flight lock)
+  → /auth/refresh fails
+  → .catch() inside refreshAccessToken():
+      await token deletion from storage with Promise.allSettled()
+      emitSessionInvalidated()
+  → AuthContext subscriber (idempotent):
+      setUser(null)
+      setOnboardingStatus('incomplete')
+      delete cached user from storage
+      React Query cache cleared
+  → Stack.Protected removes all protected routes
+  → User falls back to index (Welcome screen)
+```
+
+- No React context imported into the Axios client. No circular dependencies.
+- Cleanup and event emission live inside `refreshAccessToken()`, not duplicated in callers.
+- The single-flight lock guarantees at most one refresh attempt and one invalidation event for concurrent requests.
+
+**Cold-start route normalization:**
+
+In `StartupGate` (`_layout.tsx`):
+
+1. The Stack navigator is always rendered — `StartupGate` returns `<RootLayoutNav />` on every render. The native splash covers the content visually.
+2. After the navigator mounts, a `useEffect` checks `fontsLoaded && !isInitializing`.
+3. `normalizedRef` (useRef) ensures normalization runs exactly once per process lifetime.
+4. If `user && onboardingStatus === 'complete'`, calls `router.replace('/(tabs)/library')`.
+5. Sets `ready` state flag after normalization.
+6. A second effect hides the splash when `fontsLoaded && !isInitializing && ready`.
+7. Background/foreground resume preserves the current route — `normalizedRef` prevents re-normalization.
+
+**Startup destinations:**
+
+| Scenario | Destination |
+|----------|-------------|
+| Cold start, returning user, onboarding complete | `/(tabs)/library` (guaranteed) |
+| Cold start, returning user, onboarding incomplete | `/onboarding` |
+| Cold start, unauthenticated | `/` (Welcome) |
+| Foreground resume (same process) | Preserves current route |
+| After login (onboarding complete) | `/(tabs)/library` |
+| After login/register (onboarding incomplete) | `/onboarding` |
+| After onboarding completion | `/(tabs)/library` (via index redirect) |
+| After deliberate logout | `/` (Welcome) |
+| Runtime session expiry | `/` (Welcome, via Stack.Protected removal) |
+
+**Android Back behavior:**
+
+- `Stack.Protected` ensures auth routes (`(auth)`) and the root route (`index`) are never on the navigation stack while the user is in a protected route group.
+- Pressing Back from Library exits the app or returns to the OS. No blank root route or auth screen is revealed.
+
+**Splash-screen synchronization:**
+
+- `StartupGate` always renders `<RootLayoutNav />` (the Stack navigator) on every render. The native splash covers the content visually and is hidden only after fonts, auth initialization, and route normalization are complete.
+- `AuthContext.isInitializing` becomes `false` after cached user restoration + onboarding resolution (fast path).
+- No-cached-user path: waits for `/auth/profile` → resolves onboarding → then sets `isInitializing = false`.
+- Profile validation runs in background without blocking the app.
+
+**Onboarding state management:**
+
+- `AuthContext.onboardingStatus`: `'loading'` → `'incomplete'` → `'complete'`.
+- `'loading'` is only visible during the bootstrap phase (splash screen is still shown).
+- `markOnboardingComplete()` catches storage failures; always updates state so the user proceeds.
+- If storage fails, onboarding may show again on the next cold start — acceptable fallback.
+
+**Root cause of blank startup screen (fixed):**
+
+1. Splash hid on font load, before auth restoration completed.
+2. `index.tsx` rendered a dark empty `View` while waiting for async auth state.
+3. `AuthContext` had an async imperative navigation effect with delayed `router.replace` after onboarding check.
+4. `unstable_settings.initialRouteName: '(tabs)'` could influence Android stack restoration.
+
+**Beta build version:** Android `versionCode` is `15`.
+
 ---
 
-**Last Updated:** After Step 98x (Setup Images and Reading Generation Timeout) — June 11, 2026
+
+**Last Updated:** After Step 137 (Declarative Route Protection, Runtime Session Invalidation & Cold-Start Library Guarantee) — June 13, 2026

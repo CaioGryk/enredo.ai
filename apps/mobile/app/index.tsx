@@ -1,5 +1,4 @@
 import {
-  ActivityIndicator,
   Alert,
   ImageBackground,
   Linking,
@@ -9,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { BookOpen, Clapperboard, Palette, Sparkles } from 'lucide-react-native';
 import { typography } from '../src/theme/typography';
 import { useAuth } from '../src/context/AuthContext';
@@ -20,21 +19,28 @@ const welcomeImage =
 const ACCENT = '#CEBDFF';
 const ACCENT_TEXT = '#381385';
 
-export default function WelcomeScreen() {
-  const router = useRouter();
-  const { isLoading, user } = useAuth();
+export default function Index() {
+  const { user, onboardingStatus } = useAuth();
 
-  if (isLoading || user) {
-    return (
-      <View style={styles.loading}>
-        {isLoading ? <ActivityIndicator color={ACCENT} size="small" /> : null}
-      </View>
-    );
+  // The splash screen stays until auth init completes, so `user` and
+  // `onboardingStatus` are resolved when this component first renders.
+  if (user) {
+    if (onboardingStatus === 'incomplete') {
+      return <Redirect href="/onboarding" />;
+    }
+    // onboardingStatus === 'loading' is guarded by the splash screen.
+    // onboardingStatus === 'complete' → Library.
+    return <Redirect href="/(tabs)/library" />;
   }
+
+  return <WelcomeScreen />;
+}
+
+function WelcomeScreen() {
+  const router = useRouter();
 
   return (
     <ImageBackground source={{ uri: welcomeImage }} style={styles.root} imageStyle={styles.bgImage}>
-      {/* Gradient overlays (cinematic) */}
       <View style={styles.overlayBottom} />
       <View style={styles.overlayTop} />
       <View style={styles.topGlow} />
@@ -143,12 +149,6 @@ function FeatureCard({
 }
 
 const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0A0A0A',
-  },
   root: {
     flex: 1,
     backgroundColor: '#0A0A0A',
@@ -167,8 +167,6 @@ const styles = StyleSheet.create({
   overlayBottom: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'transparent',
-    // gradient bottom-to-top
-    borderTopWidth: 0,
   },
   overlayTop: {
     ...StyleSheet.absoluteFillObject,
