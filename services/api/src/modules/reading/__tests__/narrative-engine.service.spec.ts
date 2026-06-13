@@ -3,6 +3,7 @@ import { NarrativeEngine } from '../narrative/narrative-engine.service';
 import { AiService } from '@modules/ai/ai.service';
 import { GenerateSceneInput } from '../narrative/narrative-response.types';
 import { SubscriptionType } from '@prisma/client';
+import { BadGatewayException, BadRequestException } from '@nestjs/common';
 
 describe('NarrativeEngine', () => {
   let narrativeEngine: NarrativeEngine;
@@ -600,16 +601,68 @@ describe('NarrativeEngine', () => {
       expect(callArgs.narrativePolicy).toEqual(narrativePolicy);
     });
 
-    it('should throw error when provider fails for first scene', async () => {
+    it('should use a local first scene when the provider fails', async () => {
       mockAiService.isMockMode.mockReturnValue(false);
       mockAiService.generateFirstScene.mockRejectedValue(new Error('Provider unavailable'));
 
       const firstSceneInput: GenerateSceneInput = {
         ...baseInput,
+        premise: {
+          title: 'The Broken Tower',
+          openingScene: 'Rain falls over the broken tower while the gate begins to open.',
+        },
+        playableCharacter: {
+          name: 'Lia',
+          initialGoal: 'find the missing map',
+        },
         isFirstScene: true,
       };
 
-      await expect(narrativeEngine.generateScene(firstSceneInput)).rejects.toThrow('Scene generation failed');
+      const result = await narrativeEngine.generateScene(firstSceneInput);
+
+      expect(result.sceneText).toContain('Rain falls over the broken tower');
+      expect(result.sceneText).toContain('Lia');
+      expect(result.providerUsed).toBe('local');
+      expect(result.modelUsed).toBe('local/first-scene-fallback');
+      expect(result.tokenUsage?.totalTokens).toBe(0);
+      expect(result.memoryPatch?.codex?.timeline).toHaveLength(1);
+    });
+
+    it('should use a local first scene for upstream HTTP failures', async () => {
+      mockAiService.isMockMode.mockReturnValue(false);
+      mockAiService.generateFirstScene.mockRejectedValue(new BadGatewayException('Invalid provider response'));
+
+      const result = await narrativeEngine.generateScene({
+        ...baseInput,
+        story: {
+          ...baseInput.story,
+          openingScene: 'The harbor bells ring before dawn.',
+        },
+        isFirstScene: true,
+      });
+
+      expect(result.sceneText).toContain('The harbor bells ring before dawn');
+      expect(result.providerUsed).toBe('local');
+    });
+
+    it('should preserve first-scene validation errors', async () => {
+      mockAiService.isMockMode.mockReturnValue(false);
+      mockAiService.generateFirstScene.mockRejectedValue(new BadRequestException('Invalid story setup'));
+
+      await expect(narrativeEngine.generateScene({
+        ...baseInput,
+        isFirstScene: true,
+      })).rejects.toThrow('Invalid story setup');
+    });
+
+    it('should not hide unexpected first-scene programming errors', async () => {
+      mockAiService.isMockMode.mockReturnValue(false);
+      mockAiService.generateFirstScene.mockRejectedValue(new TypeError('Cannot read properties of undefined'));
+
+      await expect(narrativeEngine.generateScene({
+        ...baseInput,
+        isFirstScene: true,
+      })).rejects.toThrow('Scene generation failed');
     });
   });
 

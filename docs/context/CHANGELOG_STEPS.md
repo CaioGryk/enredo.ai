@@ -10034,3 +10034,47 @@ to preserve signature compatibility.
 - `npx eas-cli init --force` — created and linked the new EAS project.
 - `npx expo config --type public` — confirmed owner, project ID, Android package,
   version code, and application configuration.
+
+---
+
+## Step 140 — Resilient First Scene Generation
+
+**Objective:** Prevent newly created reading sessions from becoming unusable when
+all configured LLM providers are temporarily unavailable or return an invalid
+first-scene response.
+
+### Root Cause
+
+`POST /api/reading/start` created the session successfully and deferred the first
+scene. When generation failed in the background, the session remained without
+narrative events. Every subsequent `GET /api/reading/sessions/:id` retried the same
+generation path, returned `READING_GENERATION_FAILED`, and the mobile reader showed
+a misleading connection error.
+
+### Backend Behavior
+
+- First-scene provider, network, quota, timeout, or invalid-response failures now
+  produce a deterministic local opening from the selected character's starting
+  situation, the selected premise, or the story opening data.
+- The fallback creates the same initial memory and codex timeline as an AI-generated
+  opening, so the next interaction can continue through the normal LLM pipeline.
+- Validation and authorization errors below HTTP 500 are still returned to the
+  caller.
+- Unexpected programming errors are not hidden by the fallback.
+- Continuation-scene failures keep their existing behavior and never silently
+  switch to locally generated content.
+- Fallback events record `local/first-scene-fallback` with zero token usage.
+
+### Deployment Impact
+
+This is a backend-only change. A Railway redeploy is required; no new Expo APK is
+needed.
+
+### Verification
+
+- `narrative-engine.service.spec.ts` covers provider errors, upstream HTTP failures,
+  validation errors, unexpected programming errors, codex persistence, and the QA
+  failure harness.
+- `zero-event-fallback.spec.ts` verifies recovery of sessions without events.
+- `reading-error-contract.spec.ts` verifies the public reading error contract.
+- `npx tsc --noEmit --incremental false`

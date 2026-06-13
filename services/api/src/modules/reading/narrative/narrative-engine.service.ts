@@ -1,4 +1,4 @@
-import { Injectable, HttpException } from '@nestjs/common';
+import { Injectable, HttpException, Logger } from '@nestjs/common';
 import { AiService } from '@modules/ai/ai.service';
 import { NarrativeContextBuilder } from './narrative-context.builder';
 import { GenerateSceneInput, GenerateSceneResult } from './narrative-response.types';
@@ -6,6 +6,8 @@ import { UserActionType, SubscriptionType } from '@prisma/client';
 
 @Injectable()
 export class NarrativeEngine {
+  private readonly logger = new Logger(NarrativeEngine.name);
+
   constructor(private readonly aiService: AiService) {}
 
   async generateScene(input: GenerateSceneInput): Promise<GenerateSceneResult> {
@@ -24,9 +26,64 @@ export class NarrativeEngine {
         ? await this.generateAIFirstScene(input)
         : await this.generateAIScene(input);
     } catch (error) {
+      if (input.isFirstScene && this.canUseLocalFirstSceneFallback(error)) {
+        const cause = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `First scene AI generation failed; using local fallback. session=${input.sessionId} cause=${cause.substring(0, 300)}`,
+        );
+        return this.generateLocalFirstScene(input);
+      }
       if (error instanceof HttpException) throw error;
       throw new Error(`Scene generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  private canUseLocalFirstSceneFallback(error: unknown): boolean {
+    if (error instanceof HttpException) return error.getStatus() >= 500;
+    const message = error instanceof Error ? error.message : '';
+    return /provider|api|timeout|network|fetch|rate limit|quota|socket|econn|invalid.+response|json/i.test(message);
+  }
+
+  private generateLocalFirstScene(input: GenerateSceneInput): GenerateSceneResult {
+    const premiseContext = NarrativeContextBuilder.buildPremiseContext(input.premise);
+    const characterContext = NarrativeContextBuilder.buildCharacterContext(input.playableCharacter);
+    const protagonistName = characterContext?.name || 'O protagonista';
+    const openingSource = [
+      characterContext?.startingSituation,
+      premiseContext?.openingScene,
+      input.story.openingScene,
+      premiseContext?.synopsis,
+      input.story.synopsis,
+      input.story.basePrompt,
+    ].find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+    const opening = (openingSource || `${protagonistName} está diante do primeiro desafio desta história.`)
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 1400);
+    const introducesProtagonist = opening.toLocaleLowerCase('pt-BR')
+      .includes(protagonistName.toLocaleLowerCase('pt-BR'));
+    const protagonistIntroduction = introducesProtagonist
+      ? ''
+      : ` ${protagonistName} percebe que cada decisão tomada a partir daqui poderá mudar o rumo dos acontecimentos.`;
+    const goal = characterContext?.initialGoal || characterContext?.motivation;
+    const goalSentence = goal
+      ? ` Seu objetivo imediato é ${goal.trim().replace(/[.!?]+$/, '').toLocaleLowerCase('pt-BR')}.`
+      : '';
+    const sceneText = `${opening}${protagonistIntroduction}${goalSentence} O próximo passo precisa ser escolhido agora.`;
+
+    return this.parseFirstSceneResult({
+      sceneText,
+      choices: ['Seguir em frente', 'Observar antes de agir', 'Procurar uma alternativa'],
+      modelUsed: 'local/first-scene-fallback',
+      providerUsed: 'local',
+      inputTokens: 0,
+      outputTokens: 0,
+      sceneMetadata: {
+        emotion: 'expectativa',
+        pacing: 'media',
+      },
+    }, input);
   }
 
   private async generateAIFirstScene(input: GenerateSceneInput): Promise<GenerateSceneResult> {
@@ -146,7 +203,7 @@ export class NarrativeEngine {
       sceneText,
       suggestedActions,
       modelUsed: result.modelUsed || 'unknown',
-      providerUsed: 'ai',
+      providerUsed: result.providerUsed || 'ai',
       tokenUsage: {
         inputTokens: result.inputTokens || 0,
         outputTokens: result.outputTokens || 0,
