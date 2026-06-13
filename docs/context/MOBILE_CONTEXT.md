@@ -633,7 +633,7 @@ Rail buttons (like, save, share) are now functional:
 ### New User Flow (Step 94)
 
 - Entry screen offers three clear paths: create account, login, or try the guided preview.
-- Successful login/register/social auth sets tokens and lets `AuthContext` route users to onboarding when `onboardingComplete:{userId}` is missing, or directly to Library when completed.
+- Successful email/password registration opens onboarding once in that account-creation session. Login, social auth, and restored sessions open Library directly.
 - The Axios API client uses a single-flight refresh-token lock. When multiple protected requests receive 401 at the same time, only one `/auth/refresh` call is sent; the other requests wait for the new access token and retry with it. This is required because the backend rotates refresh tokens and revokes the previous token on every successful refresh.
 - Before protected requests, the API client proactively refreshes the access token when the JWT is expired or within 60 seconds of expiring. This reduces noisy 401s and prevents reader-start actions from depending on reactive retry.
 - API and refresh request timeouts are 30s for beta QA, because local preview + Supabase remote + provider-backed reading can exceed 10s during cold or slow moments.
@@ -819,12 +819,12 @@ In `StartupGate` (`_layout.tsx`):
 
 | Scenario | Destination |
 |----------|-------------|
-| Cold start, returning user, onboarding complete | `/(tabs)/library` (guaranteed) |
-| Cold start, returning user, onboarding incomplete | `/onboarding` |
+| Cold start, returning authenticated user | `/(tabs)/library` (guaranteed) |
 | Cold start, unauthenticated | `/` (Welcome) |
 | Foreground resume (same process) | Preserves current route |
-| After login (onboarding complete) | `/(tabs)/library` |
-| After login/register (onboarding incomplete) | `/onboarding` |
+| After email/password login | `/(tabs)/library` |
+| After Google login | `/(tabs)/library` |
+| Immediately after new email/password registration | `/onboarding` |
 | After onboarding completion | `/(tabs)/library` (via index redirect) |
 | After deliberate logout | `/` (Welcome) |
 | Runtime session expiry | `/` (Welcome, via Stack.Protected removal) |
@@ -843,10 +843,10 @@ In `StartupGate` (`_layout.tsx`):
 
 **Onboarding state management:**
 
-- `AuthContext.onboardingStatus`: `'loading'` → `'incomplete'` → `'complete'`.
-- `'loading'` is only visible during the bootstrap phase (splash screen is still shown).
-- `markOnboardingComplete()` catches storage failures; always updates state so the user proceeds.
-- If storage fails, onboarding may show again on the next cold start — acceptable fallback.
+- Onboarding is shown only immediately after a successful email/password registration.
+- Email/password login, Google login, and every restored authenticated session set onboarding to `'complete'` and open Library directly.
+- The local completion flag remains as a best-effort record, but it no longer decides whether a returning account is sent through onboarding.
+- `markOnboardingComplete()` catches storage failures and always updates state so the newly registered user proceeds.
 
 **Root cause of blank startup screen (fixed):**
 
@@ -855,9 +855,9 @@ In `StartupGate` (`_layout.tsx`):
 3. `AuthContext` had an async imperative navigation effect with delayed `router.replace` after onboarding check.
 4. `unstable_settings.initialRouteName: '(tabs)'` could influence Android stack restoration.
 
-**Beta build version:** Android `versionCode` is `15`.
+**Beta build version:** Android `versionCode` is `16`.
 
 ---
 
 
-**Last Updated:** After Step 137 (Declarative Route Protection, Runtime Session Invalidation & Cold-Start Library Guarantee) — June 13, 2026
+**Last Updated:** After Step 138 (Onboarding Only After New Registration) — June 13, 2026

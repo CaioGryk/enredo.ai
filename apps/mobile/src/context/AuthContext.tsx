@@ -45,15 +45,6 @@ function parseCachedUser(value: string | null): User | null {
   }
 }
 
-async function resolveOnboardingStatus(userId: string): Promise<OnboardingStatus> {
-  try {
-    const done = await tokenStorage.getItem(getOnboardingCompleteKey(userId));
-    return done === 'true' ? 'complete' : 'incomplete';
-  } catch {
-    return 'incomplete';
-  }
-}
-
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -70,10 +61,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  // Bootstrap: restore cached user + resolve onboarding, then mark init complete.
-  // Cached-user fast path: setUser + resolveOnboardingStatus → isInitializing = false.
+  // Bootstrap: every restored authenticated session opens directly in Library.
+  // Onboarding is reserved for a newly created account in the registration flow.
+  // Cached-user fast path: setUser + complete onboarding → isInitializing = false.
   // Background profile validation updates user without blocking.
-  // No-cached-user path: wait for /auth/profile → resolve onboarding → isInitializing = false.
+  // No-cached-user path: wait for /auth/profile → complete onboarding → isInitializing = false.
   useEffect(() => {
     let cancelled = false;
 
@@ -110,10 +102,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Token exists — attempt cached-user fast path
         const cachedUser = parseCachedUser(await tokenStorage.getItem(CACHED_USER_KEY));
         if (cachedUser) {
-          const status = await resolveOnboardingStatus(cachedUser.id);
           if (!cancelled) {
             setUser(cachedUser);
-            setOnboardingStatus(status);
+            setOnboardingStatus('complete');
             setIsInitializing(false);
             setIsLoading(false);
           }
@@ -127,12 +118,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
           await tokenStorage.setItem(CACHED_USER_KEY, JSON.stringify(data));
 
-          // No-cached-user path: onboarding was never resolved for this user.
-          // Resolve now using the profile payload before finishing init.
+          // No-cached-user path: a valid restored session is a returning user
+          // and opens Library directly.
           if (!cachedUser && !cancelled) {
-            const status = await resolveOnboardingStatus(data.id);
             setUser(data);
-            setOnboardingStatus(status);
+            setOnboardingStatus('complete');
             setIsInitializing(false);
             setIsLoading(false);
           }
@@ -217,8 +207,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
     await tokenStorage.setItem(CACHED_USER_KEY, JSON.stringify(data.user));
-    const status = await resolveOnboardingStatus(data.user.id);
-    setOnboardingStatus(status);
+    // Existing users must always land directly in Library after login.
+    setOnboardingStatus('complete');
     setUser(data.user);
   }, [queryClient]);
 
@@ -228,8 +218,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
     await tokenStorage.setItem(CACHED_USER_KEY, JSON.stringify(data.user));
-    const status = await resolveOnboardingStatus(data.user.id);
-    setOnboardingStatus(status);
+    // Onboarding is shown only for the account-creation session.
+    setOnboardingStatus('incomplete');
     setUser(data.user);
   }, [queryClient]);
 
@@ -239,8 +229,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await tokenStorage.setItem('accessToken', data.accessToken);
     await tokenStorage.setItem('refreshToken', data.refreshToken);
     await tokenStorage.setItem(CACHED_USER_KEY, JSON.stringify(data.user));
-    const status = await resolveOnboardingStatus(data.user.id);
-    setOnboardingStatus(status);
+    // The SSO endpoint does not distinguish creation from login. Prefer the
+    // returning-user experience and open Library directly.
+    setOnboardingStatus('complete');
     setUser(data.user);
   }, [queryClient]);
 
@@ -260,11 +251,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       await tokenStorage.setItem(getOnboardingCompleteKey(user.id), 'true');
     } catch {
       // Storage failure is non-blocking.
-      // Onboarding may show again on the next cold start, but the user proceeds.
+      // Restored sessions still open Library, so the user will not be trapped.
     }
-    // Always update state so the user can navigate forward.
-    // If storage failed, the flag will be missing on the next cold start
-    // and onboarding will be shown again — acceptable fallback.
+    // Always update state so the new user can navigate forward.
     setOnboardingStatus('complete');
   }, [user]);
 

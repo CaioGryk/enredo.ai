@@ -6404,7 +6404,6 @@ Exhausted provider skipped on next call in same instance, `ADMIN_CATALOG_TEXT_PR
 **Documentation updated:**
 - `docs/context/CURRENT_STATE.md`
 - `docs/context/MOBILE_CONTEXT.md`
-- `docs/context/CHANGELOG_STEPS.md`
 
 ---
 
@@ -9896,6 +9895,8 @@ The splash stays visible until:
 | Runtime session expiry on protected route | Falls back to `/` (`Stack.Protected` removes routes) |
 | Android Back from Library | Exits app. Auth/root routes are in different guarded groups and not on the stack. |
 
+> **Superseded by Step 138:** Returning authenticated sessions now always open Library. Only a newly created email/password account enters onboarding during its registration session.
+
 ### Runtime Session-Expiry Flow
 
 ```
@@ -9979,3 +9980,28 @@ The native splash covers all content until `hideAsync()` is called.
 - `apps/mobile/app/(auth)/register.tsx`
 - `docs/context/CHANGELOG_STEPS.md`
 - `docs/context/MOBILE_CONTEXT.md`
+
+---
+
+## Step 138 — Onboarding Only After New Registration
+
+**Objective:** Ensure returning authenticated users always open Library and never repeat onboarding after reinstalling the APK, changing devices, or losing local storage.
+
+### Root Cause
+
+Onboarding eligibility depended on the local `onboardingComplete:${user.id}` flag. Because the flag was device-local, an existing account looked new whenever local app data was unavailable.
+
+### Mobile Behavior
+
+- A successful email/password registration sets onboarding to `incomplete` for that account-creation session.
+- Email/password login sets onboarding to `complete` and opens Library.
+- Google login sets onboarding to `complete` and opens Library because the current SSO response does not distinguish a newly created account from an existing one.
+- Cold-start restoration from cached user or `/auth/profile` sets onboarding to `complete` and opens Library.
+- The local completion flag remains best effort, but is no longer used to classify returning users.
+- Android `versionCode` incremented from `15` to `16`.
+
+### Verification
+
+- `npx tsc --noEmit`
+- `npx expo-doctor`
+- `git diff --check`
